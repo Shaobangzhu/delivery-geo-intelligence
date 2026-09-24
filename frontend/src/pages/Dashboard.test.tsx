@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { Dashboard } from "./Dashboard";
 import type { DashboardData } from "../dashboard/api";
 
+vi.mock("../dashboard/PickupMap", () => ({ PickupMap: () => <div data-testid="pickup-map" /> }));
+
 const merchant = { id: "synthetic-id", name: "Synthetic Pickup", category: "grocery" as const,
   city: "Test City", deliveries: 2, totalEarnings: 12, averageEarnings: 12, sampleCount: 1 };
 const fixture: DashboardData = {
@@ -56,4 +58,16 @@ it("changes shared filters and hides local map mode for destination heatmap", as
   await user.click(screen.getByRole("button", { name: "Month" }));
   await user.click(screen.getByRole("button", { name: "Grocery" }));
   await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("period=month&category=grocery"))).toBe(true));
+});
+
+it("keeps the Pickup Volume map mounted while time and category filters load", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.fn(async () => ({ ok: true, json: async () => fixture }));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<Dashboard />);
+  const map = await screen.findByTestId("pickup-map");
+  await user.click(screen.getByRole("button", { name: "Month" }));
+  await user.click(screen.getByRole("button", { name: "Grocery" }));
+  await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
+  expect(screen.getByTestId("pickup-map")).toBe(map);
 });

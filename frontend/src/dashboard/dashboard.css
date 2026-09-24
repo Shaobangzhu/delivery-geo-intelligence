@@ -16,10 +16,16 @@
 .map-panel { display: flex; flex-direction: column; min-height: 655px; overflow: hidden; padding: 10px; }
 .map-mode { display: flex; align-self: flex-start; gap: 4px; width: 180px; position: relative; z-index: 1; }
 .map-placeholder { display: flex; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 9px; min-height: 400px; margin-top: 10px; border: 1px dashed #b5ccef; border-radius: 5px; background: radial-gradient(circle at 30% 35%, #dcecff 0, transparent 26%), radial-gradient(circle at 66% 68%, #c6dfff 0, transparent 25%), linear-gradient(135deg, #f4f9ff, #e8f3ff); color: #6a85a8; text-align: center; font-size: 12px; }
+.pickup-map-shell { position: relative; flex: 1; min-height: 400px; margin-top: 10px; overflow: hidden; border: 1px solid #d9e7f8; border-radius: 5px; background: #eef5ff; }
+.pickup-map-canvas { position: absolute; inset: 0; }
+.map-progress, .map-error { position: absolute; left: 12px; bottom: 12px; max-width: calc(100% - 24px); padding: 7px 10px; border: 1px solid #d5e4f7; border-radius: 5px; background: #ffffffed; color: #31557f; font-size: 11px; box-shadow: 0 2px 8px #3e618a24; }
+.map-error { right: 12px; bottom: auto; top: 12px; color: #a62331; border-color: #f1b7bd; }
+.dashboard-grid.is-updating .dashboard-details { opacity: .52; }
 .map-placeholder-mark { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #d5e6ff; color: #1163e5; font-size: 40px; line-height: 1; }
 .map-placeholder strong { color: #284a77; font-size: 18px; }
 .map-placeholder small { margin-top: 10px; color: #496c9a; font-size: 11px; }
-.map-caption { padding: 10px 4px 2px; color: #5b7597; font-size: 11px; }
+.map-caption { display: flex; justify-content: space-between; gap: 8px; padding: 10px 4px 2px; color: #5b7597; font-size: 11px; }
+.map-caption small { font-size: 11px; }
 .dashboard-details { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
 .stat-card { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 94px; padding: 8px; text-align: center; }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { loadDashboard, type Category, type DashboardData, type MerchantRanking, type Metric, type Period } from "../dashboard/api";
+import { PickupMap } from "../dashboard/PickupMap";
 import "../dashboard/dashboard.css";
 
 const periods: { value: Period; label: string }[] = [
@@ -78,11 +79,15 @@ function MapPanel({ data, metric, mapMode, onMapMode }: { data: DashboardData; m
       <button type="button" aria-pressed={mapMode === "heatmap"} onClick={() => onMapMode("heatmap")}>Heatmap</button>
       <button type="button" aria-pressed={mapMode === "points"} onClick={() => onMapMode("points")}>Points</button>
     </div>}
-    <div className="map-placeholder"><span className="map-placeholder-mark" aria-hidden="true">⌖</span>
-      <strong>Map visualization</strong><span>ArcGIS rendering follows in a later phase.</span>
-      <small>{selectedCount} filtered {metric === "destinationHeatmap" ? "generalized destination areas" : "merchant locations"} available</small>
+    {metric === "pickupVolume" ? <PickupMap rows={data.map.pickupVolume} mode={mapMode} />
+      : <div className="map-placeholder"><span className="map-placeholder-mark" aria-hidden="true">⌖</span>
+        <strong>Map visualization</strong><span>ArcGIS rendering for this metric follows in a later phase.</span>
+        <small>{selectedCount} filtered {metric === "destinationHeatmap" ? "generalized destination areas" : "merchant locations"} available</small>
+      </div>}
+    <div className="map-caption">
+      <span>{metric === "destinationHeatmap" ? "Destination points are generalized before storage." : "Pickup locations represent physical merchant records."}</span>
+      {metric === "pickupVolume" && <small>{selectedCount} filtered merchant locations available</small>}
     </div>
-    <div className="map-caption">{metric === "destinationHeatmap" ? "Destination points are generalized before storage." : "Pickup locations represent physical merchant records."}</div>
   </section>;
 }
 
@@ -98,11 +103,11 @@ export function Dashboard() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    setData(null);
     setError("");
     loadDashboard(period, category, controller.signal).then((result) => { setData(result); setLoading(false); })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
+        setData(null);
         setError("Dashboard analytics are unavailable. Try again.");
         setLoading(false);
       });
@@ -111,7 +116,7 @@ export function Dashboard() {
 
   return <section className="dashboard-page" aria-labelledby="dashboard-title">
     <div className="dashboard-heading"><div><div className="section-kicker">Dashboard</div><h1 id="dashboard-title">Observed Delivery Activity</h1></div>
-      <div className="dashboard-range" aria-live="polite"><span aria-hidden="true">▦</span> {data ? `${dateLabel(data.filters.range.startDate)} – ${dateLabel(data.filters.range.endDate)}` : error ? "Date range unavailable" : "Loading date range…"}</div>
+      <div className="dashboard-range" aria-live="polite"><span aria-hidden="true">▦</span> {loading ? "Updating date range…" : data ? `${dateLabel(data.filters.range.startDate)} – ${dateLabel(data.filters.range.endDate)}` : error ? "Date range unavailable" : "Loading date range…"}</div>
     </div>
     <div className="dashboard-filters">
       <div className="dashboard-filter"><span>Time Period</span><div className="segmented" role="group" aria-label="Time period">{periods.map((item) => <button key={item.value} type="button" aria-pressed={period === item.value} onClick={() => setPeriod(item.value)}>{item.label}</button>)}</div></div>
@@ -120,7 +125,7 @@ export function Dashboard() {
     </div>
     {error && <p className="dashboard-error" role="alert">{error}</p>}
     {loading && <p className="dashboard-loading" role="status">Loading dashboard analytics…</p>}
-    {data && !loading && <div className="dashboard-grid">
+    {data && <div className={`dashboard-grid${loading ? " is-updating" : ""}`} aria-busy={loading}>
       <MapPanel data={data} metric={metric} mapMode={mapMode} onMapMode={setMapMode} />
       <div className="dashboard-details">
         <div className="summary-grid">
