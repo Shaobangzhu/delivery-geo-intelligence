@@ -54,7 +54,7 @@ test("dashboard API applies one filter to every dataset and preserves payout sam
       delivery(1, 23, 30, [0.3, 0.4]), delivery(1, 24, 20),
       delivery(2, 25, undefined), delivery(3, 25, undefined), delivery(1, 27, 100, [0.5, 0.6])
     ]);
-    server = createApp(db, async () => { throw new Error("Geocoding should not run"); }).listen(0, "127.0.0.1");
+    server = createApp(db, async () => { throw new Error("Geocoding should not run"); }, async () => { throw new Error("Merchant geocoding should not run"); }).listen(0, "127.0.0.1");
     await once(server, "listening");
     const base = `http://127.0.0.1:${server.address().port}`;
     async function dashboard(query) {

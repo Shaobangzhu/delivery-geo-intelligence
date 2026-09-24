@@ -6,6 +6,7 @@ export interface Merchant {
   name: string;
   category: Category;
   city: string;
+  publicAddress?: string;
 }
 
 export interface Delivery {
@@ -48,7 +49,7 @@ export class ApiError extends Error {
   }
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
     let code: string | undefined;

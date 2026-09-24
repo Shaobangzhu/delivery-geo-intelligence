@@ -32,7 +32,7 @@ h1 { margin: 8px 0 10px; font-size: clamp(27px, 4vw, 40px); letter-spacing: -.04
 @media (max-width: 700px) {
   .site-header { align-items: flex-start; flex-direction: column; padding: 16px; }
   .primary-nav { width: 100%; }
-  .nav-link { flex: 1; }
+  .nav-link { flex: 1; min-width: 0; padding-inline: 8px; }
   .page-content { padding: 28px 16px; }
   .placeholder-panel { min-height: 340px; }
   .site-footer { flex-direction: column; gap: 5px; padding: 14px 16px; }

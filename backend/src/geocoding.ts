@@ -19,12 +19,14 @@ export type GeocodingFailure = "no_match" | "low_confidence" | "unusable_result"
 
 export class GeocodingError extends Error {
   constructor(public readonly code: GeocodingFailure) {
-    super("Destination geocoding failed");
+    super("Address geocoding failed");
     this.name = "GeocodingError";
   }
 }
 
-export type DestinationGeocoder = (address: string) => Promise<GeoJsonPoint>;
+export type StoredGeocoder = (address: string) => Promise<GeoJsonPoint>;
+export type DestinationGeocoder = StoredGeocoder;
+export type MerchantGeocoder = StoredGeocoder;
 
 /** Round WGS84 degrees to a stable grid; no raw coordinate leaves this function. */
 export function generalizeCoordinates(longitude: number, latitude: number, decimals: number): GeoJsonPoint {
@@ -41,11 +43,10 @@ export function generalizeCoordinates(longitude: number, latitude: number, decim
   return { type: "Point", coordinates: [round(longitude), round(latitude)] };
 }
 
-export function createArcGisGeocoder(
+export function createArcGisStoredGeocoder(
   apiKey: string,
-  decimals: number,
   fetcher: typeof fetch = fetch
-): DestinationGeocoder {
+): StoredGeocoder {
   if (!apiKey) throw new Error("ArcGIS geocoding credential is missing");
 
   return async (address: string) => {
@@ -98,10 +99,20 @@ export function createArcGisGeocoder(
     if (candidate.data.score < MIN_SCORE || !ADDRESS_MATCH_TYPES.has(candidate.data.attributes.Addr_type)) {
       throw new GeocodingError("low_confidence");
     }
-    try {
-      return generalizeCoordinates(candidate.data.location.x, candidate.data.location.y, decimals);
-    } catch {
-      throw new GeocodingError("unusable_result");
-    }
+    const exact = pointSchema.safeParse({ type: "Point", coordinates: [candidate.data.location.x, candidate.data.location.y] });
+    if (!exact.success) throw new GeocodingError("unusable_result");
+    return exact.data;
+  };
+}
+
+export function createArcGisGeocoder(
+  apiKey: string,
+  decimals: number,
+  fetcher: typeof fetch = fetch
+): DestinationGeocoder {
+  const exactGeocode = createArcGisStoredGeocoder(apiKey, fetcher);
+  return async (address: string) => {
+    const exact = await exactGeocode(address);
+    return generalizeCoordinates(exact.coordinates[0], exact.coordinates[1], decimals);
   };
 }

@@ -1,11 +1,11 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ObjectId, type Db, type Filter, type Sort } from "mongodb";
 import { ZodError } from "zod";
-import { GeocodingError, type DestinationGeocoder } from "./geocoding.js";
+import { GeocodingError, type DestinationGeocoder, type MerchantGeocoder } from "./geocoding.js";
 import { dashboardFilterSchema, getDashboardAnalytics, getDestinationHeatmap } from "./dashboard.js";
 import {
   deliveryInputSchema, deliveryPatchSchema, deliveryQuerySchema, deliveryResponse,
-  merchantInputSchema, merchantResponse, objectIdSchema,
+  merchantInputSchema, merchantPatchSchema, merchantResponse, objectIdSchema,
   type DeliveryDocument, type MerchantDocument
 } from "./model.js";
 
@@ -16,10 +16,10 @@ function invalid(response: Response, error: ZodError) {
   });
 }
 
-function geocodingFailure(response: Response, error: GeocodingError) {
+function geocodingFailure(response: Response, error: GeocodingError, subject: "Destination" | "Merchant" = "Destination") {
   const status = error.code === "no_match" || error.code === "low_confidence" ? 422
     : error.code === "network_error" ? 503 : 502;
-  return response.status(status).json({ error: "Destination geocoding failed", code: error.code });
+  return response.status(status).json({ error: `${subject} geocoding failed`, code: error.code });
 }
 
 function escapeRegex(value: string): string {
@@ -35,7 +35,7 @@ const sorts: Record<string, Sort> = {
   distanceAsc: { distanceMiles: 1, _id: 1 }
 };
 
-export function createApp(db: Db, geocodeDestination: DestinationGeocoder) {
+export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geocodeMerchant: MerchantGeocoder) {
   const app = express();
   const merchants = db.collection<MerchantDocument>("merchants");
   const deliveries = db.collection<DeliveryDocument>("deliveries");
@@ -64,15 +64,75 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder) {
 
   app.get("/api/merchants", async (_request, response) => {
     const rows = await merchants.find().sort({ name: 1, _id: 1 }).toArray();
-    response.json({ data: rows.map(merchantResponse) });
+    const counts = await deliveries.aggregate<{ _id: ObjectId; count: number }>([
+      { $match: { merchantId: { $in: rows.map((merchant) => merchant._id) } } },
+      { $group: { _id: "$merchantId", count: { $sum: 1 } } }
+    ]).toArray();
+    const countById = new Map(counts.map((row) => [row._id.toHexString(), row.count]));
+    response.json({ data: rows.map((merchant) => merchantResponse(merchant, countById.get(merchant._id.toHexString()) ?? 0)) });
+  });
+
+  app.get("/api/merchants/:id", async (request, response) => {
+    const parsed = objectIdSchema.safeParse(request.params.id);
+    if (!parsed.success) return invalid(response, parsed.error);
+    const id = new ObjectId(parsed.data);
+    const merchant = await merchants.findOne({ _id: id });
+    if (!merchant) return response.status(404).json({ error: "Merchant not found" });
+    const deliveryCount = await deliveries.countDocuments({ merchantId: id });
+    return response.json({ data: merchantResponse(merchant, deliveryCount) });
   });
 
   app.post("/api/merchants", async (request, response) => {
     const parsed = merchantInputSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response, parsed.error);
-    const merchant: MerchantDocument = { _id: new ObjectId(), ...parsed.data };
+    let location: MerchantDocument["location"];
+    try {
+      location = await geocodeMerchant(parsed.data.publicAddress);
+    } catch (error) {
+      if (error instanceof GeocodingError) return geocodingFailure(response, error, "Merchant");
+      throw error;
+    }
+    const merchant: MerchantDocument = { _id: new ObjectId(), ...parsed.data, location };
     await merchants.insertOne(merchant);
-    return response.status(201).json({ data: merchantResponse(merchant) });
+    return response.status(201).json({ data: merchantResponse(merchant, 0) });
+  });
+
+  app.patch("/api/merchants/:id", async (request, response) => {
+    const id = objectIdSchema.safeParse(request.params.id);
+    if (!id.success) return invalid(response, id.error);
+    const parsed = merchantPatchSchema.safeParse(request.body);
+    if (!parsed.success) return invalid(response, parsed.error);
+    const objectId = new ObjectId(id.data);
+    const existing = await merchants.findOne({ _id: objectId });
+    if (!existing) return response.status(404).json({ error: "Merchant not found" });
+    const changes = parsed.data;
+    const set: Partial<MerchantDocument> = { ...changes };
+    if (changes.publicAddress !== undefined && changes.publicAddress !== existing.publicAddress) {
+      try {
+        set.location = await geocodeMerchant(changes.publicAddress);
+      } catch (error) {
+        if (error instanceof GeocodingError) return geocodingFailure(response, error, "Merchant");
+        throw error;
+      }
+    }
+    const updated = await merchants.findOneAndUpdate({ _id: objectId }, { $set: set }, { returnDocument: "after" });
+    if (!updated) return response.status(404).json({ error: "Merchant not found" });
+    const deliveryCount = await deliveries.countDocuments({ merchantId: objectId });
+    return response.json({ data: merchantResponse(updated, deliveryCount) });
+  });
+
+  app.delete("/api/merchants/:id", async (request, response) => {
+    const parsed = objectIdSchema.safeParse(request.params.id);
+    if (!parsed.success) return invalid(response, parsed.error);
+    const id = new ObjectId(parsed.data);
+    if (!(await merchants.findOne({ _id: id }, { projection: { _id: 1 } }))) {
+      return response.status(404).json({ error: "Merchant not found" });
+    }
+    if (await deliveries.countDocuments({ merchantId: id })) {
+      return response.status(409).json({ error: "Merchant has delivery history and cannot be deleted" });
+    }
+    await merchants.deleteOne({ _id: id });
+    return response.status(204).end();
   });
 
   app.get("/api/deliveries", async (request, response) => {

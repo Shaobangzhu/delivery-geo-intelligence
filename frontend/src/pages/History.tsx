@@ -140,7 +140,7 @@ export function History() {
                 const merchant = merchantById.get(delivery.merchantId);
                 return <tr key={delivery.id}>
                   <td className="date-cell">{formatDateTime(delivery.pickedUpAt)}</td>
-                  <td><span className="merchant-name">{merchant?.name ?? "Unknown merchant"}</span>{merchant && <span className="merchant-city">{merchant.city}</span>}</td>
+                  <td><span className="merchant-name">{merchant?.name ?? "Unknown merchant"}</span>{merchant && <span className="merchant-city">{merchant.publicAddress ?? merchant.city}</span>}</td>
                   <td><span className={`category-label category-${merchant?.category ?? "other"}`}>{merchant ? categories.find((item) => item.value === merchant.category)?.label : "Other"}</span></td>
                   <td className="number-cell">{delivery.payout === undefined ? "—" : `$${delivery.payout.toFixed(2)}`}</td>
                   <td className="number-cell">{delivery.distanceMiles === undefined ? "—" : `${delivery.distanceMiles.toFixed(1)} mi`}</td>

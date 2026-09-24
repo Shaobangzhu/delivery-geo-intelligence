@@ -1,6 +1,12 @@
 # Residential destination privacy model
 
-The address is transient form input. The backend passes it to ArcGIS stored geocoding, obtains an exact coordinate in memory, reduces coordinate precision, and persists only the resulting GeoJSON Point. Neither `destinationAddress` nor the exact geocoder coordinate is a MongoDB field. Delivery API responses expose only `hasDestinationLocation`, not an address or coordinates. The application does not log request bodies, ArcGIS payloads, or provider error text.
+## Public pickup locations versus private destinations
+
+A Merchant is one physical **public business** pickup location. Its verified `publicAddress` and exact stored-geocoded GeoJSON `location` may be persisted and displayed. Merchant points are not rounded by destination privacy rules. Two stores with the same brand name remain separate records with separate IDs.
+
+A Delivery destination is a private residential location. Its raw address is transient request input; the exact geocoder point is transient process data. Only a generalized `destinationLocation` is persisted. Delivery responses do not expose the address or point. The two geocoding workflows share only the lower-level stored ArcGIS lookup and remain separate after it returns an exact point.
+
+The destination address is transient form input. The backend passes it to ArcGIS stored geocoding, obtains an exact coordinate in memory, reduces coordinate precision, and persists only the resulting GeoJSON Point. Neither `destinationAddress` nor the exact residential geocoder coordinate is a MongoDB field. Delivery API responses expose only `hasDestinationLocation`, not an address or coordinates. The application does not log request bodies, ArcGIS payloads, or provider error text.
 
 ```text
 transient address → Express → ArcGIS stored geocode → exact coordinate in memory
@@ -21,6 +27,7 @@ Changing the precision setting affects new or replaced destinations only; existi
 ## Boundaries and limitations
 
 - The private ArcGIS key is read only by the backend from `ARCGIS_GEOCODING_API_KEY`.
+- Merchant public address corrections change the pickup point associated with every historical Delivery referencing that Merchant ID. A moved store should be recorded as a new Merchant; temporal Merchant location history is not implemented.
 - The address is sent to ArcGIS over HTTPS in a POST body. ArcGIS necessarily receives it to geocode; it is not stored by this application's database or application logs.
 - Exact coordinates and address strings exist briefly in process memory during the request; JavaScript does not provide a reliable memory-wipe guarantee.
 - API writes reject direct `destinationLocation` input. The only application write path for a destination is geocode and generalize.

@@ -1,0 +1,10 @@
+.merchants-page { max-width: 1240px; margin: 0 auto; }
+.merchant-filters { display: grid; grid-template-columns: minmax(240px, 2fr) minmax(180px, 1fr); gap: 10px; max-width: 650px; margin-bottom: 14px; }
+.merchant-table { min-width: 780px; }
+.merchant-table td:nth-child(3) { max-width: 320px; overflow-wrap: anywhere; }
+.merchant-address-missing { color: #7890ac; font-style: italic; }
+.merchant-location-warning { margin: 14px 0 0; padding: 10px 12px; border: 1px solid #e9c981; border-radius: 5px; background: #fff8e8; color: #765013; font-size: 12px; line-height: 1.5; }
+.merchant-legacy-note { margin: 2px 0 0; color: #647b9c; font-size: 11px; line-height: 1.45; }
+.merchant-delete-copy { color: #395778; font-size: 12px; line-height: 1.5; }
+.merchants-page button:focus-visible { outline: 3px solid #8bbaff; outline-offset: 2px; }
+@media (max-width: 600px) { .merchant-filters { grid-template-columns: 1fr; } }

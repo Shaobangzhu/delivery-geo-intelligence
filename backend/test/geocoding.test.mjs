@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createArcGisGeocoder, generalizeCoordinates } from "../dist/geocoding.js";
+import { createArcGisGeocoder, createArcGisStoredGeocoder, generalizeCoordinates } from "../dist/geocoding.js";
 
 const transientInput = "synthetic-destination-token";
 const candidate = {
@@ -54,6 +54,18 @@ test("ArcGIS request uses stored semantics, POST body, private header, and WGS84
   });
   assert.deepEqual(await geocode(transientInput), { type: "Point", coordinates: [0.12, 0.65] });
   assert.equal(called, true);
+});
+
+test("public business geocoding stores the exact point while destination geocoding still generalizes", async () => {
+  const fetcher = async (_url, options) => {
+    assert.equal(new URLSearchParams(options.body).get("forStorage"), "true");
+    assert.equal(options.headers["X-Esri-Authorization"], "Bearer unit-test-key");
+    return mockFetch(successPayload)();
+  };
+  const merchantPoint = await createArcGisStoredGeocoder("unit-test-key", fetcher)("synthetic-public-business-token");
+  const destinationPoint = await createArcGisGeocoder("unit-test-key", 2, fetcher)(transientInput);
+  assert.deepEqual(merchantPoint, { type: "Point", coordinates: [0.123456, 0.654321] });
+  assert.deepEqual(destinationPoint, { type: "Point", coordinates: [0.12, 0.65] });
 });
 
 test("no match, low confidence, provider error, and unusable result stay generic", async () => {

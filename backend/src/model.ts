@@ -18,9 +18,13 @@ export type GeoJsonPoint = z.infer<typeof pointSchema>;
 export const merchantInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(120),
   category: categorySchema,
-  location: pointSchema,
+  publicAddress: z.string().trim().min(1).max(500),
   city: z.string().trim().min(1).max(120)
 });
+export const merchantPatchSchema = merchantInputSchema.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  { message: "At least one field is required" }
+);
 
 const timestampSchema = z.iso.datetime({ offset: true });
 
@@ -65,6 +69,8 @@ export interface MerchantDocument {
   _id: ObjectId;
   name: string;
   category: Category;
+  // Earlier merchant records can predate public-address capture.
+  publicAddress?: string;
   location: GeoJsonPoint;
   city: string;
 }
@@ -79,13 +85,15 @@ export interface DeliveryDocument {
   notes?: string;
 }
 
-export function merchantResponse(merchant: MerchantDocument) {
+export function merchantResponse(merchant: MerchantDocument, deliveryCount: number) {
   return {
     id: merchant._id.toHexString(),
     name: merchant.name,
     category: merchant.category,
+    ...(merchant.publicAddress === undefined ? {} : { publicAddress: merchant.publicAddress }),
     location: merchant.location,
-    city: merchant.city
+    city: merchant.city,
+    deliveryCount
   };
 }
 

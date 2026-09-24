@@ -83,7 +83,7 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
             <select id={`${id}-merchant`} value={merchantId} onChange={(event) => setMerchantId(event.target.value)} required data-autofocus disabled={saving}>
               <option value="">{merchants.length ? "Select merchant" : "No merchants available"}</option>
               {merchants.map((merchant) => (
-                <option key={merchant.id} value={merchant.id}>{merchant.name} · {merchant.city}</option>
+                <option key={merchant.id} value={merchant.id}>{merchant.name} · {merchant.publicAddress ?? merchant.city} · {merchant.id.slice(-6)}</option>
               ))}
             </select>
           </div>

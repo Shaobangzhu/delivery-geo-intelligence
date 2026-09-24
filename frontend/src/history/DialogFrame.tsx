@@ -57,7 +57,7 @@ export function DialogFrame({ title, onClose, busy, children, className = "" }: 
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
       if (previousFocus?.isConnected) previousFocus.focus();
-      else document.querySelector<HTMLElement>("[data-history-primary]")?.focus();
+      else document.querySelector<HTMLElement>("[data-history-primary], [data-merchant-primary]")?.focus();
     };
   }, []);
 
