@@ -1,0 +1,24 @@
+name: delivery-geo-intelligence
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: dgi-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DGI_MONGO_ROOT_USERNAME:?Set DGI_MONGO_ROOT_USERNAME in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${DGI_MONGO_ROOT_PASSWORD:?Set DGI_MONGO_ROOT_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: delivery_geo_intelligence
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - dgi_mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --username \"$$MONGO_INITDB_ROOT_USERNAME\" --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand({ ping: 1 }).ok\" | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  dgi_mongodb_data:

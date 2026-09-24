@@ -1,0 +1,15 @@
+{
+  "name": "delivery-geo-intelligence",
+  "private": true,
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:backend": "npm run dev -w backend",
+    "typecheck": "npm run typecheck -w frontend && npm run typecheck -w backend",
+    "build": "npm run build -w frontend && npm run build -w backend",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:status": "docker compose ps",
+    "db:logs": "docker compose logs -f mongodb"
+  }
+}
