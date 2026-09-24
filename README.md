@@ -1,6 +1,6 @@
 # Delivery Geo Intelligence
 
-Delivery Geo Intelligence is a local-first Web GIS proof of concept for personally observed last-mile delivery activity around Eastvale, California. Phase 1 provides the application shell, API health endpoint, and a dedicated local MongoDB service. Maps, delivery records, and analytics are planned for later phases.
+Delivery Geo Intelligence is a local-first Web GIS proof of concept for personally observed last-mile delivery activity around Eastvale, California. The current application has a two-page frontend shell and a MongoDB-backed Merchant and Delivery API. Maps, geocoding, and analytics are planned for later phases.
 
 ## Requirements
 
@@ -30,7 +30,8 @@ Open <http://127.0.0.1:5173>. The routes are `/dashboard` and `/history`; `/` re
 | `npm run dev:backend` | Start Express on port 3000 |
 | `npm run typecheck` | Typecheck both workspaces |
 | `npm run build` | Build both workspaces |
+| `npm test` | Run backend API integration tests against an isolated temporary database |
 
 The MongoDB container publishes port 27017 on `127.0.0.1` only. It uses its own `dgi_mongodb_data` named volume. Frontend and backend run on the host. No database content or environment credentials belong in Git.
 
-See [architecture](docs/architecture.md) for the current topology and planned data flow.
+See [architecture](docs/architecture.md) for the current topology and planned data flow, and [data model](docs/data-model.md) for the collections and API contract. Merchant locations supplied to the API must be verified public pickup locations. There is no seed data in the repository.

@@ -7,6 +7,7 @@
     "dev:backend": "npm run dev -w backend",
     "typecheck": "npm run typecheck -w frontend && npm run typecheck -w backend",
     "build": "npm run build -w frontend && npm run build -w backend",
+    "test": "npm run test -w backend",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:status": "docker compose ps",

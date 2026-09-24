@@ -6,12 +6,14 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "test": "npm run build && node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
   },
   "dependencies": {
     "dotenv": "^18.0.3",
     "express": "^5.2.1",
+    "mongodb": "^7.6.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
