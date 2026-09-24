@@ -2,6 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { ObjectId, type Db, type Filter, type Sort } from "mongodb";
 import { ZodError } from "zod";
 import { GeocodingError, type DestinationGeocoder } from "./geocoding.js";
+import { dashboardFilterSchema, getDashboardAnalytics } from "./dashboard.js";
 import {
   deliveryInputSchema, deliveryPatchSchema, deliveryQuerySchema, deliveryResponse,
   merchantInputSchema, merchantResponse, objectIdSchema,
@@ -47,6 +48,12 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder) {
     } catch {
       response.status(503).json({ status: "unavailable" });
     }
+  });
+
+  app.get("/api/dashboard", async (request, response) => {
+    const parsed = dashboardFilterSchema.safeParse(request.query);
+    if (!parsed.success) return invalid(response, parsed.error);
+    return response.json(await getDashboardAnalytics(db, parsed.data));
   });
 
   app.get("/api/merchants", async (_request, response) => {
