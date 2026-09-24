@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { Dashboard } from "./Dashboard";
 import type { DashboardData } from "../dashboard/api";
 
-vi.mock("../dashboard/PickupMap", () => ({ PickupMap: () => <div data-testid="pickup-map" /> }));
+vi.mock("../dashboard/DashboardMap", () => ({ DashboardMap: ({ metric, destinationCells }: { metric: string; destinationCells: unknown[] }) =>
+  <div data-testid="dashboard-map" data-metric={metric} data-destination-count={destinationCells.length} /> }));
 
 const merchant = { id: "synthetic-id", name: "Synthetic Pickup", category: "grocery" as const,
   city: "Test City", deliveries: 2, totalEarnings: 12, averageEarnings: 12, sampleCount: 1 };
@@ -19,9 +20,8 @@ const fixture: DashboardData = {
   ],
   pickupTimeline: [{ date: "2026-04-20", deliveries: 2 }], topMerchants: [merchant],
   map: { pickupVolume: [{ ...merchant, location: { type: "Point", coordinates: [0, 0] } }],
-    merchantDiversity: [{ id: merchant.id, name: merchant.name, category: merchant.category, city: merchant.city, deliveries: 2,
-      location: { type: "Point", coordinates: [0, 0] } }],
-    destinationHeatmap: [{ location: { type: "Point", coordinates: [0.1, 0.2] }, count: 1 }] }
+    merchantDiversity: [{ id: merchant.id, name: merchant.name, category: merchant.category, city: merchant.city, distinctMerchantCount: 1,
+      location: { type: "Point", coordinates: [0, 0] } }] }
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -40,12 +40,11 @@ it("loads one dashboard response for the cards, timeline, ranking, and map shell
   expect(String(fetchMock.mock.calls[0][0])).toContain("period=week&category=all");
 });
 
-it("changes shared filters and hides local map mode for destination heatmap", async () => {
+it("loads filtered destination cells and hides the local Points control", async () => {
   const user = userEvent.setup();
-  const fetchMock = vi.fn(async (url: string) => ({ ok: true, json: async () => ({ ...fixture,
-    filters: { ...fixture.filters, period: url.includes("period=month") ? "month" : "week",
-      category: url.includes("category=grocery") ? "grocery" : "all" }
-  }) }));
+  const fetchMock = vi.fn(async (url: string) => url.includes("destination-heatmap")
+    ? { ok: true, json: async () => ({ cells: [{ location: { type: "Point", coordinates: [0.1, 0.2] }, count: 1 }] }) }
+    : { ok: true, json: async () => fixture });
   vi.stubGlobal("fetch", fetchMock);
   render(<Dashboard />);
   await screen.findByText("Apr 20, 2026 – Apr 26, 2026");
@@ -54,20 +53,24 @@ it("changes shared filters and hides local map mode for destination heatmap", as
   expect(within(mode).getByRole("button", { name: "Points" })).toHaveAttribute("aria-pressed", "true");
   await user.click(screen.getByRole("button", { name: "Destination Heatmap" }));
   expect(screen.queryByRole("group", { name: "Map display mode" })).not.toBeInTheDocument();
-  expect(screen.getByText("1 filtered generalized destination areas available")).toBeInTheDocument();
+  expect(screen.getByText("Destination heatmap only — individual destination points are not shown.")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByTestId("dashboard-map")).toHaveAttribute("data-destination-count", "1"));
+  expect(screen.getByTestId("dashboard-map")).toHaveAttribute("data-metric", "destinationHeatmap");
+  expect(screen.queryByText(/0\.1|0\.2|latitude|longitude/i)).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Month" }));
   await user.click(screen.getByRole("button", { name: "Grocery" }));
-  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("period=month&category=grocery"))).toBe(true));
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("destination-heatmap?period=month&category=grocery"))).toBe(true));
+  expect(screen.getByText("Observed destination activity associated with grocery deliveries.")).toBeInTheDocument();
 });
 
-it("keeps the Pickup Volume map mounted while time and category filters load", async () => {
+it("keeps the map mounted while time and category filters load", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.fn(async () => ({ ok: true, json: async () => fixture }));
   vi.stubGlobal("fetch", fetchMock);
   render(<Dashboard />);
-  const map = await screen.findByTestId("pickup-map");
+  const map = await screen.findByTestId("dashboard-map");
   await user.click(screen.getByRole("button", { name: "Month" }));
   await user.click(screen.getByRole("button", { name: "Grocery" }));
   await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
-  expect(screen.getByTestId("pickup-map")).toBe(map);
+  expect(screen.getByTestId("dashboard-map")).toBe(map);
 });

@@ -65,7 +65,6 @@ export function resolveDashboardFilters(filters: DashboardFilters, now = new Dat
 
 type MerchantSummary = { id: string; name: string; category: MerchantDocument["category"]; city: string };
 type Ranking = MerchantSummary & { deliveries: number; totalEarnings: number | null; averageEarnings: number | null; sampleCount: number };
-type Point = MerchantDocument["location"];
 
 function sumKnownPayouts(rows: DeliveryDocument[]) {
   const known = rows.filter((row) => row.payout !== undefined);
@@ -82,29 +81,48 @@ function rankingByValue(rows: Ranking[], value: "totalEarnings" | "averageEarnin
   )[0] ?? null;
 }
 
-export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, now = new Date()) {
+async function resolveDashboardQuery(db: Db, filters: DashboardFilters, now: Date) {
   const range = resolveDashboardFilters(filters, now);
   const merchantFilter: Filter<MerchantDocument> = filters.category === "all" ? {} : { category: filters.category };
   const merchants = await db.collection<MerchantDocument>("merchants").find(merchantFilter).toArray();
-  const merchantById = new Map(merchants.map((merchant) => [merchant._id.toHexString(), merchant]));
   const deliveryFilter: Filter<DeliveryDocument> = {
     pickedUpAt: { $gte: range.start, $lt: range.endExclusive },
     merchantId: { $in: merchants.map((merchant) => merchant._id) }
   };
+  return { range, merchants, deliveryFilter };
+}
+
+export async function getDestinationHeatmap(db: Db, filters: DashboardFilters, now = new Date()) {
+  const { deliveryFilter } = await resolveDashboardQuery(db, filters, now);
+  const rows = await db.collection<DeliveryDocument>("deliveries").find(
+    { ...deliveryFilter, destinationLocation: { $exists: true } },
+    { projection: { _id: 0, destinationLocation: 1 } }
+  ).toArray();
+  const cells = new Map<string, { location: NonNullable<DeliveryDocument["destinationLocation"]>; count: number }>();
+  for (const row of rows) {
+    if (!row.destinationLocation) continue;
+    const key = row.destinationLocation.coordinates.join(",");
+    const cell = cells.get(key) ?? { location: row.destinationLocation, count: 0 };
+    cell.count += 1;
+    cells.set(key, cell);
+  }
+  return { cells: [...cells.values()].sort((a, b) => b.count - a.count ||
+    a.location.coordinates[0] - b.location.coordinates[0] || a.location.coordinates[1] - b.location.coordinates[1]) };
+}
+
+export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, now = new Date()) {
+  const { range, merchants, deliveryFilter } = await resolveDashboardQuery(db, filters, now);
+  const merchantById = new Map(merchants.map((merchant) => [merchant._id.toHexString(), merchant]));
   const deliveries = await db.collection<DeliveryDocument>("deliveries").find(deliveryFilter).toArray();
   const byMerchant = new Map<string, DeliveryDocument[]>();
-  const destinationCounts = new Map<string, { location: Point; count: number }>();
+  const destinationAreas = new Set<string>();
   for (const delivery of deliveries) {
     const id = delivery.merchantId.toHexString();
     const group = byMerchant.get(id) ?? [];
     group.push(delivery);
     byMerchant.set(id, group);
     if (delivery.destinationLocation) {
-      const location = delivery.destinationLocation;
-      const key = location.coordinates.join(",");
-      const point = destinationCounts.get(key) ?? { location, count: 0 };
-      point.count += 1;
-      destinationCounts.set(key, point);
+      destinationAreas.add(delivery.destinationLocation.coordinates.join(","));
     }
   }
 
@@ -138,10 +156,8 @@ export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, n
   const pickupVolume = rankings.map((ranking) => ({
     ...ranking, location: merchantById.get(ranking.id)!.location
   }));
-  const merchantDiversity = pickupVolume.map(({ id, name, category, city, deliveries: count, location }) =>
-    ({ id, name, category, city, deliveries: count, location }));
-  const destinationHeatmap = [...destinationCounts.values()].sort((a, b) => b.count - a.count ||
-    a.location.coordinates[0] - b.location.coordinates[0] || a.location.coordinates[1] - b.location.coordinates[1]);
+  const merchantDiversity = pickupVolume.map(({ id, name, category, city, location }) =>
+    ({ id, name, category, city, distinctMerchantCount: 1, location }));
   const earnings = sumKnownPayouts(deliveries);
 
   return {
@@ -152,12 +168,12 @@ export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, n
     },
     summary: {
       totalDeliveries: deliveries.length, uniqueMerchants: rankings.length,
-      observedDestinationAreas: destinationHeatmap.length, totalEarnings: earnings,
+      observedDestinationAreas: destinationAreas.size, totalEarnings: earnings,
       topMerchantByOrders: rankings[0] ?? null,
       topMerchantByTotalEarnings: rankingByValue(rankings, "totalEarnings"),
       topMerchantByAverageEarnings: rankingByValue(rankings, "averageEarnings")
     },
     categoryDistribution, pickupTimeline: timeline, topMerchants: rankings,
-    map: { pickupVolume, merchantDiversity, destinationHeatmap }
+    map: { pickupVolume, merchantDiversity }
   };
 }

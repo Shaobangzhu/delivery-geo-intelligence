@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { ObjectId, type Db, type Filter, type Sort } from "mongodb";
 import { ZodError } from "zod";
 import { GeocodingError, type DestinationGeocoder } from "./geocoding.js";
-import { dashboardFilterSchema, getDashboardAnalytics } from "./dashboard.js";
+import { dashboardFilterSchema, getDashboardAnalytics, getDestinationHeatmap } from "./dashboard.js";
 import {
   deliveryInputSchema, deliveryPatchSchema, deliveryQuerySchema, deliveryResponse,
   merchantInputSchema, merchantResponse, objectIdSchema,
@@ -54,6 +54,12 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder) {
     const parsed = dashboardFilterSchema.safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
     return response.json(await getDashboardAnalytics(db, parsed.data));
+  });
+
+  app.get("/api/dashboard/destination-heatmap", async (request, response) => {
+    const parsed = dashboardFilterSchema.safeParse(request.query);
+    if (!parsed.success) return invalid(response, parsed.error);
+    return response.json(await getDestinationHeatmap(db, parsed.data));
   });
 
   app.get("/api/merchants", async (_request, response) => {

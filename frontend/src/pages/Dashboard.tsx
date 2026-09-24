@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { loadDashboard, type Category, type DashboardData, type MerchantRanking, type Metric, type Period } from "../dashboard/api";
-import { PickupMap } from "../dashboard/PickupMap";
+import { loadDashboard, loadDestinationHeatmap, type Category, type DashboardData, type DestinationHeatmapData, type MerchantRanking, type Metric, type Period } from "../dashboard/api";
+import { DashboardMap } from "../dashboard/DashboardMap";
 import "../dashboard/dashboard.css";
 
 const periods: { value: Period; label: string }[] = [
@@ -72,23 +72,27 @@ function Timeline({ data }: { data: DashboardData }) {
   </section>;
 }
 
-function MapPanel({ data, metric, mapMode, onMapMode }: { data: DashboardData; metric: Metric; mapMode: "heatmap" | "points"; onMapMode: (value: "heatmap" | "points") => void }) {
-  const selectedCount = metric === "destinationHeatmap" ? data.map.destinationHeatmap.length : data.map[metric].length;
+function MapPanel({ data, metric, category, mapMode, onMapMode, destination, destinationLoading, destinationError }: { data: DashboardData; metric: Metric; category: Category; mapMode: "heatmap" | "points"; onMapMode: (value: "heatmap" | "points") => void; destination: DestinationHeatmapData | null; destinationLoading: boolean; destinationError: string }) {
+  const selectedCount = metric === "merchantDiversity" ? data.map.merchantDiversity.length : data.map.pickupVolume.length;
   return <section className="dash-card map-panel" aria-label={`${metrics.find((item) => item.value === metric)?.label} map area`}>
     {metric !== "destinationHeatmap" && <div className="map-mode" role="group" aria-label="Map display mode">
       <button type="button" aria-pressed={mapMode === "heatmap"} onClick={() => onMapMode("heatmap")}>Heatmap</button>
       <button type="button" aria-pressed={mapMode === "points"} onClick={() => onMapMode("points")}>Points</button>
     </div>}
-    {metric === "pickupVolume" ? <PickupMap rows={data.map.pickupVolume} mode={mapMode} />
-      : <div className="map-placeholder"><span className="map-placeholder-mark" aria-hidden="true">⌖</span>
-        <strong>Map visualization</strong><span>ArcGIS rendering for this metric follows in a later phase.</span>
-        <small>{selectedCount} filtered {metric === "destinationHeatmap" ? "generalized destination areas" : "merchant locations"} available</small>
-      </div>}
+    <DashboardMap pickupRows={data.map.pickupVolume} diversityRows={data.map.merchantDiversity}
+      destinationCells={destination?.cells ?? []} metric={metric} mode={mapMode} />
+    {metric === "destinationHeatmap" && destinationLoading && <span className="map-data-status" role="status">Loading destination heatmap…</span>}
+    {metric === "destinationHeatmap" && destinationError && <span className="map-data-error" role="alert">{destinationError}</span>}
     <div className="map-caption">
-      <span>{metric === "destinationHeatmap" ? "Destination points are generalized before storage." : "Pickup locations represent physical merchant records."}</span>
-      {metric === "pickupVolume" && <small>{selectedCount} filtered merchant locations available</small>}
+      <span>{metric === "destinationHeatmap" ? "Destination heatmap only — individual destination points are not shown." : metric === "merchantDiversity" ? "Each observed merchant location counts once; this view shows distinct merchants, not pickup frequency." : "Pickup locations represent physical merchant records."}</span>
+      {metric !== "destinationHeatmap" && <small>{selectedCount} filtered merchant locations available</small>}
     </div>
+    {metric === "destinationHeatmap" && <p className="map-category-note">{categoryNote(category)}</p>}
   </section>;
+}
+
+function categoryNote(category: Category): string {
+  return category === "all" ? "Observed destination activity from all delivery categories." : `Observed destination activity associated with ${category} deliveries.`;
 }
 
 export function Dashboard() {
@@ -99,20 +103,50 @@ export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [destination, setDestination] = useState<{ period: Period; category: Category; data: DestinationHeatmapData } | null>(null);
+  const [destinationLoading, setDestinationLoading] = useState(false);
+  const [destinationError, setDestinationError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
     setLoading(true);
     setError("");
-    loadDashboard(period, category, controller.signal).then((result) => { setData(result); setLoading(false); })
+    loadDashboard(period, category, controller.signal).then((result) => {
+      if (active) { setData(result); setLoading(false); }
+    })
       .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        if (!active || (cause instanceof DOMException && cause.name === "AbortError")) return;
         setData(null);
         setError("Dashboard analytics are unavailable. Try again.");
         setLoading(false);
       });
-    return () => controller.abort();
+    return () => { active = false; controller.abort(); };
   }, [period, category]);
+
+  useEffect(() => {
+    setDestination(null);
+    setDestinationError("");
+    if (metric !== "destinationHeatmap") {
+      setDestinationLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    let active = true;
+    setDestinationLoading(true);
+    loadDestinationHeatmap(period, category, controller.signal).then((result) => {
+      if (active) {
+        setDestination({ period, category, data: result });
+        setDestinationLoading(false);
+      }
+    }).catch((cause: unknown) => {
+      if (!active || (cause instanceof DOMException && cause.name === "AbortError")) return;
+      setDestination(null);
+      setDestinationError("Destination heatmap is unavailable. Try again.");
+      setDestinationLoading(false);
+    });
+    return () => { active = false; controller.abort(); };
+  }, [metric, period, category]);
 
   return <section className="dashboard-page" aria-labelledby="dashboard-title">
     <div className="dashboard-heading"><div><div className="section-kicker">Dashboard</div><h1 id="dashboard-title">Observed Delivery Activity</h1></div>
@@ -126,7 +160,9 @@ export function Dashboard() {
     {error && <p className="dashboard-error" role="alert">{error}</p>}
     {loading && <p className="dashboard-loading" role="status">Loading dashboard analytics…</p>}
     {data && <div className={`dashboard-grid${loading ? " is-updating" : ""}`} aria-busy={loading}>
-      <MapPanel data={data} metric={metric} mapMode={mapMode} onMapMode={setMapMode} />
+      <MapPanel data={data} metric={metric} category={category} mapMode={mapMode} onMapMode={setMapMode}
+        destination={destination?.period === period && destination.category === category ? destination.data : null}
+        destinationLoading={destinationLoading} destinationError={destinationError} />
       <div className="dashboard-details">
         <div className="summary-grid">
           <div className="dash-card stat-card"><span className="stat-label">Total Deliveries</span><strong>{data.summary.totalDeliveries}</strong></div>

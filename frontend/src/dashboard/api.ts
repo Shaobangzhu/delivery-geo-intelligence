@@ -33,9 +33,12 @@ export interface DashboardData {
   topMerchants: MerchantRanking[];
   map: {
     pickupVolume: (MerchantRanking & { location: GeoPoint })[];
-    merchantDiversity: { id: string; name: string; category: Exclude<Category, "all">; city: string; deliveries: number; location: GeoPoint }[];
-    destinationHeatmap: { location: GeoPoint; count: number }[];
+    merchantDiversity: { id: string; name: string; category: Exclude<Category, "all">; city: string; distinctMerchantCount: 1; location: GeoPoint }[];
   };
+}
+
+export interface DestinationHeatmapData {
+  cells: { location: GeoPoint; count: number }[];
 }
 
 export async function loadDashboard(period: Period, category: Category, signal?: AbortSignal): Promise<DashboardData> {
@@ -43,4 +46,11 @@ export async function loadDashboard(period: Period, category: Category, signal?:
   const response = await fetch(`/api/dashboard?${query}`, { signal });
   if (!response.ok) throw new Error("Dashboard analytics are unavailable. Try again.");
   return response.json() as Promise<DashboardData>;
+}
+
+export async function loadDestinationHeatmap(period: Period, category: Category, signal?: AbortSignal): Promise<DestinationHeatmapData> {
+  const query = new URLSearchParams({ period, category });
+  const response = await fetch(`/api/dashboard/destination-heatmap?${query}`, { signal });
+  if (!response.ok) throw new Error("Destination heatmap is unavailable. Try again.");
+  return response.json() as Promise<DestinationHeatmapData>;
 }
