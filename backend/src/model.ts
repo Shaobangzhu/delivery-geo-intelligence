@@ -24,12 +24,15 @@ export const merchantInputSchema = z.strictObject({
 
 const timestampSchema = z.iso.datetime({ offset: true });
 
-// Destination input is intentionally absent until the private geocoding flow exists.
+// This address is transient input only; it is never part of DeliveryDocument.
+const destinationAddressSchema = z.string().trim().min(1).max(500);
+
 export const deliveryInputSchema = z.strictObject({
   merchantId: objectIdSchema,
   pickedUpAt: timestampSchema,
   payout: z.number().finite().nonnegative().optional(),
   distanceMiles: z.number().finite().nonnegative().optional(),
+  destinationAddress: destinationAddressSchema.optional(),
   notes: z.string().trim().max(2000).optional()
 });
 
@@ -38,6 +41,7 @@ export const deliveryPatchSchema = z.strictObject({
   pickedUpAt: timestampSchema.optional(),
   payout: z.number().finite().nonnegative().nullable().optional(),
   distanceMiles: z.number().finite().nonnegative().nullable().optional(),
+  destinationAddress: destinationAddressSchema.optional(),
   notes: z.string().trim().max(2000).nullable().optional()
 }).refine(
   (value) => Object.keys(value).length > 0,

@@ -2,6 +2,7 @@ import { MongoClient } from "mongodb";
 import { createApp } from "./app.js";
 import { DATABASE_NAME, ensureIndexes } from "./db.js";
 import { env } from "./config/env.js";
+import { createArcGisGeocoder } from "./geocoding.js";
 
 const client = new MongoClient(env.MONGODB_URI);
 
@@ -10,7 +11,8 @@ try {
   const db = client.db(DATABASE_NAME);
   await ensureIndexes(db);
 
-  const server = createApp(db).listen(env.PORT, "127.0.0.1", () => {
+  const geocodeDestination = createArcGisGeocoder(env.ARCGIS_GEOCODING_API_KEY, env.DESTINATION_COORDINATE_DECIMALS);
+  const server = createApp(db, geocodeDestination).listen(env.PORT, "127.0.0.1", () => {
     console.info(`DGI API listening on http://127.0.0.1:${env.PORT}`);
   });
 

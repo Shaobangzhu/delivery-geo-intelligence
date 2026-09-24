@@ -11,7 +11,7 @@ The application uses the native MongoDB Node.js driver. The application database
 
 A Merchant is one physical pickup location, so two branches of one brand use separate records. `category` is `restaurant`, `grocery`, `retail`, or `other`. Merchant `location` is a GeoJSON Point with coordinates in `[longitude, latitude]` order. Only verified public business locations should be submitted. No merchant or delivery records are seeded by this phase.
 
-`merchantId` references a Merchant record. `pickedUpAt` is stored as a BSON Date. `payout` is the manually recorded gross payout; absence means unknown, while an explicit `0` means zero. The API does not default absent payout to zero. Optional `destinationLocation` is reserved for a future generalized GeoJSON Point and has a 2dsphere index. No persisted `destinationAddress` field exists.
+`merchantId` references a Merchant record. `pickedUpAt` is stored as a BSON Date. `payout` is the manually recorded gross payout; absence means unknown, while an explicit `0` means zero. The API does not default absent payout to zero. Optional `destinationLocation` holds a generalized GeoJSON Point and has a 2dsphere index. No persisted `destinationAddress` field exists.
 
 ## Endpoints
 
@@ -26,7 +26,7 @@ A Merchant is one physical pickup location, so two branches of one brand use sep
 | `PATCH /api/deliveries/:id` | Changes supplied fields; `null` clears optional payout, distance, or notes |
 | `DELETE /api/deliveries/:id` | Deletes a delivery and returns 204 |
 
-The create and patch Delivery requests accept `merchantId`, `pickedUpAt`, `payout`, `distanceMiles`, and `notes` as applicable. They reject `destinationAddress`, `destinationLocation`, and other unknown fields. The History-oriented Delivery response exposes `hasDestinationLocation` but never exposes coordinates. Synthetic destination points may be inserted directly into an isolated test database for controlled index tests; the public API cannot write them.
+The create and patch Delivery requests accept `merchantId`, `pickedUpAt`, `payout`, `distanceMiles`, `notes`, and transient `destinationAddress` as applicable. They reject direct `destinationLocation` and other unknown fields. The backend geocodes and generalizes a supplied address before writing only `destinationLocation`. The History-oriented Delivery response exposes `hasDestinationLocation` but never exposes coordinates. Synthetic destination points may be inserted directly into an isolated test database for controlled index tests; the public API cannot write them directly.
 
 `GET /api/deliveries` accepts:
 

@@ -6,6 +6,7 @@ import test from "node:test";
 import { MongoClient, ObjectId } from "mongodb";
 import { createApp } from "../dist/app.js";
 import { ensureIndexes } from "../dist/db.js";
+import { GeocodingError, generalizeCoordinates } from "../dist/geocoding.js";
 
 test("Merchant and Delivery API against an isolated DGI MongoDB test database", async (t) => {
   assert.ok(process.env.MONGODB_URI, "Set MONGODB_URI in backend/.env before running tests");
@@ -13,13 +14,24 @@ test("Merchant and Delivery API against an isolated DGI MongoDB test database", 
   const databaseName = `delivery_geo_intelligence_test_${process.pid}_${randomBytes(4).toString("hex")}`;
   let server;
   let connected = false;
+  const geocodeCalls = [];
+  const transientInputA = "synthetic-destination-token-a";
+  const transientInputB = "synthetic-destination-token-b";
+  async function geocodeDestination(input) {
+    geocodeCalls.push(input);
+    if (input === "synthetic-no-match") throw new GeocodingError("no_match");
+    if (input === "synthetic-provider-error") throw new GeocodingError("provider_error");
+    return input === transientInputB
+      ? generalizeCoordinates(0.765432, 0.234567, 2)
+      : generalizeCoordinates(0.123456, 0.654321, 2);
+  }
 
   try {
     await client.connect();
     connected = true;
     const db = client.db(databaseName);
     await ensureIndexes(db);
-    server = createApp(db).listen(0, "127.0.0.1");
+    server = createApp(db, geocodeDestination).listen(0, "127.0.0.1");
     await once(server, "listening");
     const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -67,7 +79,7 @@ test("Merchant and Delivery API against an isolated DGI MongoDB test database", 
       assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, distanceMiles: -1 })).status, 400);
       assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, pickedUpAt: "not-a-date" })).status, 400);
       assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, merchantId: "bad" })).status, 400);
-      assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, destinationAddress: "forbidden" })).status, 400);
+      assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, destinationAddress: "" })).status, 400);
       assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, destinationLocation: { type: "Point", coordinates: [0, 0] } })).status, 400);
       assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, merchantId: new ObjectId().toHexString() })).status, 422);
 
@@ -142,6 +154,45 @@ test("Merchant and Delivery API against an isolated DGI MongoDB test database", 
       assert.equal((await api("DELETE", `/api/deliveries/${deliveryAId}`)).status, 204);
       assert.equal((await api("GET", `/api/deliveries/${deliveryAId}`)).status, 404);
       assert.equal((await api("GET", "/api/deliveries")).body.pagination.total, 2);
+    });
+
+    await t.test("transient destination is generalized, replaced, and never returned", async () => {
+      const body = { merchantId: merchantAId, pickedUpAt: "2026-04-06T09:00:00-07:00", destinationAddress: transientInputA };
+      const before = await db.collection("deliveries").countDocuments();
+      const noMatch = await api("POST", "/api/deliveries", { ...body, destinationAddress: "synthetic-no-match" });
+      assert.equal(noMatch.status, 422);
+      assert.equal(noMatch.body.code, "no_match");
+      assert.equal((await db.collection("deliveries").countDocuments()), before);
+      assert.equal((await api("POST", "/api/deliveries", { ...body, destinationAddress: "synthetic-provider-error" })).status, 502);
+
+      const created = await api("POST", "/api/deliveries", body);
+      assert.equal(created.status, 201);
+      assert.equal(created.body.data.hasDestinationLocation, true);
+      assert.equal(JSON.stringify(created.body).includes(transientInputA), false);
+      assert.equal(Object.hasOwn(created.body.data, "destinationLocation"), false);
+      const id = created.body.data.id;
+      let stored = await db.collection("deliveries").findOne({ _id: new ObjectId(id) });
+      assert.equal(Object.hasOwn(stored, "destinationAddress"), false);
+      assert.deepEqual(stored.destinationLocation, { type: "Point", coordinates: [0.12, 0.65] });
+      assert.equal(JSON.stringify(stored).includes("0.123456"), false);
+
+      const normalEdit = await api("PATCH", `/api/deliveries/${id}`, { notes: "synthetic note" });
+      assert.equal(normalEdit.status, 200);
+      stored = await db.collection("deliveries").findOne({ _id: new ObjectId(id) });
+      assert.deepEqual(stored.destinationLocation.coordinates, [0.12, 0.65]);
+      assert.equal(geocodeCalls.filter((input) => input === transientInputA).length, 1);
+
+      const replacement = await api("PATCH", `/api/deliveries/${id}`, { destinationAddress: transientInputB });
+      assert.equal(replacement.status, 200);
+      assert.equal(JSON.stringify(replacement.body).includes(transientInputB), false);
+      stored = await db.collection("deliveries").findOne({ _id: new ObjectId(id) });
+      assert.deepEqual(stored.destinationLocation.coordinates, [0.77, 0.23]);
+      assert.equal(Object.hasOwn(stored, "destinationAddress"), false);
+      assert.equal(JSON.stringify(stored).includes("0.765432"), false);
+      assert.equal((await api("PATCH", `/api/deliveries/${id}`, { destinationAddress: "synthetic-no-match" })).status, 422);
+      const afterFailure = await db.collection("deliveries").findOne({ _id: new ObjectId(id) });
+      assert.deepEqual(afterFailure.destinationLocation.coordinates, [0.77, 0.23]);
+      await api("DELETE", `/api/deliveries/${id}`);
     });
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));

@@ -13,7 +13,7 @@ The frontend and backend run directly on the host. Docker Compose runs only Mong
 
 The Compose image uses MongoDB 7.0 because MongoDB 8.0 failed to start under this Docker Desktop environment's Linux kernel. The DGI volume is separate from other projects.
 
-## Planned later data flow
+## Destination data flow
 
 ```text
 History form
@@ -23,8 +23,8 @@ History form
   → deterministic coordinate generalization
   → discard address and exact coordinate
   → persist generalized GeoJSON Point in MongoDB
-  → analytics
-  → ArcGIS Dashboard
+  → analytics (planned)
+  → ArcGIS Dashboard (planned)
 ```
 
-This flow is a plan, not an implemented feature. Residential addresses and exact geocoded residential coordinates must not be stored or logged. The current Delivery API rejects destination addresses and coordinates. The frontend ArcGIS key will be browser-consumed; the backend geocoding key must remain server-only. Observed records and derived analysis must be described as a personal observational dataset, not representative of overall delivery demand.
+The destination write path through MongoDB is implemented. Analytics and ArcGIS Dashboard visualization remain planned. Residential addresses and exact geocoded residential coordinates must not be stored or logged. The Delivery API accepts a transient address and rejects direct destination coordinates. The frontend ArcGIS key will be browser-consumed; the backend geocoding key remains server-only. Observed records and derived analysis must be described as a personal observational dataset, not representative of overall delivery demand.

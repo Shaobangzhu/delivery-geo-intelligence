@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ObjectId, type Db, type Filter, type Sort } from "mongodb";
 import { ZodError } from "zod";
+import { GeocodingError, type DestinationGeocoder } from "./geocoding.js";
 import {
   deliveryInputSchema, deliveryPatchSchema, deliveryQuerySchema, deliveryResponse,
   merchantInputSchema, merchantResponse, objectIdSchema,
@@ -12,6 +13,12 @@ function invalid(response: Response, error: ZodError) {
     error: "Invalid request",
     details: error.issues.map((issue) => ({ field: issue.path.join(".") || "request", message: issue.message }))
   });
+}
+
+function geocodingFailure(response: Response, error: GeocodingError) {
+  const status = error.code === "no_match" || error.code === "low_confidence" ? 422
+    : error.code === "network_error" ? 503 : 502;
+  return response.status(status).json({ error: "Destination geocoding failed", code: error.code });
 }
 
 function escapeRegex(value: string): string {
@@ -27,7 +34,7 @@ const sorts: Record<string, Sort> = {
   distanceAsc: { distanceMiles: 1, _id: 1 }
 };
 
-export function createApp(db: Db) {
+export function createApp(db: Db, geocodeDestination: DestinationGeocoder) {
   const app = express();
   const merchants = db.collection<MerchantDocument>("merchants");
   const deliveries = db.collection<DeliveryDocument>("deliveries");
@@ -97,10 +104,20 @@ export function createApp(db: Db) {
     if (!(await merchants.findOne({ _id: merchantId }, { projection: { _id: 1 } }))) {
       return response.status(422).json({ error: "Merchant not found" });
     }
+    let destinationLocation: DeliveryDocument["destinationLocation"];
+    if (parsed.data.destinationAddress !== undefined) {
+      try {
+        destinationLocation = await geocodeDestination(parsed.data.destinationAddress);
+      } catch (error) {
+        if (error instanceof GeocodingError) return geocodingFailure(response, error);
+        throw error;
+      }
+    }
     const delivery: DeliveryDocument = {
       _id: new ObjectId(), merchantId, pickedUpAt: new Date(parsed.data.pickedUpAt),
       ...(parsed.data.payout === undefined ? {} : { payout: parsed.data.payout }),
       ...(parsed.data.distanceMiles === undefined ? {} : { distanceMiles: parsed.data.distanceMiles }),
+      ...(destinationLocation === undefined ? {} : { destinationLocation }),
       ...(parsed.data.notes === undefined ? {} : { notes: parsed.data.notes })
     };
     await deliveries.insertOne(delivery);
@@ -113,6 +130,9 @@ export function createApp(db: Db) {
     const parsed = deliveryPatchSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response, parsed.error);
     const changes = parsed.data;
+    if (!(await deliveries.findOne({ _id: new ObjectId(id.data) }, { projection: { _id: 1 } }))) {
+      return response.status(404).json({ error: "Delivery not found" });
+    }
     if (changes.merchantId && !(await merchants.findOne({ _id: new ObjectId(changes.merchantId) }, { projection: { _id: 1 } }))) {
       return response.status(422).json({ error: "Merchant not found" });
     }
@@ -120,6 +140,14 @@ export function createApp(db: Db) {
     const unset: Record<string, ""> = {};
     if (changes.merchantId !== undefined) set.merchantId = new ObjectId(changes.merchantId);
     if (changes.pickedUpAt !== undefined) set.pickedUpAt = new Date(changes.pickedUpAt);
+    if (changes.destinationAddress !== undefined) {
+      try {
+        set.destinationLocation = await geocodeDestination(changes.destinationAddress);
+      } catch (error) {
+        if (error instanceof GeocodingError) return geocodingFailure(response, error);
+        throw error;
+      }
+    }
     for (const field of ["payout", "distanceMiles", "notes"] as const) {
       const value = changes[field];
       if (value === null) unset[field] = "";
