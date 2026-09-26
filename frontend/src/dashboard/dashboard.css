@@ -19,7 +19,7 @@
 .dashboard-map-canvas { position: absolute; inset: 0; }
 .map-progress, .map-error { position: absolute; left: 12px; bottom: 12px; max-width: calc(100% - 24px); padding: 7px 10px; border: 1px solid #d5e4f7; border-radius: 5px; background: #ffffffed; color: #31557f; font-size: 11px; box-shadow: 0 2px 8px #3e618a24; }
 .map-error { right: 12px; bottom: auto; top: 12px; color: #a62331; border-color: #f1b7bd; }
-.dashboard-grid.is-updating .dashboard-details { opacity: .52; }
+.dashboard-grid.is-updating { opacity: 0; pointer-events: none; }
 .map-caption { display: flex; justify-content: space-between; gap: 8px; padding: 10px 4px 2px; color: #5b7597; font-size: 11px; }
 .map-caption small { font-size: 11px; }
 .map-data-status, .map-data-error, .map-category-note { margin: 6px 4px 0; color: #5b7597; font-size: 11px; }

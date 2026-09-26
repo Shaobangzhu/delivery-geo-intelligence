@@ -172,6 +172,19 @@ it("serializes rapid merchant filter edits and applies only the latest data", as
   expect(FakeMapView.instances).toHaveLength(1);
 });
 
+it("updates an existing merchant's public point after an address correction without rebuilding the map", async () => {
+  const { rerender } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
+    destinationCells={[]} metric="pickupVolume" mode="points" />);
+  await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
+  const corrected = { ...pickupRows[0], location: { type: "Point" as const, coordinates: [4, 5] as [number, number] } };
+  rerender(<DashboardMap pickupRows={[corrected, pickupRows[1]]} diversityRows={[{ ...diversityRows[0], location: corrected.location }, diversityRows[1]]}
+    destinationCells={[]} metric="pickupVolume" mode="points" />);
+  const layer = FakeFeatureLayer.instances[0];
+  await waitFor(() => expect(layer.edits).toHaveLength(2));
+  expect(layer.edits[1].updateFeatures?.[0].options.geometry?.options).toMatchObject({ longitude: 4, latitude: 5 });
+  expect(FakeMapView.instances).toHaveLength(1);
+});
+
 it("updates merchant data while the hidden destination layer view is still initializing", async () => {
   FakeMapView.destinationLayerViewGate = new Promise<void>(() => undefined);
   const { unmount } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}

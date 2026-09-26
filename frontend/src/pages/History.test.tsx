@@ -19,6 +19,7 @@ function reply(body: unknown, status = 200): Response {
 
 function installApi(options: {
   rows?: Delivery[];
+  get?: (url: URL) => Promise<Response> | Response;
   post?: (payload: DeliveryPayload) => Promise<Response> | Response;
   patch?: (payload: DeliveryPayload) => Promise<Response> | Response;
 } = {}) {
@@ -28,6 +29,7 @@ function installApi(options: {
     const method = init?.method ?? "GET";
     if (url.pathname === "/api/merchants") return reply({ data: merchants });
     if (url.pathname === "/api/deliveries" && method === "GET") {
+      if (options.get) return options.get(url);
       const search = url.searchParams.get("search")?.toLowerCase() ?? "";
       const category = url.searchParams.get("category") ?? "";
       const from = url.searchParams.get("from");
@@ -81,6 +83,21 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Delivery History", () => {
+  it("ignores an older list response after filters change", async () => {
+    const user = userEvent.setup();
+    let finishOld!: (response: Response) => void;
+    const oldRequest = new Promise<Response>((resolve) => { finishOld = resolve; });
+    installApi({ get: (url) => url.searchParams.get("search")
+      ? reply({ data: [initialRows[1]], pagination: { page: 1, pageSize: 10, total: 1, totalPages: 1 } })
+      : oldRequest });
+    render(<History />);
+    await user.type(screen.getByLabelText("Merchant search"), "Grocery");
+    expect(await screen.findByText("Test Grocery B")).toBeInTheDocument();
+    finishOld(reply({ data: [initialRows[0]], pagination: { page: 1, pageSize: 10, total: 1, totalPages: 1 } }));
+    await waitFor(() => expect(screen.getByText("Test Grocery B")).toBeInTheDocument());
+    expect(screen.queryByText("Test Merchant A")).not.toBeInTheDocument();
+  });
+
   it("loads real API data and displays only a safe destination state", async () => {
     installApi();
     render(<History />);

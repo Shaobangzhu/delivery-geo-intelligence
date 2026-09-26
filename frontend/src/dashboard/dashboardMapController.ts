@@ -176,9 +176,9 @@ export class DashboardMapController {
         }
         next.set(row.id, objectId);
         const graphic = new this.arcgis.Graphic({
-          ...(this.displayedMerchants.has(row.id) ? {} : { geometry: new this.arcgis.Point({
+          geometry: new this.arcgis.Point({
             longitude: row.location.coordinates[0], latitude: row.location.coordinates[1], spatialReference: { wkid: 4326 }
-          }) }),
+          }),
           attributes: {
             ObjectID: objectId, merchantId: row.id, merchantName: row.name,
             category: row.category, deliveryCount: row.deliveries,

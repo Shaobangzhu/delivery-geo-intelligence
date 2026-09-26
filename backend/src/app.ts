@@ -39,6 +39,15 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   const app = express();
   const merchants = db.collection<MerchantDocument>("merchants");
   const deliveries = db.collection<DeliveryDocument>("deliveries");
+  let referenceWrite = Promise.resolve();
+  async function withReferenceWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = referenceWrite;
+    let release!: () => void;
+    referenceWrite = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try { return await operation(); }
+    finally { release(); }
+  }
   app.use(express.json({ limit: "32kb" }));
 
   app.get("/api/health", async (_request, response) => {
@@ -125,13 +134,14 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     const parsed = objectIdSchema.safeParse(request.params.id);
     if (!parsed.success) return invalid(response, parsed.error);
     const id = new ObjectId(parsed.data);
-    if (!(await merchants.findOne({ _id: id }, { projection: { _id: 1 } }))) {
-      return response.status(404).json({ error: "Merchant not found" });
-    }
-    if (await deliveries.countDocuments({ merchantId: id })) {
-      return response.status(409).json({ error: "Merchant has delivery history and cannot be deleted" });
-    }
-    await merchants.deleteOne({ _id: id });
+    const outcome = await withReferenceWrite(async () => {
+      if (!(await merchants.findOne({ _id: id }, { projection: { _id: 1 } }))) return "missing";
+      if (await deliveries.countDocuments({ merchantId: id })) return "referenced";
+      await merchants.deleteOne({ _id: id });
+      return "deleted";
+    });
+    if (outcome === "missing") return response.status(404).json({ error: "Merchant not found" });
+    if (outcome === "referenced") return response.status(409).json({ error: "Merchant has delivery history and cannot be deleted" });
     return response.status(204).end();
   });
 
@@ -193,7 +203,12 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
       ...(destinationLocation === undefined ? {} : { destinationLocation }),
       ...(parsed.data.notes === undefined ? {} : { notes: parsed.data.notes })
     };
-    await deliveries.insertOne(delivery);
+    const inserted = await withReferenceWrite(async () => {
+      if (!(await merchants.findOne({ _id: merchantId }, { projection: { _id: 1 } }))) return false;
+      await deliveries.insertOne(delivery);
+      return true;
+    });
+    if (!inserted) return response.status(422).json({ error: "Merchant not found" });
     return response.status(201).json({ data: deliveryResponse(delivery) });
   });
 
@@ -226,13 +241,21 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
       if (value === null) unset[field] = "";
       else if (value !== undefined) Object.assign(set, { [field]: value });
     }
-    const updated = await deliveries.findOneAndUpdate(
-      { _id: new ObjectId(id.data) },
-      { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) },
-      { returnDocument: "after" }
-    );
-    if (!updated) return response.status(404).json({ error: "Delivery not found" });
-    return response.json({ data: deliveryResponse(updated) });
+    const write = async () => {
+      if (changes.merchantId && !(await merchants.findOne({ _id: new ObjectId(changes.merchantId) }, { projection: { _id: 1 } }))) {
+        return { status: "merchant_missing" as const };
+      }
+      const updated = await deliveries.findOneAndUpdate(
+        { _id: new ObjectId(id.data) },
+        { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) },
+        { returnDocument: "after" }
+      );
+      return { status: "updated" as const, delivery: updated };
+    };
+    const outcome = changes.merchantId ? await withReferenceWrite(write) : await write();
+    if (outcome.status === "merchant_missing") return response.status(422).json({ error: "Merchant not found" });
+    if (!outcome.delivery) return response.status(404).json({ error: "Delivery not found" });
+    return response.json({ data: deliveryResponse(outcome.delivery) });
   });
 
   app.delete("/api/deliveries/:id", async (request, response) => {

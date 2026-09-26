@@ -24,6 +24,8 @@ Merchants form → verified public business address → Express
 
 Two locations of one brand have separate Merchant IDs. Editing an address corrects the pickup point for every delivery referencing that ID; a genuinely moved store should be a new Merchant. A referenced Merchant cannot be deleted (HTTP 409); delivery records are never cascade deleted. Earlier Merchant records without a saved public address retain their existing point until corrected.
 
+The local Express process serializes Merchant deletion with Delivery creation and merchant reassignment. It rechecks the Merchant immediately before the Delivery write, so a destination geocode in progress cannot create an orphan Delivery after a Merchant is deleted in this process. This is a single-process safeguard, not a cross-process transaction. A future multi-instance deployment would need database-enforced or transactional referential handling.
+
 ## Residential destination data flow
 
 ```text

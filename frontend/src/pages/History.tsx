@@ -44,10 +44,11 @@ export function History() {
 
   useEffect(() => {
     const controller = new AbortController();
-    listMerchants(controller.signal).then(setMerchants).catch((error: unknown) => {
-      if (!isAbort(error)) setMerchantError(userFacingError(error));
+    let active = true;
+    listMerchants(controller.signal).then((rows) => { if (active) setMerchants(rows); }).catch((error: unknown) => {
+      if (active && !isAbort(error)) setMerchantError(userFacingError(error));
     });
-    return () => controller.abort();
+    return () => { active = false; controller.abort(); };
   }, []);
 
   useEffect(() => {
@@ -58,14 +59,15 @@ export function History() {
       return;
     }
     const controller = new AbortController();
+    let active = true;
     setLoading(true);
     setListError("");
     listDeliveries({ search, category, fromDate, toDate, sort, page, pageSize: PAGE_SIZE }, controller.signal)
-      .then((data) => { setResult(data); setLoading(false); })
+      .then((data) => { if (active) { setResult(data); setLoading(false); } })
       .catch((error: unknown) => {
-        if (!isAbort(error)) { setListError(userFacingError(error)); setLoading(false); }
+        if (active && !isAbort(error)) { setListError(userFacingError(error)); setLoading(false); }
       });
-    return () => controller.abort();
+    return () => { active = false; controller.abort(); };
   }, [search, category, fromDate, toDate, sort, page, reload]);
 
   const merchantById = useMemo(() => new Map(merchants.map((merchant) => [merchant.id, merchant])), [merchants]);
@@ -141,7 +143,7 @@ export function History() {
                 return <tr key={delivery.id}>
                   <td className="date-cell">{formatDateTime(delivery.pickedUpAt)}</td>
                   <td><span className="merchant-name">{merchant?.name ?? "Unknown merchant"}</span>{merchant && <span className="merchant-city">{merchant.publicAddress ?? merchant.city}</span>}</td>
-                  <td><span className={`category-label category-${merchant?.category ?? "other"}`}>{merchant ? categories.find((item) => item.value === merchant.category)?.label : "Other"}</span></td>
+                  <td><span className={`category-label${merchant ? ` category-${merchant.category}` : ""}`}>{merchant ? categories.find((item) => item.value === merchant.category)?.label : "Unknown"}</span></td>
                   <td className="number-cell">{delivery.payout === undefined ? "—" : `$${delivery.payout.toFixed(2)}`}</td>
                   <td className="number-cell">{delivery.distanceMiles === undefined ? "—" : `${delivery.distanceMiles.toFixed(1)} mi`}</td>
                   <td><span className={delivery.hasDestinationLocation ? "destination-status ready" : "destination-status missing"}>{delivery.hasDestinationLocation ? "Location Ready" : "No Location"}</span></td>

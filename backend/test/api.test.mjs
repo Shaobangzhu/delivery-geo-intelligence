@@ -18,8 +18,14 @@ test("Merchant and Delivery API against an isolated DGI MongoDB test database", 
   const merchantGeocodeCalls = [];
   const transientInputA = "synthetic-destination-token-a";
   const transientInputB = "synthetic-destination-token-b";
+  let pauseConcurrentGeocode;
+  let notifyConcurrentGeocode;
   async function geocodeDestination(input) {
     geocodeCalls.push(input);
+    if (input === "synthetic-concurrent-geocode") {
+      notifyConcurrentGeocode();
+      await pauseConcurrentGeocode;
+    }
     if (input === "synthetic-no-match") throw new GeocodingError("no_match");
     if (input === "synthetic-provider-error") throw new GeocodingError("provider_error");
     return input === transientInputB
@@ -217,6 +223,23 @@ test("Merchant and Delivery API against an isolated DGI MongoDB test database", 
       assert.equal((await api("DELETE", `/api/merchants/${unused.body.data.id}`)).status, 204);
       assert.equal((await api("GET", `/api/merchants/${unused.body.data.id}`)).status, 404);
       assert.equal(await db.collection("deliveries").countDocuments({ merchantId: new ObjectId(merchantBId) }), existingDeliveryCount);
+    });
+
+    await t.test("deleting a Merchant during destination geocoding cannot create an orphan Delivery", async () => {
+      const temporary = await api("POST", "/api/merchants", { ...merchantA, name: "Temporary Pickup" });
+      assert.equal(temporary.status, 201);
+      let resume;
+      pauseConcurrentGeocode = new Promise((resolve) => { resume = resolve; });
+      const started = new Promise((resolve) => { notifyConcurrentGeocode = resolve; });
+      const pendingDelivery = api("POST", "/api/deliveries", {
+        merchantId: temporary.body.data.id, pickedUpAt: "2026-04-08T10:00:00-07:00",
+        destinationAddress: "synthetic-concurrent-geocode"
+      });
+      await started;
+      assert.equal((await api("DELETE", `/api/merchants/${temporary.body.data.id}`)).status, 204);
+      resume();
+      assert.equal((await pendingDelivery).status, 422);
+      assert.equal(await db.collection("deliveries").countDocuments({ merchantId: new ObjectId(temporary.body.data.id) }), 0);
     });
 
     await t.test("transient destination is generalized, replaced, and never returned", async () => {

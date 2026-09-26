@@ -74,3 +74,25 @@ it("keeps the map mounted while time and category filters load", async () => {
   await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
   expect(screen.getByTestId("dashboard-map")).toBe(map);
 });
+
+it("hides stale analytics while a new filter response is pending without unmounting the map", async () => {
+  const user = userEvent.setup();
+  let finishNext!: (value: { ok: boolean; json: () => Promise<DashboardData> }) => void;
+  let requests = 0;
+  vi.stubGlobal("fetch", vi.fn(() => {
+    requests += 1;
+    return requests === 1
+      ? Promise.resolve({ ok: true, json: async () => fixture })
+      : new Promise((resolve) => { finishNext = resolve; });
+  }));
+  render(<Dashboard />);
+  const map = await screen.findByTestId("dashboard-map");
+  await user.click(screen.getByRole("button", { name: "Month" }));
+  const grid = map.closest(".dashboard-grid");
+  expect(grid).toHaveAttribute("aria-busy", "true");
+  expect(grid).toHaveAttribute("inert");
+  expect(grid).toHaveClass("is-updating");
+  expect(screen.getByTestId("dashboard-map")).toBe(map);
+  finishNext({ ok: true, json: async () => fixture });
+  await waitFor(() => expect(grid).toHaveAttribute("aria-busy", "false"));
+});

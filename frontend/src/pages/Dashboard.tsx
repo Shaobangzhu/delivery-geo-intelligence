@@ -159,7 +159,7 @@ export function Dashboard() {
     </div>
     {error && <p className="dashboard-error" role="alert">{error}</p>}
     {loading && <p className="dashboard-loading" role="status">Loading dashboard analytics…</p>}
-    {data && <div className={`dashboard-grid${loading ? " is-updating" : ""}`} aria-busy={loading}>
+    {data && <div className={`dashboard-grid${loading ? " is-updating" : ""}`} aria-busy={loading} inert={loading}>
       <MapPanel data={data} metric={metric} category={category} mapMode={mapMode} onMapMode={setMapMode}
         destination={destination?.period === period && destination.category === category ? destination.data : null}
         destinationLoading={destinationLoading} destinationError={destinationError} />
