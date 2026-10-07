@@ -121,10 +121,22 @@ export class DashboardMapController {
         : this.heatmap("deliveryCount", Math.max(1, ...this.pickupRows.map((row) => row.deliveries)));
     }
     if (this.metric === "merchantDiversity") {
-      return new this.arcgis.SimpleRenderer({
-        symbol: new this.arcgis.SimpleMarkerSymbol({
-          style: "circle", color: "#1769e9", outline: { color: "#ffffff", width: 1.5 }, size: 11
-        })
+      const categories = [
+        { value: "restaurant", label: "Restaurant", color: "#EF4444", glyph: "M7 6v5m3-5v5m-6-5v5q0 3 3 3v6m9-14v14m0-14q-4 3-4 8h4" },
+        { value: "grocery", label: "Grocery", color: "#16A34A", glyph: "M4 10h16l-2 9H6zM8 10l3-5m5 5-3-5M9 13v3m6-3v3" },
+        { value: "retail", label: "Retail", color: "#7C3AED", glyph: "M6 9h12l1 11H5zM9 9V7a3 3 0 0 1 6 0v2" },
+        { value: "other", label: "Other", color: "#64748B", glyph: "M6 20V5h12v15M4 20h16M9 8h1m4 0h1m-6 4h1m4 0h1m-4 8v-4h2v4" }
+      ];
+      const uniqueValueInfos = categories.map(({ value, label, color, glyph }) => {
+        // Explicit SVG dimensions support Firefox; icons are self-contained and equal in size.
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="${color}" stroke="white" stroke-width="1.5"/><path d="${glyph}" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        return { value, label, symbol: new this.arcgis.PictureMarkerSymbol({
+          url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, width: "24px", height: "24px"
+        }) };
+      });
+      return new this.arcgis.UniqueValueRenderer({
+        field: "category", uniqueValueInfos,
+        defaultSymbol: uniqueValueInfos[3].symbol, defaultLabel: "Other"
       });
     }
     return new this.arcgis.SimpleRenderer({

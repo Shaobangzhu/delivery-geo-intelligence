@@ -72,6 +72,8 @@ class FakePoint { constructor(public options: { longitude: number; latitude: num
 class FakeHeatmapRenderer { constructor(public options: Record<string, unknown>) {} }
 class FakeSimpleRenderer { constructor(public options: Record<string, unknown>) {} }
 class FakeSimpleMarkerSymbol { constructor(public options: Record<string, unknown>) {} }
+class FakeUniqueValueRenderer { constructor(public options: Record<string, unknown>) {} }
+class FakePictureMarkerSymbol { constructor(public options: Record<string, unknown>) {} }
 class FakePopupTemplate { constructor(public options: Record<string, unknown>) {} }
 
 const removeWatch = vi.fn();
@@ -81,6 +83,7 @@ const runtime = {
   Map: FakeMap, MapView: FakeMapView, FeatureLayer: FakeFeatureLayer,
   Graphic: FakeGraphic, Point: FakePoint, HeatmapRenderer: FakeHeatmapRenderer,
   SimpleRenderer: FakeSimpleRenderer, SimpleMarkerSymbol: FakeSimpleMarkerSymbol,
+  UniqueValueRenderer: FakeUniqueValueRenderer, PictureMarkerSymbol: FakePictureMarkerSymbol,
   PopupTemplate: FakePopupTemplate, config, reactiveUtils: { watch }
 } as unknown as ArcgisRuntime;
 
@@ -131,14 +134,75 @@ it("weights pickup activity and distinct merchant variety differently in one per
   expect(merchantLayer.edits).toHaveLength(1);
   rerender(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
     destinationCells={[]} metric="merchantDiversity" mode="points" />);
-  expect(merchantLayer.renderer).toBeInstanceOf(FakeSimpleRenderer);
-  expect((merchantLayer.renderer as FakeSimpleRenderer).options.visualVariables).toBeUndefined();
+  expect(merchantLayer.renderer).toBeInstanceOf(FakeUniqueValueRenderer);
+  expect((merchantLayer.renderer as FakeUniqueValueRenderer).options.visualVariables).toBeUndefined();
   expect(FakeMapView.instances).toHaveLength(1);
   expect(watch).toHaveBeenCalledTimes(2);
   unmount();
   expect(FakeMapView.instances[0].destroy).toHaveBeenCalledTimes(1);
   expect(FakeMapView.instances[0].removeEvent).toHaveBeenCalledTimes(1);
   expect(removeWatch).toHaveBeenCalledTimes(2);
+});
+
+it("uses equal category icons with the real ArcGIS renderer and preserves other modes", async () => {
+  const [{ default: UniqueValueRenderer }, { default: PictureMarkerSymbol }] = await Promise.all([
+    import("@arcgis/core/renderers/UniqueValueRenderer.js"),
+    import("@arcgis/core/symbols/PictureMarkerSymbol.js")
+  ]);
+  loadArcgisMock.mockResolvedValue({ ...runtime, UniqueValueRenderer, PictureMarkerSymbol } as ArcgisRuntime);
+  const props = { pickupRows, diversityRows, destinationCells };
+  const { rerender } = render(<DashboardMap {...props} metric="merchantDiversity" mode="points" />);
+  await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
+  const [layer, destination] = FakeFeatureLayer.instances;
+  const popup = layer.popupTemplate;
+  const renderer = layer.renderer;
+  expect(renderer).toBeInstanceOf(UniqueValueRenderer);
+  if (!(renderer instanceof UniqueValueRenderer)) throw new Error("Expected category renderer");
+  expect(renderer.field).toBe("category");
+  expect(renderer.visualVariables).toBeNull();
+  const infos = renderer.uniqueValueInfos;
+  if (!infos) throw new Error("Expected explicit category symbols");
+  expect(infos.map((info) => info.value)).toEqual(["restaurant", "grocery", "retail", "other"]);
+  const icons = infos.map((info) => {
+    expect(info.symbol).toBeInstanceOf(PictureMarkerSymbol);
+    const symbol = info.symbol as InstanceType<typeof PictureMarkerSymbol>;
+    expect(symbol.width).toBe(18); // ArcGIS converts 24 CSS pixels to 18 points.
+    expect(symbol.height).toBe(18);
+    expect(symbol.url).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    return decodeURIComponent(symbol.url!.split(",")[1]);
+  });
+  ["#EF4444", "#16A34A", "#7C3AED", "#64748B"].forEach((color, index) => {
+    expect(icons[index]).toContain(`fill="${color}"`);
+    expect(icons[index]).toContain('stroke="white"');
+    expect(icons[index]).toContain('width="24" height="24"');
+  });
+  expect(new Set(icons.map((svg) => svg.match(/<path d="([^"]+)"/)?.[1])).size).toBe(4);
+  rerender(<DashboardMap {...props} metric="merchantDiversity" mode="heatmap" />);
+  expect((layer.renderer as FakeHeatmapRenderer).options).toMatchObject({ field: "merchantWeight", maxDensity: 0.004, radius: 28 });
+  rerender(<DashboardMap {...props} metric="merchantDiversity" mode="points" />);
+  expect(layer.renderer).toBeInstanceOf(UniqueValueRenderer);
+  rerender(<DashboardMap {...props} metric="pickupVolume" mode="points" />);
+  expect(layer.renderer).toBeInstanceOf(FakeSimpleRenderer);
+  expect((layer.renderer as FakeSimpleRenderer).options.visualVariables).toEqual([
+    { type: "size", field: "deliveryCount", stops: [{ value: 1, size: 9 }, { value: 5, size: 25 }] }
+  ]);
+  rerender(<DashboardMap {...props} metric="pickupVolume" mode="heatmap" />);
+  expect((layer.renderer as FakeHeatmapRenderer).options).toMatchObject({ field: "deliveryCount", maxDensity: 0.02, radius: 28 });
+  rerender(<DashboardMap {...props} metric="merchantDiversity" mode="points" />);
+  expect(layer.renderer).toBeInstanceOf(UniqueValueRenderer);
+  expect(layer.popupTemplate).toBe(popup);
+  expect(layer.popupEnabled).toBe(true);
+  rerender(<DashboardMap {...props} metric="destinationHeatmap" mode="points" />);
+  await waitFor(() => expect(destination.visible).toBe(true));
+  expect(layer.visible).toBe(false);
+  expect(layer.popupEnabled).toBe(false);
+  expect(destination.popupEnabled).toBe(false);
+  expect(destination.popupTemplate).toBeNull();
+  expect((destination.renderer as FakeHeatmapRenderer).options.field).toBe("count");
+  expect(FakeMapView.instances).toHaveLength(1);
+  expect(FakeMap.instances[0].layers).toHaveLength(2);
+  expect(watch).toHaveBeenCalledTimes(2);
+  expect(layer.edits).toHaveLength(1);
 });
 
 it("renders destinations only as a noninteractive generalized heatmap and clears them on filter change", async () => {
