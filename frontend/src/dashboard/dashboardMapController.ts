@@ -16,8 +16,6 @@ export class DashboardMapController {
   private destinationEdits: Promise<void> = Promise.resolve();
   private displayedMerchants = new Map<string, number>();
   private displayedCells = new Map<string, number>();
-  private readonly merchantObjectIds = new Map<string, number>();
-  private readonly cellObjectIds = new Map<string, number>();
   private nextMerchantObjectId = 1;
   private nextCellObjectId = 1;
   private pickupRows: PickupLocation[] = [];
@@ -104,7 +102,8 @@ export class DashboardMapController {
 
   private heatmap(field: string, largestWeight: number) {
     return new this.arcgis.HeatmapRenderer({
-      field, radius: 28, minDensity: 0, maxDensity: Math.max(4, largestWeight * 2),
+      // A lower base density than the SDK's 0.04 default keeps sparse observations visible.
+      field, radius: 28, minDensity: 0, maxDensity: 0.004 * largestWeight,
       colorStops: [
         { ratio: 0, color: "rgba(42, 113, 245, 0)" },
         { ratio: 0.2, color: "rgba(72, 159, 255, 0.65)" },
@@ -167,13 +166,11 @@ export class DashboardMapController {
       if (this.destroyed || revision !== this.merchantRevision) return;
       const next = new Map<string, number>();
       const addFeatures: InstanceType<ArcgisRuntime["Graphic"]>[] = [];
+      const addedIds: string[] = [];
       const updateFeatures: InstanceType<ArcgisRuntime["Graphic"]>[] = [];
       for (const row of pickupRows) {
-        let objectId = this.merchantObjectIds.get(row.id);
-        if (objectId === undefined) {
-          objectId = this.nextMerchantObjectId++;
-          this.merchantObjectIds.set(row.id, objectId);
-        }
+        const existingObjectId = this.displayedMerchants.get(row.id);
+        const objectId = existingObjectId ?? this.nextMerchantObjectId++;
         next.set(row.id, objectId);
         const graphic = new this.arcgis.Graphic({
           geometry: new this.arcgis.Point({
@@ -187,8 +184,8 @@ export class DashboardMapController {
             sampleCount: row.sampleCount
           }
         });
-        if (this.displayedMerchants.has(row.id)) updateFeatures.push(graphic);
-        else addFeatures.push(graphic);
+        if (existingObjectId !== undefined) updateFeatures.push(graphic);
+        else { addFeatures.push(graphic); addedIds.push(row.id); }
       }
       const deleteFeatures = [...this.displayedMerchants].filter(([id]) => !next.has(id)).map(([, objectId]) => ({ objectId }));
       const result = await this.merchantLayer.applyEdits({
@@ -199,6 +196,12 @@ export class DashboardMapController {
       if (this.destroyed) return;
       if ([...result.addFeatureResults, ...result.updateFeatureResults, ...result.deleteFeatureResults].some((item) => item.error)) {
         throw new Error("Merchant feature edit failed");
+      }
+      for (const [index, id] of addedIds.entries()) {
+        const objectId = result.addFeatureResults[index]?.objectId;
+        if (typeof objectId !== "number") throw new Error("Merchant feature ID missing");
+        next.set(id, objectId);
+        this.nextMerchantObjectId = Math.max(this.nextMerchantObjectId, objectId + 1);
       }
       this.displayedMerchants = next;
     }).catch(() => {
@@ -224,23 +227,21 @@ export class DashboardMapController {
       if (this.destroyed || revision !== this.destinationRevision) return;
       const next = new Map<string, number>();
       const addFeatures: InstanceType<ArcgisRuntime["Graphic"]>[] = [];
+      const addedKeys: string[] = [];
       const updateFeatures: InstanceType<ArcgisRuntime["Graphic"]>[] = [];
       for (const cell of cells) {
         const key = cell.location.coordinates.join(",");
-        let objectId = this.cellObjectIds.get(key);
-        if (objectId === undefined) {
-          objectId = this.nextCellObjectId++;
-          this.cellObjectIds.set(key, objectId);
-        }
+        const existingObjectId = this.displayedCells.get(key);
+        const objectId = existingObjectId ?? this.nextCellObjectId++;
         next.set(key, objectId);
         const graphic = new this.arcgis.Graphic({
-          ...(this.displayedCells.has(key) ? {} : { geometry: new this.arcgis.Point({
+          ...(existingObjectId !== undefined ? {} : { geometry: new this.arcgis.Point({
             longitude: cell.location.coordinates[0], latitude: cell.location.coordinates[1], spatialReference: { wkid: 4326 }
           }) }),
           attributes: { ObjectID: objectId, count: cell.count }
         });
-        if (this.displayedCells.has(key)) updateFeatures.push(graphic);
-        else addFeatures.push(graphic);
+        if (existingObjectId !== undefined) updateFeatures.push(graphic);
+        else { addFeatures.push(graphic); addedKeys.push(key); }
       }
       const deleteFeatures = [...this.displayedCells].filter(([key]) => !next.has(key)).map(([, objectId]) => ({ objectId }));
       const result = await this.destinationLayer.applyEdits({
@@ -251,6 +252,12 @@ export class DashboardMapController {
       if (this.destroyed) return;
       if ([...result.addFeatureResults, ...result.updateFeatureResults, ...result.deleteFeatureResults].some((item) => item.error)) {
         throw new Error("Destination feature edit failed");
+      }
+      for (const [index, key] of addedKeys.entries()) {
+        const objectId = result.addFeatureResults[index]?.objectId;
+        if (typeof objectId !== "number") throw new Error("Destination feature ID missing");
+        next.set(key, objectId);
+        this.nextCellObjectId = Math.max(this.nextCellObjectId, objectId + 1);
       }
       this.displayedCells = next;
       if (revision === this.destinationRevision) {

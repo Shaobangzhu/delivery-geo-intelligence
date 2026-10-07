@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { DashboardMap } from "./DashboardMap";
 import type { ArcgisRuntime } from "./arcgisRuntime";
 import type { DestinationCell, DiversityLocation, PickupLocation } from "./dashboardMapController";
@@ -36,11 +36,29 @@ class FakeFeatureLayer {
   popupEnabled: boolean;
   popupTemplate: unknown;
   edits: Array<{ addFeatures?: FakeGraphic[]; updateFeatures?: FakeGraphic[]; deleteFeatures?: { objectId: number }[] }> = [];
+  private nextObjectId = 1;
+  private featureIds = new Set<number>();
   when = vi.fn(async () => undefined);
   applyEdits = vi.fn(async (edit: { addFeatures?: FakeGraphic[]; updateFeatures?: FakeGraphic[]; deleteFeatures?: { objectId: number }[] }) => {
     this.edits.push(edit);
     if (this.edits.length === 1 && FakeFeatureLayer.firstEditGate) await FakeFeatureLayer.firstEditGate;
-    return { addFeatureResults: [], updateFeatureResults: [], deleteFeatureResults: [] };
+    const deleteFeatureResults = (edit.deleteFeatures ?? []).map(({ objectId }) => {
+      const existed = this.featureIds.delete(objectId);
+      return existed ? { objectId } : { objectId, error: new Error(`Feature with object id ${objectId} missing`) };
+    });
+    const addFeatureResults = (edit.addFeatures ?? []).map((graphic) => {
+      const requested = Number(graphic.options.attributes.ObjectID);
+      const objectId = Math.max(requested, this.nextObjectId);
+      this.nextObjectId = objectId + 1;
+      this.featureIds.add(objectId);
+      graphic.options.attributes.ObjectID = objectId;
+      return { objectId };
+    });
+    const updateFeatureResults = (edit.updateFeatures ?? []).map((graphic) => {
+      const objectId = Number(graphic.options.attributes.ObjectID);
+      return this.featureIds.has(objectId) ? { objectId } : { objectId, error: new Error(`Feature with object id ${objectId} missing`) };
+    });
+    return { addFeatureResults, updateFeatureResults, deleteFeatureResults };
   });
   constructor(public options: Record<string, unknown>) {
     FakeFeatureLayer.instances.push(this);
@@ -152,6 +170,62 @@ it("renders destinations only as a noninteractive generalized heatmap and clears
   expect(merchantLayer.popupEnabled).toBe(true);
   expect(destinationLayer.visible).toBe(false);
   expect(FakeMapView.instances).toHaveLength(1);
+});
+
+it("uses a sparse-data density range accepted by the real ArcGIS heatmap renderer", async () => {
+  const { default: HeatmapRenderer } = await import("@arcgis/core/renderers/HeatmapRenderer.js");
+  loadArcgisMock.mockResolvedValue({ ...runtime, HeatmapRenderer } as ArcgisRuntime);
+  render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
+    destinationCells={destinationCells} metric="destinationHeatmap" mode="heatmap" />);
+
+  const layer = () => FakeFeatureLayer.instances[1];
+  await waitFor(() => expect(layer()?.visible).toBe(true));
+  const renderer = layer().renderer;
+  expect(renderer).toBeInstanceOf(HeatmapRenderer);
+  if (!(renderer instanceof HeatmapRenderer)) throw new Error("Expected ArcGIS HeatmapRenderer");
+  expect(renderer.field).toBe("count");
+  expect(renderer.minDensity).toBe(0);
+  expect(renderer.maxDensity).toBeLessThan(new HeatmapRenderer().maxDensity);
+  expect(layer().popupEnabled).toBe(false);
+});
+
+it("uses the SDK-assigned ID when a generalized cell returns after a filter change", async () => {
+  const { rerender } = render(<DashboardMap pickupRows={[]} diversityRows={[]}
+    destinationCells={destinationCells} metric="destinationHeatmap" mode="heatmap" />);
+  const layer = () => FakeFeatureLayer.instances[1];
+  await waitFor(() => expect(layer()?.edits).toHaveLength(1));
+  rerender(<DashboardMap pickupRows={[]} diversityRows={[]}
+    destinationCells={[]} metric="destinationHeatmap" mode="heatmap" />);
+  await waitFor(() => expect(layer().edits).toHaveLength(2));
+  rerender(<DashboardMap pickupRows={[]} diversityRows={[]}
+    destinationCells={destinationCells} metric="destinationHeatmap" mode="heatmap" />);
+  await waitFor(() => expect(layer().edits).toHaveLength(3));
+  expect(layer().edits[2].addFeatures?.[0].options.attributes.ObjectID).toBe(2);
+  rerender(<DashboardMap pickupRows={[]} diversityRows={[]}
+    destinationCells={[]} metric="destinationHeatmap" mode="heatmap" />);
+  await waitFor(() => expect(layer().edits).toHaveLength(4));
+  expect(layer().edits[3].deleteFeatures).toEqual([{ objectId: 2 }]);
+  await waitFor(() => expect(layer().visible).toBe(true));
+  expect(screen.queryByText("The destination heatmap could not be updated.")).not.toBeInTheDocument();
+});
+
+it("uses the SDK-assigned ID when a public merchant returns after a filter change", async () => {
+  const { rerender } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
+    destinationCells={[]} metric="pickupVolume" mode="points" />);
+  const layer = () => FakeFeatureLayer.instances[0];
+  await waitFor(() => expect(layer()?.edits).toHaveLength(1));
+  rerender(<DashboardMap pickupRows={[pickupRows[0]]} diversityRows={[diversityRows[0]]}
+    destinationCells={[]} metric="pickupVolume" mode="points" />);
+  await waitFor(() => expect(layer().edits).toHaveLength(2));
+  rerender(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
+    destinationCells={[]} metric="pickupVolume" mode="points" />);
+  await waitFor(() => expect(layer().edits).toHaveLength(3));
+  expect(layer().edits[2].addFeatures?.[0].options.attributes.ObjectID).toBe(3);
+  rerender(<DashboardMap pickupRows={[pickupRows[0]]} diversityRows={[diversityRows[0]]}
+    destinationCells={[]} metric="pickupVolume" mode="points" />);
+  await waitFor(() => expect(layer().edits).toHaveLength(4));
+  expect(layer().edits[3].deleteFeatures).toEqual([{ objectId: 3 }]);
+  expect(screen.queryByText("The merchant locations could not be updated.")).not.toBeInTheDocument();
 });
 
 it("serializes rapid merchant filter edits and applies only the latest data", async () => {
