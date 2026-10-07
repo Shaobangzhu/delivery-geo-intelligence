@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { loadArcgis } from "./arcgisRuntime";
-import { DashboardMapController, type DestinationCell, type DiversityLocation, type MapMode, type PickupLocation } from "./dashboardMapController";
+import { DashboardMapController, type DestinationCell, type DiversityLocation, type PickupLocation } from "./dashboardMapController";
 import type { Metric } from "./api";
 import "@arcgis/core/assets/esri/themes/light/main.css";
 
@@ -9,14 +9,13 @@ interface Props {
   diversityRows: DiversityLocation[];
   destinationCells: DestinationCell[];
   metric: Metric;
-  mode: MapMode;
 }
 
-export function DashboardMap({ pickupRows, diversityRows, destinationCells, metric, mode }: Props) {
+export function DashboardMap({ pickupRows, diversityRows, destinationCells, metric }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<DashboardMapController | null>(null);
-  const latest = useRef({ pickupRows, diversityRows, destinationCells, metric, mode });
-  latest.current = { pickupRows, diversityRows, destinationCells, metric, mode };
+  const latest = useRef({ pickupRows, diversityRows, destinationCells, metric });
+  latest.current = { pickupRows, diversityRows, destinationCells, metric };
   const [error, setError] = useState("");
   const [updating, setUpdating] = useState(false);
 
@@ -35,7 +34,7 @@ export function DashboardMap({ pickupRows, diversityRows, destinationCells, metr
       const current = latest.current;
       controller.setMerchantFeatures(current.pickupRows, current.diversityRows);
       controller.setDestinationCells(current.destinationCells);
-      controller.setMode(current.metric, current.mode);
+      controller.setMetric(current.metric);
     }).catch(() => { if (!cancelled) setError("The map could not be loaded."); });
     return () => {
       cancelled = true;
@@ -46,7 +45,7 @@ export function DashboardMap({ pickupRows, diversityRows, destinationCells, metr
 
   useEffect(() => { controllerRef.current?.setMerchantFeatures(pickupRows, diversityRows); }, [pickupRows, diversityRows]);
   useEffect(() => { controllerRef.current?.setDestinationCells(destinationCells); }, [destinationCells]);
-  useEffect(() => { controllerRef.current?.setMode(metric, mode); }, [metric, mode]);
+  useEffect(() => { controllerRef.current?.setMetric(metric); }, [metric]);
 
   return <div className="dashboard-map-shell">
     <div className="dashboard-map-canvas" ref={containerRef} aria-label={`${metric === "destinationHeatmap" ? "Generalized destination activity" : "Observed merchant activity"} map`} />

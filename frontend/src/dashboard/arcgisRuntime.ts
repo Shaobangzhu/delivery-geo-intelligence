@@ -1,13 +1,11 @@
 export async function loadArcgis() {
-  const [Map, MapView, FeatureLayer, Graphic, Point, HeatmapRenderer, SimpleRenderer, SimpleMarkerSymbol, UniqueValueRenderer, PictureMarkerSymbol, PopupTemplate, config, reactiveUtils] = await Promise.all([
+  const [Map, MapView, FeatureLayer, Graphic, Point, HeatmapRenderer, UniqueValueRenderer, PictureMarkerSymbol, PopupTemplate, config, reactiveUtils] = await Promise.all([
     import("@arcgis/core/Map.js"),
     import("@arcgis/core/views/MapView.js"),
     import("@arcgis/core/layers/FeatureLayer.js"),
     import("@arcgis/core/Graphic.js"),
     import("@arcgis/core/geometry/Point.js"),
     import("@arcgis/core/renderers/HeatmapRenderer.js"),
-    import("@arcgis/core/renderers/SimpleRenderer.js"),
-    import("@arcgis/core/symbols/SimpleMarkerSymbol.js"),
     import("@arcgis/core/renderers/UniqueValueRenderer.js"),
     import("@arcgis/core/symbols/PictureMarkerSymbol.js"),
     import("@arcgis/core/PopupTemplate.js"),
@@ -17,8 +15,7 @@ export async function loadArcgis() {
   return {
     Map: Map.default, MapView: MapView.default, FeatureLayer: FeatureLayer.default,
     Graphic: Graphic.default, Point: Point.default,
-    HeatmapRenderer: HeatmapRenderer.default, SimpleRenderer: SimpleRenderer.default,
-    SimpleMarkerSymbol: SimpleMarkerSymbol.default,
+    HeatmapRenderer: HeatmapRenderer.default,
     UniqueValueRenderer: UniqueValueRenderer.default, PictureMarkerSymbol: PictureMarkerSymbol.default,
     PopupTemplate: PopupTemplate.default,
     config: config.default, reactiveUtils

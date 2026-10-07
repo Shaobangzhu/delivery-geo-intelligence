@@ -4,7 +4,6 @@ import type { ArcgisRuntime } from "./arcgisRuntime";
 export type PickupLocation = DashboardData["map"]["pickupVolume"][number];
 export type DiversityLocation = DashboardData["map"]["merchantDiversity"][number];
 export type DestinationCell = DestinationHeatmapData["cells"][number];
-export type MapMode = "heatmap" | "points";
 
 export class DashboardMapController {
   private readonly view: InstanceType<ArcgisRuntime["MapView"]>;
@@ -23,7 +22,6 @@ export class DashboardMapController {
   private merchantSignature = "[],[]";
   private destinationSignature = "[]";
   private metric: Metric = "pickupVolume";
-  private mode: MapMode = "heatmap";
   private merchantUpdating = false;
   private destinationUpdating = false;
   private destinationPending = false;
@@ -93,7 +91,7 @@ export class DashboardMapController {
     void this.ready.catch(() => {
       if (!this.destroyed) this.onError("The map could not be initialized.");
     });
-    this.setMode("pickupVolume", "heatmap");
+    this.setMetric("pickupVolume");
   }
 
   private emitUpdating() {
@@ -115,11 +113,6 @@ export class DashboardMapController {
   }
 
   private merchantRenderer() {
-    if (this.mode === "heatmap") {
-      return this.metric === "merchantDiversity"
-        ? this.heatmap("merchantWeight", 1)
-        : this.heatmap("deliveryCount", Math.max(1, ...this.pickupRows.map((row) => row.deliveries)));
-    }
     if (this.metric === "merchantDiversity") {
       const categories = [
         { value: "restaurant", label: "Restaurant", color: "#EF4444", glyph: "M7 6v5m3-5v5m-6-5v5q0 3 3 3v6m9-14v14m0-14q-4 3-4 8h4" },
@@ -139,20 +132,13 @@ export class DashboardMapController {
         defaultSymbol: uniqueValueInfos[3].symbol, defaultLabel: "Other"
       });
     }
-    return new this.arcgis.SimpleRenderer({
-      symbol: new this.arcgis.SimpleMarkerSymbol({
-        style: "circle", color: "#1769e9", outline: { color: "#ffffff", width: 1.5 }, size: 9
-      }),
-      visualVariables: [{ type: "size", field: "deliveryCount", stops: [
-        { value: 1, size: 9 }, { value: Math.max(2, ...this.pickupRows.map((row) => row.deliveries)), size: 25 }
-      ] }]
-    });
+    // Pickup activity is quantitative intensity; diversity uses equal category symbols.
+    return this.heatmap("deliveryCount", Math.max(1, ...this.pickupRows.map((row) => row.deliveries)));
   }
 
-  setMode(metric: Metric, mode: MapMode): void {
+  setMetric(metric: Metric): void {
     if (this.destroyed) return;
     this.metric = metric;
-    this.mode = mode;
     this.view.closePopup();
     const destinationMode = metric === "destinationHeatmap";
     this.merchantLayer.visible = !destinationMode;

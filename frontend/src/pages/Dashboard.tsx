@@ -72,19 +72,15 @@ function Timeline({ data }: { data: DashboardData }) {
   </section>;
 }
 
-function MapPanel({ data, metric, category, mapMode, onMapMode, destination, destinationLoading, destinationError }: { data: DashboardData; metric: Metric; category: Category; mapMode: "heatmap" | "points"; onMapMode: (value: "heatmap" | "points") => void; destination: DestinationHeatmapData | null; destinationLoading: boolean; destinationError: string }) {
+function MapPanel({ data, metric, category, destination, destinationLoading, destinationError }: { data: DashboardData; metric: Metric; category: Category; destination: DestinationHeatmapData | null; destinationLoading: boolean; destinationError: string }) {
   const selectedCount = metric === "merchantDiversity" ? data.map.merchantDiversity.length : data.map.pickupVolume.length;
   return <section className="dash-card map-panel" aria-label={`${metrics.find((item) => item.value === metric)?.label} map area`}>
-    {metric !== "destinationHeatmap" && <div className="map-mode" role="group" aria-label="Map display mode">
-      <button type="button" aria-pressed={mapMode === "heatmap"} onClick={() => onMapMode("heatmap")}>Heatmap</button>
-      <button type="button" aria-pressed={mapMode === "points"} onClick={() => onMapMode("points")}>Points</button>
-    </div>}
     <DashboardMap pickupRows={data.map.pickupVolume} diversityRows={data.map.merchantDiversity}
-      destinationCells={destination?.cells ?? []} metric={metric} mode={mapMode} />
+      destinationCells={destination?.cells ?? []} metric={metric} />
     {metric === "destinationHeatmap" && destinationLoading && <span className="map-data-status" role="status">Loading destination heatmap…</span>}
     {metric === "destinationHeatmap" && destinationError && <span className="map-data-error" role="alert">{destinationError}</span>}
     <div className="map-caption">
-      <span>{metric === "destinationHeatmap" ? "Destination heatmap only — individual destination points are not shown." : metric === "merchantDiversity" ? "Each observed merchant location counts once; this view shows distinct merchants, not pickup frequency." : "Pickup locations represent physical merchant records."}</span>
+      <span>{metric === "destinationHeatmap" ? "Destination heatmap only — individual destination points are not shown." : metric === "merchantDiversity" ? "Each point represents one observed physical merchant location; color and icon indicate merchant category." : "Heat intensity represents observed pickup activity."}</span>
       {metric !== "destinationHeatmap" && <small>{selectedCount} filtered merchant locations available</small>}
     </div>
     {metric === "destinationHeatmap" && <p className="map-category-note">{categoryNote(category)}</p>}
@@ -99,7 +95,6 @@ export function Dashboard() {
   const [period, setPeriod] = useState<Period>("week");
   const [metric, setMetric] = useState<Metric>("pickupVolume");
   const [category, setCategory] = useState<Category>("all");
-  const [mapMode, setMapMode] = useState<"heatmap" | "points">("heatmap");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -160,7 +155,7 @@ export function Dashboard() {
     {error && <p className="dashboard-error" role="alert">{error}</p>}
     {loading && <p className="dashboard-loading" role="status">Loading dashboard analytics…</p>}
     {data && <div className={`dashboard-grid${loading ? " is-updating" : ""}`} aria-busy={loading} inert={loading}>
-      <MapPanel data={data} metric={metric} category={category} mapMode={mapMode} onMapMode={setMapMode}
+      <MapPanel data={data} metric={metric} category={category}
         destination={destination?.period === period && destination.category === category ? destination.data : null}
         destinationLoading={destinationLoading} destinationError={destinationError} />
       <div className="dashboard-details">

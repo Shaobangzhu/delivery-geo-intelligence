@@ -70,8 +70,6 @@ class FakeFeatureLayer {
 class FakeGraphic { constructor(public options: { geometry?: FakePoint; attributes: Record<string, unknown> }) {} }
 class FakePoint { constructor(public options: { longitude: number; latitude: number }) {} }
 class FakeHeatmapRenderer { constructor(public options: Record<string, unknown>) {} }
-class FakeSimpleRenderer { constructor(public options: Record<string, unknown>) {} }
-class FakeSimpleMarkerSymbol { constructor(public options: Record<string, unknown>) {} }
 class FakeUniqueValueRenderer { constructor(public options: Record<string, unknown>) {} }
 class FakePictureMarkerSymbol { constructor(public options: Record<string, unknown>) {} }
 class FakePopupTemplate { constructor(public options: Record<string, unknown>) {} }
@@ -82,7 +80,6 @@ const config = { apiKey: "" };
 const runtime = {
   Map: FakeMap, MapView: FakeMapView, FeatureLayer: FakeFeatureLayer,
   Graphic: FakeGraphic, Point: FakePoint, HeatmapRenderer: FakeHeatmapRenderer,
-  SimpleRenderer: FakeSimpleRenderer, SimpleMarkerSymbol: FakeSimpleMarkerSymbol,
   UniqueValueRenderer: FakeUniqueValueRenderer, PictureMarkerSymbol: FakePictureMarkerSymbol,
   PopupTemplate: FakePopupTemplate, config, reactiveUtils: { watch }
 } as unknown as ArcgisRuntime;
@@ -116,7 +113,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 it("weights pickup activity and distinct merchant variety differently in one persistent view", async () => {
   const { rerender, unmount } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="heatmap" />);
+    destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
   const [merchantLayer, destinationLayer] = FakeFeatureLayer.instances;
   expect(FakeMap.instances).toHaveLength(1);
@@ -129,13 +126,11 @@ it("weights pickup activity and distinct merchant variety differently in one per
   expect(merchantLayer.edits[0].addFeatures?.map((feature) => feature.options.attributes.ObjectID)).toEqual([1, 2]);
 
   rerender(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="merchantDiversity" mode="heatmap" />);
-  expect((merchantLayer.renderer as FakeHeatmapRenderer).options.field).toBe("merchantWeight");
-  expect(merchantLayer.edits).toHaveLength(1);
-  rerender(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="merchantDiversity" mode="points" />);
+    destinationCells={[]} metric="merchantDiversity" />);
   expect(merchantLayer.renderer).toBeInstanceOf(FakeUniqueValueRenderer);
+  expect((merchantLayer.renderer as FakeUniqueValueRenderer).options.field).toBe("category");
   expect((merchantLayer.renderer as FakeUniqueValueRenderer).options.visualVariables).toBeUndefined();
+  expect(merchantLayer.edits).toHaveLength(1);
   expect(FakeMapView.instances).toHaveLength(1);
   expect(watch).toHaveBeenCalledTimes(2);
   unmount();
@@ -144,14 +139,14 @@ it("weights pickup activity and distinct merchant variety differently in one per
   expect(removeWatch).toHaveBeenCalledTimes(2);
 });
 
-it("uses equal category icons with the real ArcGIS renderer and preserves other modes", async () => {
+it("uses equal category icons with the real ArcGIS renderer and preserves canonical metric renderers", async () => {
   const [{ default: UniqueValueRenderer }, { default: PictureMarkerSymbol }] = await Promise.all([
     import("@arcgis/core/renderers/UniqueValueRenderer.js"),
     import("@arcgis/core/symbols/PictureMarkerSymbol.js")
   ]);
   loadArcgisMock.mockResolvedValue({ ...runtime, UniqueValueRenderer, PictureMarkerSymbol } as ArcgisRuntime);
   const props = { pickupRows, diversityRows, destinationCells };
-  const { rerender } = render(<DashboardMap {...props} metric="merchantDiversity" mode="points" />);
+  const { rerender } = render(<DashboardMap {...props} metric="merchantDiversity" />);
   await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
   const [layer, destination] = FakeFeatureLayer.instances;
   const popup = layer.popupTemplate;
@@ -177,28 +172,28 @@ it("uses equal category icons with the real ArcGIS renderer and preserves other 
     expect(icons[index]).toContain('width="24" height="24"');
   });
   expect(new Set(icons.map((svg) => svg.match(/<path d="([^"]+)"/)?.[1])).size).toBe(4);
-  rerender(<DashboardMap {...props} metric="merchantDiversity" mode="heatmap" />);
-  expect((layer.renderer as FakeHeatmapRenderer).options).toMatchObject({ field: "merchantWeight", maxDensity: 0.004, radius: 28 });
-  rerender(<DashboardMap {...props} metric="merchantDiversity" mode="points" />);
-  expect(layer.renderer).toBeInstanceOf(UniqueValueRenderer);
-  rerender(<DashboardMap {...props} metric="pickupVolume" mode="points" />);
-  expect(layer.renderer).toBeInstanceOf(FakeSimpleRenderer);
-  expect((layer.renderer as FakeSimpleRenderer).options.visualVariables).toEqual([
-    { type: "size", field: "deliveryCount", stops: [{ value: 1, size: 9 }, { value: 5, size: 25 }] }
-  ]);
-  rerender(<DashboardMap {...props} metric="pickupVolume" mode="heatmap" />);
+  rerender(<DashboardMap {...props} metric="pickupVolume" />);
+  expect(layer.renderer).toBeInstanceOf(FakeHeatmapRenderer);
   expect((layer.renderer as FakeHeatmapRenderer).options).toMatchObject({ field: "deliveryCount", maxDensity: 0.02, radius: 28 });
-  rerender(<DashboardMap {...props} metric="merchantDiversity" mode="points" />);
+  rerender(<DashboardMap {...props} metric="merchantDiversity" />);
   expect(layer.renderer).toBeInstanceOf(UniqueValueRenderer);
   expect(layer.popupTemplate).toBe(popup);
   expect(layer.popupEnabled).toBe(true);
-  rerender(<DashboardMap {...props} metric="destinationHeatmap" mode="points" />);
+  rerender(<DashboardMap {...props} metric="destinationHeatmap" />);
   await waitFor(() => expect(destination.visible).toBe(true));
   expect(layer.visible).toBe(false);
   expect(layer.popupEnabled).toBe(false);
   expect(destination.popupEnabled).toBe(false);
   expect(destination.popupTemplate).toBeNull();
   expect((destination.renderer as FakeHeatmapRenderer).options.field).toBe("count");
+  rerender(<DashboardMap {...props} metric="pickupVolume" />);
+  expect(layer.visible).toBe(true);
+  expect(destination.visible).toBe(false);
+  expect(layer.renderer).toBeInstanceOf(FakeHeatmapRenderer);
+  rerender(<DashboardMap {...props} metric="merchantDiversity" />);
+  expect(layer.renderer).toBeInstanceOf(UniqueValueRenderer);
+  expect(layer.edits[0].addFeatures?.map((feature) => feature.options.attributes.merchantId)).toEqual(["merchant-a", "merchant-b"]);
+
   expect(FakeMapView.instances).toHaveLength(1);
   expect(FakeMap.instances[0].layers).toHaveLength(2);
   expect(watch).toHaveBeenCalledTimes(2);
@@ -207,7 +202,7 @@ it("uses equal category icons with the real ArcGIS renderer and preserves other 
 
 it("renders destinations only as a noninteractive generalized heatmap and clears them on filter change", async () => {
   const { rerender } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={destinationCells} metric="destinationHeatmap" mode="points" />);
+    destinationCells={destinationCells} metric="destinationHeatmap" />);
   await waitFor(() => expect(FakeFeatureLayer.instances[1]?.edits).toHaveLength(1));
   const [merchantLayer, destinationLayer] = FakeFeatureLayer.instances;
   const view = FakeMapView.instances[0];
@@ -223,24 +218,51 @@ it("renders destinations only as a noninteractive generalized heatmap and clears
   expect(JSON.stringify(destinationLayer.options)).not.toMatch(/address|merchantName|deliveryId/i);
 
   rerender(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="destinationHeatmap" mode="heatmap" />);
+    destinationCells={[]} metric="destinationHeatmap" />);
   expect(destinationLayer.visible).toBe(false);
   await waitFor(() => expect(destinationLayer.edits).toHaveLength(2));
   expect(destinationLayer.edits[1].deleteFeatures).toEqual([{ objectId: 1 }]);
   await waitFor(() => expect(destinationLayer.visible).toBe(true));
   rerender(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="points" />);
+    destinationCells={[]} metric="pickupVolume" />);
   expect(merchantLayer.visible).toBe(true);
   expect(merchantLayer.popupEnabled).toBe(true);
   expect(destinationLayer.visible).toBe(false);
   expect(FakeMapView.instances).toHaveLength(1);
 });
 
+it("keeps pending destination edits hidden when switching back to public metrics", async () => {
+  let finishEdits!: () => void;
+  FakeFeatureLayer.firstEditGate = new Promise<void>((resolve) => { finishEdits = resolve; });
+  const props = { pickupRows, diversityRows, destinationCells };
+  const { rerender } = render(<DashboardMap {...props} metric="destinationHeatmap" />);
+  await waitFor(() => expect(FakeFeatureLayer.instances[1]?.edits).toHaveLength(1));
+  const [merchant, destination] = FakeFeatureLayer.instances;
+  expect(destination.visible).toBe(false);
+  rerender(<DashboardMap {...props} metric="merchantDiversity" />);
+  expect(merchant.renderer).toBeInstanceOf(FakeUniqueValueRenderer);
+  expect(merchant.visible).toBe(true);
+  finishEdits();
+  await waitFor(() => expect(destination.applyEdits).toHaveResolved());
+  expect(destination.visible).toBe(false);
+  rerender(<DashboardMap {...props} metric="destinationHeatmap" />);
+  await waitFor(() => expect(destination.visible).toBe(true));
+  expect(destination.popupEnabled).toBe(false);
+  expect(merchant.visible).toBe(false);
+  rerender(<DashboardMap {...props} metric="pickupVolume" />);
+  expect(merchant.visible).toBe(true);
+  expect(destination.visible).toBe(false);
+  expect(merchant.renderer).toBeInstanceOf(FakeHeatmapRenderer);
+  expect(FakeMapView.instances).toHaveLength(1);
+  expect(FakeFeatureLayer.instances).toHaveLength(2);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
 it("uses a sparse-data density range accepted by the real ArcGIS heatmap renderer", async () => {
   const { default: HeatmapRenderer } = await import("@arcgis/core/renderers/HeatmapRenderer.js");
   loadArcgisMock.mockResolvedValue({ ...runtime, HeatmapRenderer } as ArcgisRuntime);
   render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={destinationCells} metric="destinationHeatmap" mode="heatmap" />);
+    destinationCells={destinationCells} metric="destinationHeatmap" />);
 
   const layer = () => FakeFeatureLayer.instances[1];
   await waitFor(() => expect(layer()?.visible).toBe(true));
@@ -255,18 +277,18 @@ it("uses a sparse-data density range accepted by the real ArcGIS heatmap rendere
 
 it("uses the SDK-assigned ID when a generalized cell returns after a filter change", async () => {
   const { rerender } = render(<DashboardMap pickupRows={[]} diversityRows={[]}
-    destinationCells={destinationCells} metric="destinationHeatmap" mode="heatmap" />);
+    destinationCells={destinationCells} metric="destinationHeatmap" />);
   const layer = () => FakeFeatureLayer.instances[1];
   await waitFor(() => expect(layer()?.edits).toHaveLength(1));
   rerender(<DashboardMap pickupRows={[]} diversityRows={[]}
-    destinationCells={[]} metric="destinationHeatmap" mode="heatmap" />);
+    destinationCells={[]} metric="destinationHeatmap" />);
   await waitFor(() => expect(layer().edits).toHaveLength(2));
   rerender(<DashboardMap pickupRows={[]} diversityRows={[]}
-    destinationCells={destinationCells} metric="destinationHeatmap" mode="heatmap" />);
+    destinationCells={destinationCells} metric="destinationHeatmap" />);
   await waitFor(() => expect(layer().edits).toHaveLength(3));
   expect(layer().edits[2].addFeatures?.[0].options.attributes.ObjectID).toBe(2);
   rerender(<DashboardMap pickupRows={[]} diversityRows={[]}
-    destinationCells={[]} metric="destinationHeatmap" mode="heatmap" />);
+    destinationCells={[]} metric="destinationHeatmap" />);
   await waitFor(() => expect(layer().edits).toHaveLength(4));
   expect(layer().edits[3].deleteFeatures).toEqual([{ objectId: 2 }]);
   await waitFor(() => expect(layer().visible).toBe(true));
@@ -275,18 +297,18 @@ it("uses the SDK-assigned ID when a generalized cell returns after a filter chan
 
 it("uses the SDK-assigned ID when a public merchant returns after a filter change", async () => {
   const { rerender } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="points" />);
+    destinationCells={[]} metric="pickupVolume" />);
   const layer = () => FakeFeatureLayer.instances[0];
   await waitFor(() => expect(layer()?.edits).toHaveLength(1));
   rerender(<DashboardMap pickupRows={[pickupRows[0]]} diversityRows={[diversityRows[0]]}
-    destinationCells={[]} metric="pickupVolume" mode="points" />);
+    destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(layer().edits).toHaveLength(2));
   rerender(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="points" />);
+    destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(layer().edits).toHaveLength(3));
   expect(layer().edits[2].addFeatures?.[0].options.attributes.ObjectID).toBe(3);
   rerender(<DashboardMap pickupRows={[pickupRows[0]]} diversityRows={[diversityRows[0]]}
-    destinationCells={[]} metric="pickupVolume" mode="points" />);
+    destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(layer().edits).toHaveLength(4));
   expect(layer().edits[3].deleteFeatures).toEqual([{ objectId: 3 }]);
   expect(screen.queryByText("The merchant locations could not be updated.")).not.toBeInTheDocument();
@@ -296,13 +318,13 @@ it("serializes rapid merchant filter edits and applies only the latest data", as
   let finishFirst!: () => void;
   FakeFeatureLayer.firstEditGate = new Promise<void>((resolve) => { finishFirst = resolve; });
   const { rerender } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="heatmap" />);
+    destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
   const layer = FakeFeatureLayer.instances[0];
   rerender(<DashboardMap pickupRows={[pickupRows[0]]} diversityRows={[diversityRows[0]]}
-    destinationCells={[]} metric="pickupVolume" mode="heatmap" />);
+    destinationCells={[]} metric="pickupVolume" />);
   rerender(<DashboardMap pickupRows={[{ ...pickupRows[1], deliveries: 4 }]} diversityRows={[diversityRows[1]]}
-    destinationCells={[]} metric="pickupVolume" mode="heatmap" />);
+    destinationCells={[]} metric="pickupVolume" />);
   finishFirst();
   await waitFor(() => expect(layer.edits).toHaveLength(2));
   expect(layer.edits[1].deleteFeatures).toEqual([{ objectId: 1 }]);
@@ -312,11 +334,11 @@ it("serializes rapid merchant filter edits and applies only the latest data", as
 
 it("updates an existing merchant's public point after an address correction without rebuilding the map", async () => {
   const { rerender } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="points" />);
+    destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
   const corrected = { ...pickupRows[0], location: { type: "Point" as const, coordinates: [4, 5] as [number, number] } };
   rerender(<DashboardMap pickupRows={[corrected, pickupRows[1]]} diversityRows={[{ ...diversityRows[0], location: corrected.location }, diversityRows[1]]}
-    destinationCells={[]} metric="pickupVolume" mode="points" />);
+    destinationCells={[]} metric="pickupVolume" />);
   const layer = FakeFeatureLayer.instances[0];
   await waitFor(() => expect(layer.edits).toHaveLength(2));
   expect(layer.edits[1].updateFeatures?.[0].options.geometry?.options).toMatchObject({ longitude: 4, latitude: 5 });
@@ -326,7 +348,7 @@ it("updates an existing merchant's public point after an address correction with
 it("updates merchant data while the hidden destination layer view is still initializing", async () => {
   FakeMapView.destinationLayerViewGate = new Promise<void>(() => undefined);
   const { unmount } = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="heatmap" />);
+    destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
   expect(watch).toHaveBeenCalledTimes(1);
   unmount();
@@ -337,7 +359,7 @@ it("avoids construction after early unmount and skips late watchers after view d
   let resolveImport!: (value: ArcgisRuntime) => void;
   loadArcgisMock.mockReturnValue(new Promise<ArcgisRuntime>((done) => { resolveImport = done; }));
   const early = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="heatmap" />);
+    destinationCells={[]} metric="pickupVolume" />);
   early.unmount();
   resolveImport(runtime);
   await Promise.resolve();
@@ -347,7 +369,7 @@ it("avoids construction after early unmount and skips late watchers after view d
   FakeMapView.whenPromise = new Promise<void>((resolve) => { resolveReady = resolve; });
   loadArcgisMock.mockResolvedValue(runtime);
   const late = render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows}
-    destinationCells={[]} metric="pickupVolume" mode="heatmap" />);
+    destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(FakeMapView.instances).toHaveLength(1));
   late.unmount();
   resolveReady();

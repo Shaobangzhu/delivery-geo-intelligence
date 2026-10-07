@@ -4,13 +4,15 @@ All dashboard datasets use the same validated `period` and `category` filters. P
 
 ## Pickup Volume
 
-Pickup Volume answers: where is the largest amount of personally observed pickup activity occurring? Each physical merchant record is a separate public point. Heatmap weight is that merchant's filtered delivery count; Points mode shows its public location, with size based on that count. Two stores of one brand remain separate features.
+Pickup Volume answers: where is the largest amount of personally observed pickup activity occurring? Each physical merchant record remains a separate feature, even when brand names match. A heatmap is the only representation, weighted by that merchant's filtered delivery count. It expresses observed activity intensity without individual point or size encoding.
 
 ## Merchant Diversity
 
-Merchant Diversity answers: where is the widest variety of distinct observed merchants? For the filtered deliveries, the backend groups by merchant ID. Each active merchant contributes exactly one unit, equivalent to `COUNT(DISTINCT merchantId)` over the selected period and category. The heatmap weights each active merchant location equally; Points mode shows those public locations. Repeat pickups at one location do not increase its diversity weight.
+Merchant Diversity answers: where are the distinct physical merchants I have observed, and what categories do they belong to? For the filtered deliveries, the backend groups by merchant ID. Each active merchant contributes exactly one unit, equivalent to `COUNT(DISTINCT merchantId)` over the selected period and category. Repeat pickups do not create additional diversity points.
 
-This PoC uses a point density heatmap, so visual overlap suggests nearby variety. It does **not** calculate distinct merchants per fixed neighborhood, grid, or hexagon. The map radius and zoom affect the visual impression. A true spatial bin analysis can be added when observations justify it; the current view must not be interpreted as a measured grid-level count.
+The only representation is an equal-size category point map. A `UniqueValueRenderer` on `category` combines color with an icon: restaurant red/dining, grocery green/basket, retail purple/shopping bag, and other slate/business. All markers are 24px; delivery count, earnings, and popularity do not affect size.
+
+The map shows observed entities and categories, not a distinct-merchant count per fixed neighborhood, grid, or hexagon. Nearby symbols may overlap at small scales. **PHASE 1.5:** true spatial bin analysis remains deferred until observations justify a defined spatial unit.
 
 ## Destination Heatmap
 

@@ -14,15 +14,15 @@ Express and Zod validate requests. The native MongoDB Node.js driver stores Merc
 
 Dashboard filters use one backend definition for week/month/year in the Los Angeles calendar and restaurant/grocery/retail/other categories. The same resolved filter feeds cards, charts, rankings, merchant map data, and the destination heatmap request. Earnings sum **known payouts only**: a missing payout is unknown, whereas a recorded $0 is known. Averages include a known-payout sample count. No mockup counts or rankings are hardcoded as data.
 
-The ArcGIS map has three modes:
+Each Dashboard metric determines one canonical ArcGIS representation; there is no separate map display selector:
 
-| Mode | Display | Meaning |
+| Metric | Display | Meaning |
 | --- | --- | --- |
-| Pickup Volume | Heatmap or public Merchant points | Intensity weighted by observed delivery count |
-| Merchant Diversity | Heatmap or public Merchant points | One unit per distinct observed Merchant; nearby variety is an approximation without spatial bins |
+| Pickup Volume | Heatmap only | Intensity weighted by observed delivery count |
+| Merchant Diversity | Category-coded public Merchant points only | One equal-size point per distinct observed physical Merchant |
 | Destination Heatmap | Heatmap only | Generalized observed destination activity; no individual markers or popups |
 
-One MapView survives filter and mode changes. Client-side FeatureLayer data and renderers update without recreating the view. Merchant popups show only public pickup and aggregate delivery information. [Dashboard analytics](docs/dashboard.md) explains filters and renderers.
+One MapView survives filter and metric changes. Client-side FeatureLayer data and renderers update without recreating the view. Merchant popups show only public pickup and aggregate delivery information. [Dashboard analytics](docs/dashboard.md) explains filters and renderers.
 
 ## Geospatial data and privacy
 
@@ -64,7 +64,7 @@ Compose uses official mongo:7.0, the dgi-mongodb container, a dedicated persiste
 
 ## Scope and remaining work
 
-- **PHASE 1.5:** A true grid or hex COUNT(DISTINCT merchantId) analysis remains optional; the current diversity heatmap weights each observed physical Merchant once.
+- **PHASE 1.5:** A true grid or hex COUNT(DISTINCT merchantId) analysis remains optional; the current diversity map displays each observed physical Merchant once as a category-coded point.
 - **PHASE 2:** No second deployment phase is implemented or committed. The present system is a local, single-process PoC; scaling or multi-user use requires its own design and privacy review.
 - **FUTURE:** Minimum aggregation thresholds and a deployment security model would require design before broader use.
 - **DEFERRED:** CSV export, temporal Merchant location history, and application-managed backup/restore are not implemented.

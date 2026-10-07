@@ -40,7 +40,7 @@ it("loads one dashboard response for the cards, timeline, ranking, and map shell
   expect(String(fetchMock.mock.calls[0][0])).toContain("period=week&category=all");
 });
 
-it("loads filtered destination cells and hides the local Points control", async () => {
+it("uses only the metric selector for canonical representations and filters destination cells", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.fn(async (url: string) => url.includes("destination-heatmap")
     ? { ok: true, json: async () => ({ cells: [{ location: { type: "Point", coordinates: [0.1, 0.2] }, count: 1 }] }) }
@@ -48,11 +48,24 @@ it("loads filtered destination cells and hides the local Points control", async 
   vi.stubGlobal("fetch", fetchMock);
   render(<Dashboard />);
   await screen.findByText("Apr 20, 2026 – Apr 26, 2026");
-  const mode = screen.getByRole("group", { name: "Map display mode" });
-  await user.click(within(mode).getByRole("button", { name: "Points" }));
-  expect(within(mode).getByRole("button", { name: "Points" })).toHaveAttribute("aria-pressed", "true");
+  const assertNoMode = () => {
+    expect(screen.queryByRole("group", { name: "Map display mode" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Points" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Heatmap" })).not.toBeInTheDocument();
+  };
+  expect(within(screen.getByRole("group", { name: "Map metric" })).getAllByRole("button").map((button) => button.textContent))
+    .toEqual(["Pickup Volume", "Merchant Diversity", "Destination Heatmap"]);
+  const map = screen.getByTestId("dashboard-map");
+  assertNoMode();
+  expect(map).toHaveAttribute("data-metric", "pickupVolume");
+  expect(screen.getByText("Heat intensity represents observed pickup activity.")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Merchant Diversity" }));
+  assertNoMode();
+  expect(map).toHaveAttribute("data-metric", "merchantDiversity");
+  expect(screen.getByText("Each point represents one observed physical merchant location; color and icon indicate merchant category.")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Destination Heatmap" }));
-  expect(screen.queryByRole("group", { name: "Map display mode" })).not.toBeInTheDocument();
+  assertNoMode();
+  expect(screen.getByTestId("dashboard-map")).toBe(map);
   expect(screen.getByText("Destination heatmap only — individual destination points are not shown.")).toBeInTheDocument();
   await waitFor(() => expect(screen.getByTestId("dashboard-map")).toHaveAttribute("data-destination-count", "1"));
   expect(screen.getByTestId("dashboard-map")).toHaveAttribute("data-metric", "destinationHeatmap");
