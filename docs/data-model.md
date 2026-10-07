@@ -7,11 +7,15 @@ The application uses the native MongoDB Node.js driver. The application database
 | Collection | Fields | Indexes |
 | --- | --- | --- |
 | `merchants` | `_id`, `name`, `category`, `publicAddress`, `location`, `city` | `location` 2dsphere |
-| `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `payout`, `distanceMiles`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt` |
+| `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `payout`, `distanceMiles`, `deliveryDurationSeconds`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt` |
 
 A Merchant is one **physical pickup location**, not a brand. Two branches of one brand use separate IDs, even when they share a name. `category` is `restaurant`, `grocery`, `retail`, or `other`. `publicAddress` is a verified public business address; `location` is its exact stored-geocode GeoJSON Point in `[longitude, latitude]` order. New Merchant writes require an address and reject client-supplied coordinates. Earlier records can lack `publicAddress`; they retain their existing location until a verified address correction is supplied. No merchant or delivery records are seeded.
 
 `merchantId` references a Merchant record. `pickedUpAt` is stored as a BSON Date. `payout` is the manually recorded gross payout; absence means unknown, while an explicit `0` means zero. The API does not default absent payout to zero. Optional `destinationLocation` holds a generalized GeoJSON Point and has a 2dsphere index. No persisted `destinationAddress` field exists.
+
+`deliveryDurationSeconds?: number` is manually observed elapsed delivery duration from delivery history/Uber Eats records, stored as positive integer seconds. It is not derived from `pickedUpAt`. For example, 1 hr 12 mins 35 secs becomes `4355`. Missing means unknown/not yet entered, not zero. POST may omit the field; when supplied it must be a finite positive integer. PATCH accepts a positive integer to set/replace, `null` to `$unset`, or omission to preserve. API responses include the field only when present. No migration, estimates, or automatic backfill is performed.
+
+The centered Add/Edit modal uses optional Hours (integer >= 0), Minutes (0–59), and Seconds (0–59). Blank components count as zero only when another component is entered; an all-blank group represents unknown duration. An entered total of zero is invalid. Known durations prepopulate the components; blanking all three clears a previously recorded duration. History shows formatted units or `—` for unknown values. **DEFERRED:** duration averages, distributions, rankings, earnings/hour, and other Dashboard analytics.
 
 ## Endpoints
 
@@ -26,10 +30,10 @@ A Merchant is one **physical pickup location**, not a brand. Two branches of one
 | `GET /api/deliveries` | Lists deliveries with filters and pagination |
 | `GET /api/deliveries/:id` | Gets one delivery |
 | `POST /api/deliveries` | Creates a delivery for an existing merchant |
-| `PATCH /api/deliveries/:id` | Changes supplied fields; `null` clears optional payout, distance, or notes |
+| `PATCH /api/deliveries/:id` | Changes supplied fields; `null` clears optional payout, distance, duration, or notes |
 | `DELETE /api/deliveries/:id` | Deletes a delivery and returns 204 |
 
-The create and patch Delivery requests accept `merchantId`, `pickedUpAt`, `payout`, `distanceMiles`, `notes`, and transient `destinationAddress` as applicable. They reject direct `destinationLocation` and other unknown fields. The backend geocodes and generalizes a supplied address before writing only `destinationLocation`. The History-oriented Delivery response exposes `hasDestinationLocation` but never exposes coordinates. Synthetic destination points may be inserted directly into an isolated test database for controlled index tests; the public API cannot write them directly.
+The create and patch Delivery requests accept `merchantId`, `pickedUpAt`, `payout`, `distanceMiles`, `deliveryDurationSeconds`, `notes`, and transient `destinationAddress` as applicable. They reject direct `destinationLocation` and other unknown fields. The backend geocodes and generalizes a supplied address before writing only `destinationLocation`. The History-oriented Delivery response exposes `hasDestinationLocation` but never exposes coordinates. Synthetic destination points may be inserted directly into an isolated test database for controlled index tests; the public API cannot write them directly.
 
 Merchant list/detail responses include `deliveryCount`, derived from Delivery references, plus the public address and exact business point when available. Normal metadata edits preserve `location`; an address edit replaces both `publicAddress` and the exact point. Because Deliveries reference `merchantId`, an address edit is a correction to the pickup location for existing history. A moved store should be created as a separate Merchant. Deletion does not reassign or cascade-delete Deliveries.
 

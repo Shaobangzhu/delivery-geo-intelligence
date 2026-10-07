@@ -200,6 +200,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
       _id: new ObjectId(), merchantId, pickedUpAt: new Date(parsed.data.pickedUpAt),
       ...(parsed.data.payout === undefined ? {} : { payout: parsed.data.payout }),
       ...(parsed.data.distanceMiles === undefined ? {} : { distanceMiles: parsed.data.distanceMiles }),
+      ...(parsed.data.deliveryDurationSeconds === undefined ? {} : { deliveryDurationSeconds: parsed.data.deliveryDurationSeconds }),
       ...(destinationLocation === undefined ? {} : { destinationLocation }),
       ...(parsed.data.notes === undefined ? {} : { notes: parsed.data.notes })
     };
@@ -236,7 +237,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
         throw error;
       }
     }
-    for (const field of ["payout", "distanceMiles", "notes"] as const) {
+    for (const field of ["payout", "distanceMiles", "deliveryDurationSeconds", "notes"] as const) {
       const value = changes[field];
       if (value === null) unset[field] = "";
       else if (value !== undefined) Object.assign(set, { [field]: value });

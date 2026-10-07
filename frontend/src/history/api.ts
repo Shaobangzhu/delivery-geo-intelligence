@@ -15,6 +15,7 @@ export interface Delivery {
   pickedUpAt: string;
   payout?: number;
   distanceMiles?: number;
+  deliveryDurationSeconds?: number;
   notes?: string;
   hasDestinationLocation: boolean;
 }
@@ -39,6 +40,7 @@ export interface DeliveryPayload {
   pickedUpAt: string;
   payout?: number | null;
   distanceMiles?: number | null;
+  deliveryDurationSeconds?: number | null;
   notes?: string | null;
   destinationAddress?: string;
 }

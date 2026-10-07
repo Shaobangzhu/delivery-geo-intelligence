@@ -53,7 +53,8 @@ function installApi(options: {
       const payload = JSON.parse(String(init?.body)) as DeliveryPayload;
       if (options.post) return options.post(payload);
       const created: Delivery = { id: "delivery-new", merchantId: payload.merchantId, pickedUpAt: payload.pickedUpAt,
-        ...(typeof payload.payout === "number" ? { payout: payload.payout } : {}), hasDestinationLocation: true };
+        ...(typeof payload.payout === "number" ? { payout: payload.payout } : {}),
+        ...(typeof payload.deliveryDurationSeconds === "number" ? { deliveryDurationSeconds: payload.deliveryDurationSeconds } : {}), hasDestinationLocation: true };
       rows = [created, ...rows];
       return reply({ data: created }, 201);
     }
@@ -63,6 +64,11 @@ function installApi(options: {
       const id = url.pathname.split("/").at(-1);
       rows = rows.map((row) => row.id === id ? { ...row, merchantId: payload.merchantId,
         pickedUpAt: payload.pickedUpAt, hasDestinationLocation: row.hasDestinationLocation || Boolean(payload.destinationAddress) } : row);
+      rows = rows.map((row) => {
+        if (row.id !== id || payload.deliveryDurationSeconds === undefined) return row;
+        const { deliveryDurationSeconds: previous, ...rest } = row;
+        return payload.deliveryDurationSeconds === null ? rest : { ...rest, deliveryDurationSeconds: payload.deliveryDurationSeconds };
+      });
       return reply({ data: rows.find((row) => row.id === id) });
     }
     if (url.pathname.startsWith("/api/deliveries/") && method === "DELETE") {
@@ -180,6 +186,7 @@ describe("Delivery History", () => {
     const post = requests(fetchMock, "POST", "/api/deliveries");
     expect(post).toHaveLength(1);
     const payload = JSON.parse(String(post[0][1]?.body)) as DeliveryPayload;
+    expect(payload).not.toHaveProperty("deliveryDurationSeconds");
     expect(payload.destinationAddress).toBe("synthetic-destination-token");
     expect(payload).not.toHaveProperty("destinationLocation");
     await user.click(screen.getByRole("button", { name: /Add Delivery/ }));
@@ -236,6 +243,7 @@ describe("Delivery History", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     const normalPayload = JSON.parse(String(requests(fetchMock, "PATCH", "/api/deliveries/delivery-a")[0][1]?.body));
     expect(normalPayload).not.toHaveProperty("destinationAddress");
+    expect(normalPayload).not.toHaveProperty("deliveryDurationSeconds");
 
     await user.click(screen.getByRole("button", { name: "Edit delivery for Test Merchant A" }));
     await user.click(screen.getByRole("button", { name: "Replace Destination" }));
@@ -247,6 +255,85 @@ describe("Delivery History", () => {
     const patches = requests(fetchMock, "PATCH", "/api/deliveries/delivery-a");
     expect(JSON.parse(String(patches.at(-1)?.[1]?.body)).destinationAddress).toBe("synthetic-replacement-token");
   });
+
+  it("captures normalized duration for a new delivery", async () => {
+    const user = userEvent.setup();
+    const fetchMock = installApi();
+    render(<History />);
+    await screen.findByText("Test Merchant A");
+    await user.click(screen.getByRole("button", { name: /Add Delivery/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("group", { name: /Delivery Duration/ })).toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText(/Merchant/), "merchant-a");
+    fireEvent.change(within(dialog).getByLabelText(/Pickup Date & Time/), { target: { value: "2026-04-21T12:30" } });
+    await user.type(within(dialog).getByLabelText(/Destination Address/), "synthetic-destination-token");
+    for (const [label, value] of [["Hours", "1"], ["Minutes", "2"], ["Seconds", "3"]]) {
+      await user.type(within(dialog).getByLabelText(label), value);
+    }
+    await user.click(within(dialog).getByRole("button", { name: "Save Delivery" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const payload = JSON.parse(String(requests(fetchMock, "POST", "/api/deliveries")[0][1]?.body));
+    expect(payload.deliveryDurationSeconds).toBe(3723);
+    expect(await screen.findByText("1 hr 2 mins 3 secs")).toBeInTheDocument();
+    expect(payload).not.toHaveProperty("durationHours");
+    expect(payload).not.toHaveProperty("durationMinutes");
+    expect(payload).not.toHaveProperty("durationSeconds");
+  });
+
+  it("prepopulates an existing duration and sends null when all components are cleared", async () => {
+    const user = userEvent.setup();
+    const fetchMock = installApi({ rows: [{ ...initialRows[0], deliveryDurationSeconds: 5025 }, initialRows[1]] });
+    render(<History />);
+    await screen.findByText("1 hr 23 mins 45 secs");
+    const unknownRow = screen.getByText("Test Grocery B").closest("tr")!;
+    expect(within(unknownRow).getAllByRole("cell")[5]).toHaveTextContent("—");
+    await user.click(screen.getByRole("button", { name: "Edit delivery for Test Merchant A" }));
+    expect(screen.getByLabelText("Hours")).toHaveValue(1);
+    expect(screen.getByLabelText("Minutes")).toHaveValue(23);
+    expect(screen.getByLabelText("Seconds")).toHaveValue(45);
+    for (const label of ["Hours", "Minutes", "Seconds"]) await user.clear(screen.getByLabelText(label));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const payload = JSON.parse(String(requests(fetchMock, "PATCH", "/api/deliveries/delivery-a")[0][1]?.body));
+    expect(payload.deliveryDurationSeconds).toBeNull();
+    expect(screen.queryByText("1 hr 23 mins 45 secs")).not.toBeInTheDocument();
+    expect(payload).not.toHaveProperty("destinationAddress");
+  });
+
+  it("backfills an old delivery through Edit and corrects an existing duration", async () => {
+    const user = userEvent.setup();
+    const fetchMock = installApi({ rows: [initialRows[0], { ...initialRows[1], deliveryDurationSeconds: 125 }] });
+    render(<History />);
+    await screen.findByText("Test Merchant A");
+    await user.click(screen.getByRole("button", { name: "Edit delivery for Test Merchant A" }));
+    for (const label of ["Hours", "Minutes", "Seconds"]) expect(screen.getByLabelText(label)).toHaveValue(null);
+    await user.type(screen.getByLabelText("Minutes"), "28");
+    await user.type(screen.getByLabelText("Seconds"), "41");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(JSON.parse(String(requests(fetchMock, "PATCH", "/api/deliveries/delivery-a")[0][1]?.body)).deliveryDurationSeconds).toBe(1721);
+    expect(await screen.findByText("28 mins 41 secs")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit delivery for Test Grocery B" }));
+    await user.clear(screen.getByLabelText("Seconds"));
+    await user.type(screen.getByLabelText("Seconds"), "12");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(JSON.parse(String(requests(fetchMock, "PATCH", "/api/deliveries/delivery-b")[0][1]?.body)).deliveryDurationSeconds).toBe(132);
+  });
+
+  it.each([["Minutes", "60"], ["Seconds", "60"], ["Hours", "-1"], ["Minutes", "1.5"], ["Seconds", "0"]])(
+    "rejects invalid duration %s=%s", async (label, value) => {
+      const user = userEvent.setup();
+      const fetchMock = installApi();
+      render(<History />);
+      await screen.findByText("Test Merchant A");
+      await user.click(screen.getByRole("button", { name: "Edit delivery for Test Merchant A" }));
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+      expect(screen.getByRole("alert")).toHaveTextContent("Enter a positive duration");
+      expect(requests(fetchMock, "PATCH", "/api/deliveries/delivery-a")).toHaveLength(0);
+    }
+  );
 
   it("requires explicit confirmation before deletion and refreshes afterward", async () => {
     const user = userEvent.setup();

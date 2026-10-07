@@ -5,8 +5,19 @@ import { randomBytes } from "node:crypto";
 import test from "node:test";
 import { MongoClient, ObjectId } from "mongodb";
 import { createApp } from "../dist/app.js";
+import { deliveryInputSchema, deliveryPatchSchema } from "../dist/model.js";
 import { ensureIndexes } from "../dist/db.js";
 import { GeocodingError, generalizeCoordinates } from "../dist/geocoding.js";
+
+test("duration schemas reject nonpositive, fractional, malformed, and nonfinite values", () => {
+  const base = { merchantId: new ObjectId().toHexString(), pickedUpAt: "2026-04-01T10:00:00Z" };
+  for (const value of [-1, 0, 1.5, NaN, Infinity, -Infinity, "41", {}, true]) {
+    assert.equal(deliveryInputSchema.safeParse({ ...base, deliveryDurationSeconds: value }).success, false);
+    assert.equal(deliveryPatchSchema.safeParse({ deliveryDurationSeconds: value }).success, false);
+  }
+  assert.equal(deliveryInputSchema.safeParse({ ...base, deliveryDurationSeconds: null }).success, false);
+  assert.equal(deliveryPatchSchema.safeParse({ deliveryDurationSeconds: null }).success, true);
+});
 
 test("Merchant and Delivery API against an isolated DGI MongoDB test database", async (t) => {
   assert.ok(process.env.MONGODB_URI, "Set MONGODB_URI in backend/.env before running tests");
@@ -279,6 +290,47 @@ test("Merchant and Delivery API against an isolated DGI MongoDB test database", 
       const afterFailure = await db.collection("deliveries").findOne({ _id: new ObjectId(id) });
       assert.deepEqual(afterFailure.destinationLocation.coordinates, [0.77, 0.23]);
       await api("DELETE", `/api/deliveries/${id}`);
+    });
+
+    await t.test("duration capture, legacy backfill, replacement, preservation, and clearing", async () => {
+      const base = { merchantId: merchantAId, pickedUpAt: "2026-04-09T10:00:00Z" };
+      const created = await api("POST", "/api/deliveries", { ...base, deliveryDurationSeconds: 4355,
+        destinationAddress: transientInputA });
+      assert.equal(created.status, 201);
+      assert.equal(created.body.data.deliveryDurationSeconds, 4355);
+      const id = created.body.data.id;
+      const stored = await db.collection("deliveries").findOne({ _id: new ObjectId(id) });
+      assert.equal(stored.deliveryDurationSeconds, 4355);
+      assert.equal(Object.hasOwn(stored, "destinationAddress"), false);
+      assert.deepEqual(stored.destinationLocation.coordinates, [0.12, 0.65]);
+      assert.equal(Object.hasOwn(created.body.data, "destinationLocation"), false);
+      assert.equal(JSON.stringify(created.body).includes(transientInputA), false);
+      const preserved = await api("PATCH", `/api/deliveries/${id}`, { notes: "Synthetic duration test" });
+      assert.equal(preserved.body.data.deliveryDurationSeconds, 4355);
+      for (const value of [-1, 0, 0.5, "41", null]) {
+        assert.equal((await api("POST", "/api/deliveries", { ...base, deliveryDurationSeconds: value })).status, 400);
+        if (value !== null) assert.equal((await api("PATCH", `/api/deliveries/${id}`, { deliveryDurationSeconds: value })).status, 400);
+      }
+      assert.equal((await api("PATCH", `/api/deliveries/${id}`, { deliveryDurationSeconds: 5025 })).body.data.deliveryDurationSeconds, 5025);
+      const cleared = await api("PATCH", `/api/deliveries/${id}`, { deliveryDurationSeconds: null });
+      assert.equal(cleared.status, 200);
+      assert.equal(Object.hasOwn(cleared.body.data, "deliveryDurationSeconds"), false);
+      const afterClear = await db.collection("deliveries").findOne({ _id: new ObjectId(id) });
+      assert.equal(Object.hasOwn(afterClear, "deliveryDurationSeconds"), false);
+      assert.deepEqual(afterClear.destinationLocation, stored.destinationLocation);
+      const unknown = await api("POST", "/api/deliveries", base);
+      assert.equal(unknown.status, 201);
+      assert.equal(Object.hasOwn(unknown.body.data, "deliveryDurationSeconds"), false);
+      assert.equal(Object.hasOwn(await db.collection("deliveries").findOne({ _id: new ObjectId(unknown.body.data.id) }), "deliveryDurationSeconds"), false);
+      const legacyId = new ObjectId();
+      await db.collection("deliveries").insertOne({ _id: legacyId, merchantId: new ObjectId(merchantAId), pickedUpAt: new Date(base.pickedUpAt) });
+      assert.equal(Object.hasOwn((await api("GET", `/api/deliveries/${legacyId}`)).body.data, "deliveryDurationSeconds"), false);
+      const backfilled = await api("PATCH", `/api/deliveries/${legacyId}`, { deliveryDurationSeconds: 1721 });
+      assert.equal(backfilled.status, 200);
+      assert.equal(backfilled.body.data.deliveryDurationSeconds, 1721);
+      assert.equal((await api("GET", `/api/deliveries/${legacyId}`)).body.data.deliveryDurationSeconds, 1721);
+      assert.equal((await api("GET", "/api/deliveries")).body.data.find((row) => row.id === legacyId.toHexString()).deliveryDurationSeconds, 1721);
+      for (const item of [id, unknown.body.data.id, legacyId.toHexString()]) await api("DELETE", `/api/deliveries/${item}`);
     });
 
     await t.test("History and Dashboard resolve current merchant metadata by ID", async () => {

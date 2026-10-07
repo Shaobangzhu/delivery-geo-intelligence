@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listDeliveries, listMerchants, userFacingError, type Category, type Delivery, type DeliveryPage, type Merchant, type SortOrder } from "../history/api";
 import { ConfirmDelete } from "../history/ConfirmDelete";
 import { DeliveryModal } from "../history/DeliveryModal";
+import { formatDuration } from "../history/duration";
 import "../history/history.css";
 
 const PAGE_SIZE = 10;
@@ -134,10 +135,10 @@ export function History() {
 
       <div className="history-table-card">
         <div className="table-scroll"><table className="history-table">
-          <thead><tr><th scope="col">Date &amp; Time</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Payout</th><th scope="col">Distance</th><th scope="col">Destination</th><th scope="col">Actions</th></tr></thead>
+          <thead><tr><th scope="col">Date &amp; Time</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Payout</th><th scope="col">Distance</th><th scope="col">Duration</th><th scope="col">Destination</th><th scope="col">Actions</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={7} className="table-message">Loading deliveries…</td></tr>
-              : result.data.length === 0 ? <tr><td colSpan={7} className="table-message">{listError ? "No records to display." : "No deliveries match the current filters."}</td></tr>
+            {loading ? <tr><td colSpan={8} className="table-message">Loading deliveries…</td></tr>
+              : result.data.length === 0 ? <tr><td colSpan={8} className="table-message">{listError ? "No records to display." : "No deliveries match the current filters."}</td></tr>
               : result.data.map((delivery) => {
                 const merchant = merchantById.get(delivery.merchantId);
                 return <tr key={delivery.id}>
@@ -146,6 +147,7 @@ export function History() {
                   <td><span className={`category-label${merchant ? ` category-${merchant.category}` : ""}`}>{merchant ? categories.find((item) => item.value === merchant.category)?.label : "Unknown"}</span></td>
                   <td className="number-cell">{delivery.payout === undefined ? "—" : `$${delivery.payout.toFixed(2)}`}</td>
                   <td className="number-cell">{delivery.distanceMiles === undefined ? "—" : `${delivery.distanceMiles.toFixed(1)} mi`}</td>
+                  <td className="duration-cell">{formatDuration(delivery.deliveryDurationSeconds)}</td>
                   <td><span className={delivery.hasDestinationLocation ? "destination-status ready" : "destination-status missing"}>{delivery.hasDestinationLocation ? "Location Ready" : "No Location"}</span></td>
                   <td><div className="row-actions">
                     <button type="button" className="icon-action" aria-label={`Edit delivery for ${merchant?.name ?? "unknown merchant"}`} onClick={() => setEditor(delivery)} title="Edit delivery">✎</button>

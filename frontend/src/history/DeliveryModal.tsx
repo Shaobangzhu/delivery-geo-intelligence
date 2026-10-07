@@ -22,6 +22,10 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
   const [replaceDestination, setReplaceDestination] = useState(false);
   const [payout, setPayout] = useState(delivery?.payout === undefined ? "" : String(delivery.payout));
   const [distance, setDistance] = useState(delivery?.distanceMiles === undefined ? "" : String(delivery.distanceMiles));
+  const duration = delivery?.deliveryDurationSeconds;
+  const [hours, setHours] = useState(duration === undefined ? "" : String(Math.floor(duration / 3600)));
+  const [minutes, setMinutes] = useState(duration === undefined ? "" : String(Math.floor(duration % 3600 / 60)));
+  const [seconds, setSeconds] = useState(duration === undefined ? "" : String(duration % 60));
   const [notes, setNotes] = useState(delivery?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -46,8 +50,21 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
       return;
     }
 
+    const parts = [hours, minutes, seconds];
+    const durationEmpty = parts.every((part) => part.trim() === "");
+    const values = parts.map((part) => part.trim() === "" ? 0 : Number(part));
+    const totalSeconds = values[0] * 3600 + values[1] * 60 + values[2];
+    if (!durationEmpty && (parts.some((part) => part !== "" && !/^\d+$/.test(part)) ||
+        values.some((value) => !Number.isSafeInteger(value) || value < 0) ||
+        values[1] > 59 || values[2] > 59 || !Number.isSafeInteger(totalSeconds) || totalSeconds <= 0)) {
+      setError("Enter a positive duration with whole hours, and minutes and seconds from 0 to 59.");
+      return;
+    }
+
     const payload: DeliveryPayload = {
       merchantId,
+      ...(!durationEmpty ? { deliveryDurationSeconds: totalSeconds }
+        : duration !== undefined ? { deliveryDurationSeconds: null } : {}),
       pickedUpAt: pickupDate.toISOString(),
       ...(delivery ? { payout: payoutValue, distanceMiles: distanceValue, notes: notes.trim() || null } : {
         ...(payoutValue === null ? {} : { payout: payoutValue }),
@@ -121,6 +138,18 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
             <label htmlFor={`${id}-distance`}>Distance (mi)</label>
             <input id={`${id}-distance`} type="number" min="0" step="0.01" inputMode="decimal" value={distance} onChange={(event) => setDistance(event.target.value)} disabled={saving} />
           </div>
+          <fieldset className="duration-group form-wide" disabled={saving}>
+            <legend>Delivery Duration <span>(optional)</span></legend>
+            <div className="duration-inputs">
+              <div className="form-field"><label htmlFor={`${id}-hours`}>Hours</label>
+                <input id={`${id}-hours`} type="number" min="0" step="1" inputMode="numeric" value={hours} onChange={(event) => setHours(event.target.value)} /></div>
+              <div className="form-field"><label htmlFor={`${id}-minutes`}>Minutes</label>
+                <input id={`${id}-minutes`} type="number" min="0" max="59" step="1" inputMode="numeric" value={minutes} onChange={(event) => setMinutes(event.target.value)} /></div>
+              <div className="form-field"><label htmlFor={`${id}-seconds`}>Seconds</label>
+                <input id={`${id}-seconds`} type="number" min="0" max="59" step="1" inputMode="numeric" value={seconds} onChange={(event) => setSeconds(event.target.value)} /></div>
+            </div>
+            <p className="duration-help">Observed elapsed time from your delivery record. Leave all fields blank for unknown duration.</p>
+          </fieldset>
           <div className="form-field form-wide">
             <label htmlFor={`${id}-notes`}>Optional Notes</label>
             <textarea id={`${id}-notes`} rows={3} maxLength={2000} value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} />

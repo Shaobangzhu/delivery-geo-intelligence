@@ -26,6 +26,8 @@ export const merchantPatchSchema = merchantInputSchema.partial().refine(
   { message: "At least one field is required" }
 );
 
+const deliveryDurationSchema = z.number().finite().int().positive();
+
 const timestampSchema = z.iso.datetime({ offset: true });
 
 // This address is transient input only; it is never part of DeliveryDocument.
@@ -36,6 +38,7 @@ export const deliveryInputSchema = z.strictObject({
   pickedUpAt: timestampSchema,
   payout: z.number().finite().nonnegative().optional(),
   distanceMiles: z.number().finite().nonnegative().optional(),
+  deliveryDurationSeconds: deliveryDurationSchema.optional(),
   destinationAddress: destinationAddressSchema.optional(),
   notes: z.string().trim().max(2000).optional()
 });
@@ -45,6 +48,7 @@ export const deliveryPatchSchema = z.strictObject({
   pickedUpAt: timestampSchema.optional(),
   payout: z.number().finite().nonnegative().nullable().optional(),
   distanceMiles: z.number().finite().nonnegative().nullable().optional(),
+  deliveryDurationSeconds: deliveryDurationSchema.nullable().optional(),
   destinationAddress: destinationAddressSchema.optional(),
   notes: z.string().trim().max(2000).nullable().optional()
 }).refine(
@@ -81,6 +85,7 @@ export interface DeliveryDocument {
   pickedUpAt: Date;
   payout?: number;
   distanceMiles?: number;
+  deliveryDurationSeconds?: number;
   destinationLocation?: GeoJsonPoint;
   notes?: string;
 }
@@ -104,6 +109,7 @@ export function deliveryResponse(delivery: DeliveryDocument) {
     pickedUpAt: delivery.pickedUpAt.toISOString(),
     ...(delivery.payout === undefined ? {} : { payout: delivery.payout }),
     ...(delivery.distanceMiles === undefined ? {} : { distanceMiles: delivery.distanceMiles }),
+    ...(delivery.deliveryDurationSeconds === undefined ? {} : { deliveryDurationSeconds: delivery.deliveryDurationSeconds }),
     ...(delivery.notes === undefined ? {} : { notes: delivery.notes }),
     hasDestinationLocation: delivery.destinationLocation !== undefined
   };
