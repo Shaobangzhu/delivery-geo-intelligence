@@ -27,6 +27,7 @@ function installApi(options: {
   const fetchMock = vi.fn(async (input: string, init?: RequestInit): Promise<Response> => {
     const url = new URL(input, "http://localhost");
     const method = init?.method ?? "GET";
+    if (url.pathname === "/api/earnings-adjustments") return reply({ data: [] });
     if (url.pathname === "/api/merchants") return reply({ data: merchants });
     if (url.pathname === "/api/deliveries" && method === "GET") {
       if (options.get) return options.get(url);

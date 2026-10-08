@@ -23,7 +23,7 @@ export interface DashboardData {
     totalDeliveries: number;
     uniqueMerchants: number;
     observedDestinationAreas: number;
-    totalEarnings: { value: number | null; sampleCount: number };
+    totalEarnings: { value: number | null; sampleCount: number; deliveryEarnings: number | null; prop22Earnings: number; deliveryPayoutSampleCount: number; prop22PaymentCount: number };
     topMerchantByOrders: MerchantRanking | null;
     topMerchantByTotalEarnings: MerchantRanking | null;
     topMerchantByAverageEarnings: MerchantRanking | null;

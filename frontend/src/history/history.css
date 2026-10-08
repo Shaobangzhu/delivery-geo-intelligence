@@ -103,3 +103,8 @@
 .duration-inputs input { width: 100%; min-width: 0; }
 .duration-help { margin: 7px 0 0; color: #6880a0; font-size: 11px; }
 .duration-cell { white-space: nowrap; }
+
+.history-primary-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.prop22-section { margin-top: 24px; }
+.prop22-section h2 { font-size: 18px; }
+.payment-table { min-width: 570px; }

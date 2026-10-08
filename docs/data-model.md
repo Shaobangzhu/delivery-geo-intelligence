@@ -7,6 +7,7 @@ The application uses the native MongoDB Node.js driver. The application database
 | Collection | Fields | Indexes |
 | --- | --- | --- |
 | `merchants` | `_id`, `name`, `category`, `publicAddress`, `location`, `city` | `location` 2dsphere |
+| `earningsAdjustments` | `_id`, `type`, `paymentDate`, `amount`, optional `coverageStartDate`, `coverageEndDate`, `notes` | `paymentDate` descending |
 | `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `payout`, `distanceMiles`, `deliveryDurationSeconds`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt` |
 
 A Merchant is one **physical pickup location**, not a brand. Two branches of one brand use separate IDs, even when they share a name. `category` is `restaurant`, `grocery`, `retail`, or `other`. `publicAddress` is a verified public business address; `location` is its exact stored-geocode GeoJSON Point in `[longitude, latitude]` order. New Merchant writes require an address and reject client-supplied coordinates. Earlier records can lack `publicAddress`; they retain their existing location until a verified address correction is supplied. No merchant or delivery records are seeded.
@@ -16,6 +17,12 @@ A Merchant is one **physical pickup location**, not a brand. Two branches of one
 `deliveryDurationSeconds?: number` is manually observed elapsed delivery duration from delivery history/Uber Eats records, stored as positive integer seconds. It is not derived from `pickedUpAt`. For example, 1 hr 12 mins 35 secs becomes `4355`. Missing means unknown/not yet entered, not zero. POST may omit the field; when supplied it must be a finite positive integer. PATCH accepts a positive integer to set/replace, `null` to `$unset`, or omission to preserve. API responses include the field only when present. No migration, estimates, or automatic backfill is performed.
 
 The centered Add/Edit modal uses optional Hours (integer >= 0), Minutes (0–59), and Seconds (0–59). Blank components count as zero only when another component is entered; an all-blank group represents unknown duration. An entered total of zero is invalid. Known durations prepopulate the components; blanking all three clears a previously recorded duration. History shows formatted units or `—` for unknown values. **DEFERRED:** duration averages, distributions, rankings, earnings/hour, and other Dashboard analytics.
+
+## Earnings adjustments
+
+`EarningsAdjustment` is independent of Delivery and Merchant. Current type is only `prop22_guarantee`. `paymentDate` is a valid date-only `YYYY-MM-DD` string and `amount` is a finite positive USD number with at most two decimal places. Coverage dates are optional as a pair, valid date-only strings, with start <= end; no coverage period or 14-day interval is inferred. Notes are optional, trimmed, and limited to 2000 characters.
+
+`/api/earnings-adjustments` supports GET (newest payment date first, ID breaks ties) and POST. `/:id` supports GET, PATCH, and DELETE, with the existing hexadecimal ObjectId validation and 404 for missing records. PATCH validates the resulting coverage pair, preserves omitted fields, and supports `null` to clear coverage dates or notes. Clearing coverage requires both dates to be removed together. Amount and payment date cannot be cleared. No Delivery migration or modifications occur.
 
 ## Endpoints
 

@@ -24,4 +24,12 @@ The same period and category filter applies to the destination endpoint and the 
 
 ## Earnings
 
-Known payouts alone contribute to totals and averages. Missing payout is distinct from a recorded `$0`. Each average reports its known-payout `sampleCount`.
+Known delivery payouts alone contribute to merchant/category totals and merchant averages. Missing payout is distinct from a recorded `$0`. Each average reports its known-payout `sampleCount`.
+
+## Cash-basis Total Earnings
+
+For Category=All, Total Earnings = known Delivery payouts + Prop 22 adjustments whose `paymentDate` is between resolved local `startDate` and `endDate`, inclusive. Canonical date strings compare in calendar order, avoiding timestamp/timezone conversion for payment dates. Coverage dates are future analysis metadata and do not allocate current earnings.
+
+The summary returns `value`, nullable `deliveryEarnings`, `prop22Earnings`, `deliveryPayoutSampleCount`, and `prop22PaymentCount`. Existing `sampleCount` remains the known delivery payout count. No known payouts and no payments yields `value: null`; payments alone produce their sum with zero delivery samples. A recorded zero payout is still known. Monetary combined sums are rounded to cents.
+
+Every category-specific view excludes adjustments. Merchant rankings, averages, popup earnings, delivery counts, timelines, and map datasets remain Delivery-based. Delivery payout must represent the delivery-level amount, while Prop 22 is entered separately; no amount is duplicated across deliveries. **DEFERRED:** coverage-period allocation and duration/distance efficiency research.

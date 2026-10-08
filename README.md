@@ -12,7 +12,7 @@ React, TypeScript, Vite, and React Router provide three primary pages:
 
 Express and Zod validate requests. The native MongoDB Node.js driver stores Merchants and Deliveries in the DGI MongoDB container. React calls Express; Express calls MongoDB and, for address geocoding, ArcGIS. Frontend and backend run on the host; Docker Compose runs MongoDB only. / redirects to /dashboard; GET /api/health checks the API.
 
-Dashboard filters use one backend definition for week/month/year in the Los Angeles calendar and restaurant/grocery/retail/other categories. The same resolved filter feeds cards, charts, rankings, merchant map data, and the destination heatmap request. Earnings sum **known payouts only**: a missing payout is unknown, whereas a recorded $0 is known. Averages include a known-payout sample count. No mockup counts or rankings are hardcoded as data.
+Dashboard filters use one backend definition for week/month/year in the Los Angeles calendar and restaurant/grocery/retail/other categories. The same resolved filter feeds cards, charts, rankings, merchant map data, and the destination heatmap request. Delivery earnings sum **known payouts only**: a missing payout is unknown, whereas a recorded $0 is known. Averages include a known-payout sample count. No mockup counts or rankings are hardcoded as data.
 
 Each Dashboard metric determines one canonical ArcGIS representation; there is no separate map display selector:
 
@@ -25,6 +25,10 @@ Each Dashboard metric determines one canonical ArcGIS representation; there is n
 One MapView survives filter and metric changes. Client-side FeatureLayer data and renderers update without recreating the view. Merchant popups show only public pickup and aggregate delivery information. [Dashboard analytics](docs/dashboard.md) explains filters and renderers.
 
 Delivery History captures optional observed delivery duration from your delivery history/Uber Eats record. Add/Edit uses Hours, Minutes, and Seconds; MongoDB stores one positive integer `deliveryDurationSeconds`. Missing duration means unknown or not yet recorded, never zero. Existing records can be manually backfilled, corrected, or cleared by leaving all three fields blank. No migration or automatic backfill is performed. History displays concise durations; duration analytics are **DEFERRED**.
+
+History also manages **Prop 22 Payments** as independent `EarningsAdjustment` records (`prop22_guarantee`). The secondary Add Prop 22 Payment action opens a centered modal; a separate newest-first table supports edit and confirmed delete. `paymentDate` is a `YYYY-MM-DD` date, while optional paired coverage dates capture the period shown in your Uber record.
+
+Dashboard **All** Total Earnings combines known delivery payouts with Prop 22 amounts received within the resolved Los Angeles calendar range. Category-specific and merchant earnings remain delivery payouts only: no Prop 22 allocation is attempted. Coverage dates do not affect current totals. Delivery payout is the delivery-level amount; entering an adjustment never changes or duplicates Delivery payouts. **DEFERRED:** coverage-period efficiency, earnings/hour, earnings/mile, and merchant/category allocation.
 
 ## Geospatial data and privacy
 

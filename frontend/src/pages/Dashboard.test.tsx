@@ -12,7 +12,7 @@ const merchant = { id: "synthetic-id", name: "Synthetic Pickup", category: "groc
 const fixture: DashboardData = {
   filters: { period: "week", category: "all", range: { start: "2026-04-20T07:00:00.000Z", endExclusive: "2026-04-27T07:00:00.000Z", startDate: "2026-04-20", endDate: "2026-04-26", timeZone: "America/Los_Angeles" } },
   summary: { totalDeliveries: 2, uniqueMerchants: 1, observedDestinationAreas: 1,
-    totalEarnings: { value: 12, sampleCount: 1 }, topMerchantByOrders: merchant,
+    totalEarnings: { value: 12, sampleCount: 1, deliveryEarnings: 12, prop22Earnings: 0, deliveryPayoutSampleCount: 1, prop22PaymentCount: 0 }, topMerchantByOrders: merchant,
     topMerchantByTotalEarnings: merchant, topMerchantByAverageEarnings: merchant },
   categoryDistribution: [
     { category: "restaurant", deliveries: 0 }, { category: "grocery", deliveries: 2 },
@@ -32,7 +32,7 @@ it("loads one dashboard response for the cards, timeline, ranking, and map shell
   render(<Dashboard />);
   expect(await screen.findByText("Apr 20, 2026 – Apr 26, 2026")).toBeInTheDocument();
   expect(screen.getAllByText("$12.00").length).toBeGreaterThan(0);
-  expect(screen.getByText("1 known payouts")).toBeInTheDocument();
+  expect(screen.getByText("1 known delivery payouts · 0 Prop 22 payments")).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Merchant Category Distribution" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Observed Pickups Over Time" })).toBeInTheDocument();
   expect(within(screen.getByRole("table")).getByText("Synthetic Pickup")).toBeInTheDocument();
@@ -108,4 +108,26 @@ it("hides stale analytics while a new filter response is pending without unmount
   expect(screen.getByTestId("dashboard-map")).toBe(map);
   finishNext({ ok: true, json: async () => fixture });
   await waitFor(() => expect(grid).toHaveAttribute("aria-busy", "false"));
+});
+
+it("shows cash-basis combined earnings only for All and delivery earnings for categories", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const category = new URL(url, "http://localhost").searchParams.get("category") ?? "all";
+    return { ok: true, json: async () => ({ ...fixture, summary: { ...fixture.summary,
+      totalEarnings: { value: category === "all" ? 125 : 100, deliveryEarnings: 100,
+        prop22Earnings: category === "all" ? 25 : 0, sampleCount: 7, deliveryPayoutSampleCount: 7, prop22PaymentCount: category === "all" ? 1 : 0 }
+    } }) };
+  }));
+  render(<Dashboard />);
+  expect(await screen.findByText("$125.00")).toBeInTheDocument();
+  expect(screen.getByText("Delivery $100.00 + Prop 22 $25.00")).toBeInTheDocument();
+  expect(screen.getByText("7 known delivery payouts · 1 Prop 22 payment")).toBeInTheDocument();
+  for (const category of ["Restaurant", "Grocery", "Retail", "Other"]) {
+    await user.click(screen.getByRole("button", { name: category }));
+    await waitFor(() => expect(screen.queryByText("$125.00")).not.toBeInTheDocument());
+    expect(screen.getByText("$100.00")).toBeInTheDocument();
+    expect(screen.getByText("Delivery payouts only; Prop 22 not allocated")).toBeInTheDocument();
+    expect(screen.queryByText("Delivery $100.00 + Prop 22 $25.00")).not.toBeInTheDocument();
+  }
 });

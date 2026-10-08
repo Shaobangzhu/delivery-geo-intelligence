@@ -6,7 +6,8 @@ import { dashboardFilterSchema, getDashboardAnalytics, getDestinationHeatmap } f
 import {
   deliveryInputSchema, deliveryPatchSchema, deliveryQuerySchema, deliveryResponse,
   merchantInputSchema, merchantPatchSchema, merchantResponse, objectIdSchema,
-  type DeliveryDocument, type MerchantDocument
+  earningsAdjustmentInputSchema, earningsAdjustmentPatchSchema, earningsAdjustmentResponse,
+  type EarningsAdjustmentDocument, type DeliveryDocument, type MerchantDocument
 } from "./model.js";
 
 function invalid(response: Response, error: ZodError) {
@@ -39,6 +40,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   const app = express();
   const merchants = db.collection<MerchantDocument>("merchants");
   const deliveries = db.collection<DeliveryDocument>("deliveries");
+  const adjustments = db.collection<EarningsAdjustmentDocument>("earningsAdjustments");
   let referenceWrite = Promise.resolve();
   async function withReferenceWrite<T>(operation: () => Promise<T>): Promise<T> {
     const previous = referenceWrite;
@@ -69,6 +71,55 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     const parsed = dashboardFilterSchema.safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
     return response.json(await getDestinationHeatmap(db, parsed.data));
+  });
+
+  app.get("/api/earnings-adjustments", async (_request, response) => {
+    const rows = await adjustments.find().sort({ paymentDate: -1, _id: -1 }).toArray();
+    return response.json({ data: rows.map(earningsAdjustmentResponse) });
+  });
+  app.get("/api/earnings-adjustments/:id", async (request, response) => {
+    const id = objectIdSchema.safeParse(request.params.id);
+    if (!id.success) return invalid(response, id.error);
+    const row = await adjustments.findOne({ _id: new ObjectId(id.data) });
+    if (!row) return response.status(404).json({ error: "Payment not found" });
+    return response.json({ data: earningsAdjustmentResponse(row) });
+  });
+  app.post("/api/earnings-adjustments", async (request, response) => {
+    const parsed = earningsAdjustmentInputSchema.safeParse(request.body);
+    if (!parsed.success) return invalid(response, parsed.error);
+    const row = { _id: new ObjectId(), ...parsed.data };
+    await adjustments.insertOne(row);
+    return response.status(201).json({ data: earningsAdjustmentResponse(row) });
+  });
+  app.patch("/api/earnings-adjustments/:id", async (request, response) => {
+    const id = objectIdSchema.safeParse(request.params.id);
+    if (!id.success) return invalid(response, id.error);
+    const patch = earningsAdjustmentPatchSchema.safeParse(request.body);
+    if (!patch.success) return invalid(response, patch.error);
+    const existing = await adjustments.findOne({ _id: new ObjectId(id.data) });
+    if (!existing) return response.status(404).json({ error: "Payment not found" });
+    const { _id, ...fields } = existing;
+    const merged: Record<string, unknown> = { ...fields, ...patch.data };
+    for (const key of ["coverageStartDate", "coverageEndDate", "notes"]) if (merged[key] === null) delete merged[key];
+    const validated = earningsAdjustmentInputSchema.safeParse(merged);
+    if (!validated.success) return invalid(response, validated.error);
+    const set: Record<string, unknown> = {};
+    const unset: Record<string, ""> = {};
+    for (const [key, value] of Object.entries(patch.data)) {
+      if (value === null) unset[key] = "";
+      else set[key] = value;
+    }
+    const updated = await adjustments.findOneAndUpdate({ _id }, {
+      ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {})
+    }, { returnDocument: "after" });
+    if (!updated) return response.status(404).json({ error: "Payment not found" });
+    return response.json({ data: earningsAdjustmentResponse(updated) });
+  });
+  app.delete("/api/earnings-adjustments/:id", async (request, response) => {
+    const id = objectIdSchema.safeParse(request.params.id);
+    if (!id.success) return invalid(response, id.error);
+    if (!(await adjustments.deleteOne({ _id: new ObjectId(id.data) })).deletedCount) return response.status(404).json({ error: "Payment not found" });
+    return response.status(204).send();
   });
 
   app.get("/api/merchants", async (_request, response) => {

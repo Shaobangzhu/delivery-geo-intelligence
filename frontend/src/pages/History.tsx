@@ -3,6 +3,7 @@ import { listDeliveries, listMerchants, userFacingError, type Category, type Del
 import { ConfirmDelete } from "../history/ConfirmDelete";
 import { DeliveryModal } from "../history/DeliveryModal";
 import { formatDuration } from "../history/duration";
+import { Prop22Payments } from "../history/Prop22Payments";
 import "../history/history.css";
 
 const PAGE_SIZE = 10;
@@ -28,6 +29,7 @@ function pageNumbers(page: number, totalPages: number): number[] {
 }
 
 export function History() {
+  const [addingPayment, setAddingPayment] = useState(false);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [merchantError, setMerchantError] = useState("");
   const [result, setResult] = useState<DeliveryPage>(emptyPage);
@@ -96,9 +98,10 @@ export function History() {
           <h1 id="history-title">Delivery History</h1>
           <p>Create, edit, and maintain delivery records before they feed dashboard analytics.</p>
         </div>
+        <div className="history-primary-actions"><button type="button" className="button secondary" onClick={() => setAddingPayment(true)}>＋ Add Prop 22 Payment</button>
         <button type="button" className="button primary add-delivery" data-history-primary onClick={() => setEditor(null)}>
           <span aria-hidden="true">＋</span> Add Delivery
-        </button>
+        </button></div>
       </div>
 
       <div className="history-filters" aria-label="Delivery filters">
@@ -167,6 +170,7 @@ export function History() {
         </div>
       </div>
 
+      <Prop22Payments adding={addingPayment} onCloseAdd={() => setAddingPayment(false)} />
       {editor !== undefined && <DeliveryModal key={editor?.id ?? "new"} delivery={editor} merchants={merchants} onClose={() => setEditor(undefined)} onSaved={refreshAfterSave} />}
       {deleteTarget && <ConfirmDelete delivery={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={refreshAfterDelete} />}
     </section>

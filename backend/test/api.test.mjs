@@ -333,6 +333,46 @@ test("Merchant and Delivery API against an isolated DGI MongoDB test database", 
       for (const item of [id, unknown.body.data.id, legacyId.toHexString()]) await api("DELETE", `/api/deliveries/${item}`);
     });
 
+    await t.test("Prop 22 independent CRUD, currency, date, coverage validation, and index", async () => {
+      const base = { type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
+      for (const bad of [{ amount: 0 }, { amount: -1 }, { amount: 1.001 }, { amount: "5" },
+        { type: "other" }, { paymentDate: "2026-02-30" }, { paymentDate: "2026-10-08T00:00:00Z" },
+        { coverageStartDate: "2026-09-21" }, { coverageEndDate: "2026-10-04" },
+        { coverageStartDate: "2026-10-04", coverageEndDate: "2026-09-21" }, { merchantId: merchantAId }]) {
+        assert.equal((await api("POST", "/api/earnings-adjustments", { ...base, ...bad })).status, 400);
+      }
+      const before = await db.collection("deliveries").find().toArray();
+      const first = await api("POST", "/api/earnings-adjustments", base);
+      assert.equal(first.status, 201);
+      const id = first.body.data.id;
+      assert.equal((await api("GET", `/api/earnings-adjustments/${id}`)).body.data.amount, 24.17);
+      const second = await api("POST", "/api/earnings-adjustments", { ...base, paymentDate: "2026-10-15", amount: 12 });
+      assert.equal((await api("GET", "/api/earnings-adjustments")).body.data[0].id, second.body.data.id);
+      const edit = await api("PATCH", `/api/earnings-adjustments/${id}`, { paymentDate: "2026-10-09", amount: 25.01,
+        coverageStartDate: "2026-09-21", coverageEndDate: "2026-10-04", notes: "Synthetic payment" });
+      assert.equal(edit.status, 200);
+      assert.equal(edit.body.data.paymentDate, "2026-10-09");
+      assert.equal(edit.body.data.amount, 25.01);
+      assert.equal(edit.body.data.coverageStartDate, "2026-09-21");
+      assert.equal((await api("PATCH", `/api/earnings-adjustments/${id}`, { coverageStartDate: "2026-10-05" })).status, 400);
+      assert.equal((await api("PATCH", `/api/earnings-adjustments/${id}`, { coverageStartDate: "2026-09-22" })).status, 200);
+      assert.equal((await api("PATCH", `/api/earnings-adjustments/${id}`, { coverageStartDate: null })).status, 400);
+      assert.equal((await api("PATCH", `/api/earnings-adjustments/${id}`, {})).status, 400);
+      assert.equal((await api("PATCH", `/api/earnings-adjustments/${id}`, { amount: 0 })).status, 400);
+      const cleared = await api("PATCH", `/api/earnings-adjustments/${id}`, { coverageStartDate: null, coverageEndDate: null, notes: null });
+      assert.equal(cleared.status, 200);
+      assert.equal(Object.hasOwn(cleared.body.data, "coverageStartDate"), false);
+      assert.deepEqual(await db.collection("deliveries").find().toArray(), before);
+      assert.ok((await db.collection("earningsAdjustments").indexes()).some((index) => index.key.paymentDate === -1));
+      for (const method of ["GET", "PATCH", "DELETE"]) {
+        assert.equal((await api(method, "/api/earnings-adjustments/bad", method === "PATCH" ? { amount: 5 } : undefined)).status, 400);
+        assert.equal((await api(method, `/api/earnings-adjustments/${new ObjectId()}`, method === "PATCH" ? { amount: 5 } : undefined)).status, 404);
+      }
+      for (const paymentId of [id, second.body.data.id]) assert.equal((await api("DELETE", `/api/earnings-adjustments/${paymentId}`)).status, 204);
+      assert.equal((await api("GET", `/api/earnings-adjustments/${id}`)).status, 404);
+      assert.deepEqual((await api("GET", "/api/earnings-adjustments")).body.data, []);
+    });
+
     await t.test("History and Dashboard resolve current merchant metadata by ID", async () => {
       const before = (await api("GET", "/api/dashboard?period=month&asOf=2026-04-20")).body;
       const sameName = before.map.pickupVolume.filter((merchant) => merchant.name === "Synthetic Pickup A");

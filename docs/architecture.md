@@ -41,3 +41,9 @@ History form
 ```
 
 Residential addresses and exact geocoded residential coordinates are not stored or logged by the application. The Delivery API accepts a transient address and rejects direct destination coordinates. The frontend ArcGIS key is browser-consumed; the backend geocoding key remains server-only. Observed records and derived analysis are a personal observational dataset, not representative of overall delivery demand.
+
+## Period earnings adjustments
+
+History sends independent Prop 22 CRUD requests to Express `/api/earnings-adjustments`; Zod validates them and the native driver stores `earningsAdjustments` with a payment-date query index. These documents have no merchant or Delivery relationship. Coverage dates are optional research metadata.
+
+Dashboard All-category Total Earnings queries payments by the resolved Los Angeles calendar date range and combines their received amounts with known delivery payouts. Category and merchant earnings remain Delivery-only. This is cash-basis accounting, with no coverage allocation, per-delivery adjustment, migration, or efficiency analytics. ArcGIS and destination privacy are unaffected.

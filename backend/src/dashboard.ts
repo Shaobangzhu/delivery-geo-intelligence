@@ -1,6 +1,6 @@
 import type { Db, Filter } from "mongodb";
 import { z } from "zod";
-import { categorySchema, type DeliveryDocument, type MerchantDocument } from "./model.js";
+import { categorySchema, type EarningsAdjustmentDocument, type DeliveryDocument, type MerchantDocument } from "./model.js";
 
 export const dashboardFilterSchema = z.strictObject({
   period: z.enum(["week", "month", "year"]).default("week"),
@@ -160,6 +160,18 @@ export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, n
     ({ id, name, category, city, distinctMerchantCount: 1, location }));
   const earnings = sumKnownPayouts(deliveries);
 
+  // Cash basis: local date strings match the resolved inclusive calendar range.
+  // Period adjustments have no defensible merchant/category attribution.
+  const payments = filters.category === "all" ? await db.collection<EarningsAdjustmentDocument>("earningsAdjustments").find({
+    type: "prop22_guarantee", paymentDate: { $gte: range.startDate, $lte: range.endDate }
+  }, { projection: { amount: 1 } }).toArray() : [];
+  const prop22Earnings = Math.round(payments.reduce((sum, row) => sum + row.amount, 0) * 100) / 100;
+  const totalEarnings = {
+    value: earnings.value === null && payments.length === 0 ? null : Math.round(((earnings.value ?? 0) + prop22Earnings) * 100) / 100,
+    deliveryEarnings: earnings.value, prop22Earnings,
+    sampleCount: earnings.sampleCount, deliveryPayoutSampleCount: earnings.sampleCount, prop22PaymentCount: payments.length
+  };
+
   return {
     filters: {
       period: range.period, category: range.category,
@@ -168,7 +180,7 @@ export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, n
     },
     summary: {
       totalDeliveries: deliveries.length, uniqueMerchants: rankings.length,
-      observedDestinationAreas: destinationAreas.size, totalEarnings: earnings,
+      observedDestinationAreas: destinationAreas.size, totalEarnings,
       topMerchantByOrders: rankings[0] ?? null,
       topMerchantByTotalEarnings: rankingByValue(rankings, "totalEarnings"),
       topMerchantByAverageEarnings: rankingByValue(rankings, "averageEarnings")

@@ -163,7 +163,7 @@ export function Dashboard() {
           <div className="dash-card stat-card"><span className="stat-label">Total Deliveries</span><strong>{data.summary.totalDeliveries}</strong></div>
           <div className="dash-card stat-card"><span className="stat-label">Unique Merchants</span><strong>{data.summary.uniqueMerchants}</strong></div>
           <div className="dash-card stat-card"><span className="stat-label">Observed Destination Areas</span><strong>{data.summary.observedDestinationAreas}</strong></div>
-          <div className="dash-card stat-card"><span className="stat-label">Total Earnings</span><strong>{money(data.summary.totalEarnings.value)}</strong><small>{data.summary.totalEarnings.sampleCount} known payouts</small></div>
+          <div className="dash-card stat-card"><span className="stat-label">Total Earnings</span><strong>{money(data.summary.totalEarnings.value)}</strong><small>{category === "all" ? `Delivery ${money(data.summary.totalEarnings.deliveryEarnings)} + Prop 22 ${money(data.summary.totalEarnings.prop22Earnings)}` : "Delivery payouts only; Prop 22 not allocated"}</small><small>{data.summary.totalEarnings.deliveryPayoutSampleCount} known delivery payouts{category === "all" ? ` · ${data.summary.totalEarnings.prop22PaymentCount} Prop 22 payment${data.summary.totalEarnings.prop22PaymentCount === 1 ? "" : "s"}` : ""}</small></div>
         </div>
         <div className="merchant-grid">
           <MerchantCard label="Top Merchant by Orders" row={data.summary.topMerchantByOrders} kind="orders" />
@@ -177,6 +177,6 @@ export function Dashboard() {
         </section>
       </div>
     </div>}
-    <div className="dashboard-methodology"><strong>Methodology</strong><span>Based on personally observed delivery activity in the displayed Los Angeles time range. Earnings include known payouts only; averages use their known payout sample. Destination locations are generalized, and results do not represent overall demand.</span></div>
+    <div className="dashboard-methodology"><strong>Methodology</strong><span>Based on personally observed delivery activity in the displayed Los Angeles time range. All-category total earnings include known delivery payouts and Prop 22 payments received in this range. Category and merchant earnings use delivery payouts only; averages use their known payout sample. Destination locations are generalized, and results do not represent overall demand.</span></div>
   </section>;
 }

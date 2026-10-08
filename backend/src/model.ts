@@ -114,3 +114,27 @@ export function deliveryResponse(delivery: DeliveryDocument) {
     hasDestinationLocation: delivery.destinationLocation !== undefined
   };
 }
+
+const adjustmentFields = {
+  type: z.literal("prop22_guarantee"),
+  paymentDate: z.iso.date(),
+  amount: z.number().finite().positive().multipleOf(0.01),
+  coverageStartDate: z.iso.date().optional(),
+  coverageEndDate: z.iso.date().optional(),
+  notes: z.string().trim().max(2000).optional()
+};
+export const earningsAdjustmentInputSchema = z.strictObject(adjustmentFields).refine(
+  (value) => (value.coverageStartDate === undefined && value.coverageEndDate === undefined) ||
+    (value.coverageStartDate !== undefined && value.coverageEndDate !== undefined && value.coverageStartDate <= value.coverageEndDate),
+  { path: ["coverageEndDate"], message: "Supply both coverage dates in chronological order" }
+);
+export const earningsAdjustmentPatchSchema = z.strictObject({
+  ...adjustmentFields,
+  coverageStartDate: z.iso.date().nullable().optional(),
+  coverageEndDate: z.iso.date().nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional()
+}).partial().refine((value) => Object.keys(value).length > 0, { message: "At least one field is required" });
+export type EarningsAdjustmentDocument = z.infer<typeof earningsAdjustmentInputSchema> & { _id: ObjectId };
+export function earningsAdjustmentResponse({ _id, ...fields }: EarningsAdjustmentDocument) {
+  return { id: _id.toHexString(), ...fields };
+}

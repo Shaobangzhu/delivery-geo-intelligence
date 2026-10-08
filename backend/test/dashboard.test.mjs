@@ -73,7 +73,7 @@ test("dashboard API applies one filter to every dataset and preserves payout sam
     assert.equal(summary.totalDeliveries, 7);
     assert.equal(summary.uniqueMerchants, 4);
     assert.equal(summary.observedDestinationAreas, 2);
-    assert.deepEqual(summary.totalEarnings, { value: 60, sampleCount: 4 });
+    assert.deepEqual(summary.totalEarnings, { value: 60, sampleCount: 4, deliveryEarnings: 60, prop22Earnings: 0, deliveryPayoutSampleCount: 4, prop22PaymentCount: 0 });
     assert.equal(summary.topMerchantByOrders.name, "Synthetic Restaurant A");
     assert.equal(summary.topMerchantByTotalEarnings.name, "Synthetic Grocery B");
     assert.equal(summary.topMerchantByTotalEarnings.totalEarnings, 50);
@@ -105,7 +105,7 @@ test("dashboard API applies one filter to every dataset and preserves payout sam
     const grocery = (await dashboard("period=week&category=grocery&asOf=2026-04-20")).body;
     assert.equal(grocery.summary.totalDeliveries, 2);
     assert.equal(grocery.summary.uniqueMerchants, 1);
-    assert.deepEqual(grocery.summary.totalEarnings, { value: 50, sampleCount: 2 });
+    assert.deepEqual(grocery.summary.totalEarnings, { value: 50, sampleCount: 2, deliveryEarnings: 50, prop22Earnings: 0, deliveryPayoutSampleCount: 2, prop22PaymentCount: 0 });
     assert.equal(grocery.categoryDistribution.find((row) => row.category === "restaurant").deliveries, 0);
     assert.equal(grocery.map.pickupVolume.length, 1);
     assert.equal(grocery.map.merchantDiversity.length, 1);
@@ -119,7 +119,7 @@ test("dashboard API applies one filter to every dataset and preserves payout sam
     assert.equal(grocery.topMerchants.length, 1);
 
     const retail = (await dashboard("period=week&category=retail&asOf=2026-04-20")).body;
-    assert.deepEqual(retail.summary.totalEarnings, { value: null, sampleCount: 0 });
+    assert.deepEqual(retail.summary.totalEarnings, { value: null, sampleCount: 0, deliveryEarnings: null, prop22Earnings: 0, deliveryPayoutSampleCount: 0, prop22PaymentCount: 0 });
     assert.equal(retail.summary.topMerchantByTotalEarnings, null);
     assert.equal(retail.summary.topMerchantByAverageEarnings, null);
     assert.equal(retail.topMerchants[0].totalEarnings, null);
@@ -134,6 +134,36 @@ test("dashboard API applies one filter to every dataset and preserves payout sam
     assert.ok(!destinations.body.cells.some((row) => row.location.coordinates.join(",") === "0.5,0.6"));
     const year = (await dashboard("period=year&category=all&asOf=2026-04-20")).body;
     assert.equal(year.pickupTimeline.length, 12);
+    await db.collection("earningsAdjustments").insertMany([
+      { type: "prop22_guarantee", paymentDate: "2026-04-20", amount: 5, coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14" },
+      { type: "prop22_guarantee", paymentDate: "2026-04-26", amount: 20 },
+      { type: "prop22_guarantee", paymentDate: "2026-04-19", amount: 3 },
+      { type: "prop22_guarantee", paymentDate: "2026-04-27", amount: 7 },
+      { type: "prop22_guarantee", paymentDate: "2026-05-01", amount: 11 },
+      { type: "prop22_guarantee", paymentDate: "2027-01-01", amount: 1000 }
+    ]);
+    const combined = (await dashboard("period=week&category=all&asOf=2026-04-20")).body;
+    assert.deepEqual(combined.summary.totalEarnings, { value: 85, deliveryEarnings: 60, prop22Earnings: 25, sampleCount: 4, deliveryPayoutSampleCount: 4, prop22PaymentCount: 2 });
+    for (const key of ["topMerchantByOrders", "topMerchantByTotalEarnings", "topMerchantByAverageEarnings"]) assert.deepEqual(combined.summary[key], summary[key]);
+    for (const key of ["map", "topMerchants", "pickupTimeline", "categoryDistribution"]) assert.deepEqual(combined[key], all.body[key]);
+    assert.deepEqual((await heatmap("period=week&category=all&asOf=2026-04-20")).body, destinations.body);
+    for (const category of ["restaurant", "grocery", "retail", "other"]) {
+      const filtered = (await dashboard(`period=week&category=${category}&asOf=2026-04-20`)).body;
+      assert.equal(filtered.summary.totalEarnings.prop22Earnings, 0);
+      assert.equal(filtered.summary.totalEarnings.prop22PaymentCount, 0);
+      assert.equal(filtered.summary.totalEarnings.value, filtered.summary.totalEarnings.deliveryEarnings);
+    }
+    const monthCombined = (await dashboard("period=month&category=all&asOf=2026-04-20")).body;
+    assert.equal(monthCombined.summary.totalEarnings.prop22Earnings, 35);
+    assert.equal(monthCombined.summary.totalEarnings.value, 195);
+    const yearCombined = (await dashboard("period=year&category=all&asOf=2026-04-20")).body;
+    assert.equal(yearCombined.summary.totalEarnings.prop22Earnings, 46);
+    assert.equal(yearCombined.summary.totalEarnings.value, 206);
+    const paymentOnly = (await dashboard("period=month&category=all&asOf=2026-05-20")).body;
+    assert.equal(paymentOnly.summary.totalEarnings.value, 11);
+    assert.equal(paymentOnly.summary.totalEarnings.deliveryEarnings, null);
+    assert.equal(paymentOnly.summary.totalEarnings.deliveryPayoutSampleCount, 0);
+    assert.equal(paymentOnly.summary.topMerchantByTotalEarnings, null);
     assert.equal((await dashboard("period=day")).status, 400);
     assert.equal((await dashboard("category=invalid")).status, 400);
     assert.equal((await heatmap("period=day")).status, 400);
