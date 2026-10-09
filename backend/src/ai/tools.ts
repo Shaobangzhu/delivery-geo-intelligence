@@ -5,13 +5,14 @@ import { getEfficiencyAnalytics } from "../efficiency.js";
 import { getSettlementEfficiency } from "../settlementEfficiency.js";
 import { objectIdSchema } from "../model.js";
 import { AnalystError, type ReadCoordinator } from "./types.js";
+import { projectAggregate } from "./projection.js";
 
 const period = dashboardFilterSchema.shape.period.removeDefault();
-const asOf = z.iso.date().nullable().optional().describe("Use null for the current period. For a historical period use a date in that period; the trusted current Los Angeles date is in instructions.");
+const asOf = z.iso.date().nullable().describe("Use null for the current period. For a historical period use a date in that period; the trusted current Los Angeles date is in instructions.");
 const category = dashboardFilterSchema.shape.category.removeDefault();
 const periodArgs = z.strictObject({ period, asOf });
 const categoryArgs = periodArgs.extend({ category });
-const settlementArgs = z.strictObject({ settlementId: objectIdSchema.nullable().optional(), limit: z.number().int().min(1).max(5).default(1) });
+const settlementArgs = z.strictObject({ settlementId: objectIdSchema.nullable(), limit: z.number().int().min(1).max(5) });
 export interface DomainServices {
   dashboard: typeof getDashboardAnalytics;
   efficiency: typeof getEfficiencyAnalytics;
@@ -71,7 +72,7 @@ export function createToolRegistry(db: Db, coordinate: ReadCoordinator, domain: 
       const data = await domain.settlements(db);
       const selected = args.settlementId ? data.data.filter((row) => row.settlementId === args.settlementId!.toLowerCase()) : data.data.slice(0, args.limit);
       return { scope: "all_categories_settlement_coverage", status: selected.length ? "available" : "unavailable",
-        settlements: selected, recentResultLimit: data.limit, totalSettlements: data.totalSettlements, hasMore: data.hasMore,
+        settlements: selected.map(({ settlementId: _id, ...row }) => row), recentResultLimit: data.limit, totalSettlements: data.totalSettlements, hasMore: data.hasMore,
         units: { revenueAndCost: "USD", hourlyRates: "USD/hour", mileageRates: "USD/mile", time: "hours", distance: "miles" },
         limitations: [...limitations, "No unrestricted ID lookup. IDs outside the recent result are unavailable.",
           "Cash receipt dates differ from work-period coverage. These income views are not additive.", "Confirmation cannot prove all activity was recorded or override structural issues."] };
@@ -95,7 +96,7 @@ export function createToolRegistry(db: Db, coordinate: ReadCoordinator, domain: 
     const handler = handlers[name] as (input: typeof parsed.data) => ReturnType<typeof handlers[K]>;
     return coordinate(async () => {
       if (signal?.aborted) throw new AnalystError("timeout_or_cancelled", 503);
-      return await handler(parsed.data);
+      return projectAggregate(await handler(parsed.data));
     }) as Promise<Awaited<ReturnType<typeof handlers[K]>>>;
   }
   const dateParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);

@@ -1,9 +1,10 @@
 .dashboard-page { max-width: 1380px; margin: 0 auto; }
 .ask-dgi { margin: 14px 0; padding: 16px; color: #294469; font-size: 13px; }
-.ask-dgi-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ask-dgi-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .ask-dgi h2 { margin: 0; font-size: 16px; }.ask-dgi h3 { font-size: 13px; overflow-wrap: anywhere; }
 .ask-dgi button { min-height: 36px; padding: 7px 12px; border: 1px solid #bad0ed; border-radius: 5px; background: #f1f7ff; color: #174e9d; font: inherit; cursor: pointer; }
 .ask-dgi button:disabled { opacity: .65; cursor: wait; }
+.ask-dgi button:focus-visible { outline: 3px solid #8bbaff; outline-offset: 2px; }
 .ask-dgi-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .ask-dgi form { display: grid; gap: 8px; }.ask-dgi label { font-weight: 700; }
 .ask-dgi textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #bad0ed; border-radius: 5px; resize: vertical; font: inherit; color: inherit; }

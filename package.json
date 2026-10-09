@@ -12,6 +12,7 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:status": "docker compose ps",
-    "db:logs": "docker compose logs -f mongodb"
+    "db:logs": "docker compose logs -f mongodb",
+    "eval:ai": "npm run eval:ai -w backend"
   }
 }

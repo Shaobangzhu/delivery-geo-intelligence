@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "test": "npm run build && node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "eval:ai": "tsc -p tsconfig.evals.json && node --import tsx evals/runner.ts"
   },
   "dependencies": {
     "dotenv": "^18.0.3",

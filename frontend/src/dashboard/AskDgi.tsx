@@ -14,6 +14,7 @@ export function AskDgi() {
   const pending = useRef<AbortController | null>(null), mounted = useRef(true);
   const textarea = useRef<HTMLTextAreaElement>(null), toggle = useRef<HTMLButtonElement>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; pending.current?.abort(); }; }, []);
+  useEffect(() => { if (open) textarea.current?.focus(); }, [open]);
   function change(value: string) { setQuestion(value); setResult(null); setError(""); }
   function close() {
     pending.current?.abort(); pending.current = null; setBusy(false); setOpen(false); setResult(null); setError(""); toggle.current?.focus();

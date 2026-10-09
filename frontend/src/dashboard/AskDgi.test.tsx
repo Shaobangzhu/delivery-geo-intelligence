@@ -45,3 +45,26 @@ it("cancels on close/unmount and ignores stale completions after reopening", asy
   await act(async () => resolvers[0]({ ok: true, json: async () => answer })); expect(screen.queryByRole("region", { name: "DGI answer" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Analyzing…" })).toBeDisabled(); view.unmount(); expect((fetch.mock.calls[1][1].signal as AbortSignal).aborted).toBe(true);
 });
+
+it.each([null, { ...answer, warnings: null }, { ...answer, toolsUsed: ["delete_records"] }, { ...answer, answer: "" }])("recovers safely from malformed successful response %#", async (payload) => {
+  const fetch = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => payload }).mockResolvedValueOnce({ ok: true, json: async () => answer });
+  vi.stubGlobal("fetch", fetch); render(<AskDgi />); const user = await open();
+  expect(screen.getByLabelText("Your question")).toHaveFocus();
+  await user.type(screen.getByLabelText("Your question"), "Explain income"); await user.click(screen.getByRole("button", { name: "Ask" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("unavailable"); expect(screen.queryByRole("region", { name: "DGI answer" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Retry analysis" })); await screen.findByRole("region", { name: "DGI answer" });
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it("keeps the newer result when an aborted request fails late", async () => {
+  let rejectOld!: (reason: unknown) => void;
+  const fetch = vi.fn().mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject; }))
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ ...answer, requestId: "new", answer: "New recorded result" }) });
+  vi.stubGlobal("fetch", fetch); render(<AskDgi />); const user = await open();
+  await user.type(screen.getByLabelText("Your question"), "Income"); await user.click(screen.getByRole("button", { name: "Ask" }));
+  await user.click(screen.getByRole("button", { name: "Close analyst" })); await open(); await user.click(screen.getByRole("button", { name: "Ask" }));
+  expect(await screen.findByRole("region", { name: "DGI answer" })).toHaveTextContent("New recorded result");
+  await act(async () => rejectOld(new Error("late private provider failure")));
+  expect(screen.getByRole("region", { name: "DGI answer" })).toHaveTextContent("New recorded result"); expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
+});

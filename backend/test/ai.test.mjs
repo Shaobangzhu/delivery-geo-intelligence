@@ -6,6 +6,7 @@ import { once } from "node:events";
 import { MongoClient, ObjectId } from "mongodb";
 import { createToolRegistry, toolDefinitions } from "../dist/ai/tools.js";
 import { createAnalyst, askSchema } from "../dist/ai/agent.js";
+import { requiresComparisonBoundary } from "../dist/ai/evidence.js";
 import { createResponsesClient } from "../dist/ai/provider.js";
 import { createApp } from "../dist/app.js";
 import { calculateDeliveryEfficiency, aggregateSessionEfficiency, calculateSessionEfficiency } from "../dist/efficiency.js";
@@ -38,10 +39,14 @@ function registry() {
   return { ...createToolRegistry({ collection() { throw new Error("No direct query expressions allowed"); } }, async (read) => { coordinated++; return read(); }, domain, now), calls, data, coordinated: () => coordinated };
 }
 const call = (name, input = defaultArgs(name), id = name) => ({ type: "function_call", name, arguments: JSON.stringify(input), call_id: id, id });
-const response = (output = [], text = "") => ({ output, output_text: text, status: "completed", usage: { input_tokens: 100, output_tokens: 20 } });
-function final(input, select = (evidence) => evidence.filter((fact) => /payout|status|confirmed|structurally/i.test(fact.label)).slice(0, 4), explanation = "Recorded amounts are observations; unavailable profit requires complete costs and coverage.") {
-  const evidence = input.filter((item) => item.type === "function_call_output").flatMap((item) => JSON.parse(item.output).evidence);
-  return response([], JSON.stringify({ explanation, factIds: select(evidence).map((fact) => fact.id) }));
+const response = (output = [], text = "") => ({ output, output_text: text, status: "completed", usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120,
+  input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } } });
+function final(input, select = (evidence) => evidence.filter((fact) => /Known payout|Estimated pre-tax|Actual received adjustment/i.test(fact.label)).slice(0, 4), explanation = "Recorded amounts are observations; unavailable profit requires complete costs and coverage.") {
+  const evidence = input.filter((item) => item.type === "function_call_output").flatMap((item) => {
+    const payload = JSON.parse(item.output);
+    return payload.evidence.map((fact) => ({ ...fact, source: payload.sources.find((row) => row.id === fact.sourceId).source }));
+  });
+  return response([], JSON.stringify({ explanation, factIds: select(evidence).map((fact) => fact.id), comparison: requiresComparisonBoundary(select(evidence)) ? "limited" : "none" }));
 }
 
 test("AI request and strict tool schemas reject invalid questions, names, fields and dates before reads", async () => {
@@ -101,7 +106,7 @@ test("provider-only, invented-number and forged-evidence answers never succeed",
   for (const text of [{ explanation: "You earned 999 dollars.", factIds: ["e1"] }, { explanation: "You earned nine hundred dollars.", factIds: ["e1"] },
     { explanation: "你的收入是九百美元。", factIds: ["e1"] }, { explanation: "Recorded results.", factIds: ["forged"] }]) {
     let step = 0;
-    await assert.rejects(() => createAnalyst({ create: async () => ++step === 1 ? response([call("get_period_summary")]) : response([], JSON.stringify(text)) }, "mock")("Income?", registry(), "id"), { code: "ungrounded_answer" });
+    await assert.rejects(() => createAnalyst({ create: async () => ++step === 1 ? response([call("get_period_summary")]) : response([], JSON.stringify({ ...text, comparison: "none" })) }, "mock")("Income?", registry(), "id"), { code: "ungrounded_answer" });
   }
 });
 test("unknown/invalid tools, failures, SDK errors and truncated responses stay controlled", async () => {
@@ -167,4 +172,63 @@ test("AI endpoint uses isolated MongoDB analytics, preserves every collection an
     if (server) await new Promise((resolve) => server.close(resolve));
     try { if (connected) await db.dropDatabase(); } finally { await client.close(); }
   }
+});
+
+test("same-tool executions retain separate scopes and evidence from another request is rejected", async () => {
+  const tools = registry();
+  const original = tools.execute;
+  tools.execute = async (name, args, signal) => {
+    const data = await original(name, args, signal), range = resolveDashboardFilters({ ...args, category: "all" }, now);
+    return { ...data, scope: { period: range.period, category: range.category, range: { startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone } } };
+  };
+  let step = 0, stale;
+  const client = { async create(input) {
+    if (++step === 1) return response([call("get_period_summary", defaultArgs("get_period_summary"), "month"), call("get_period_summary", { ...defaultArgs("get_period_summary"), period: "week" }, "week")]);
+    const outputs = input.input.filter((item) => item.type === "function_call_output").map((item) => JSON.parse(item.output));
+    const selected = outputs.map((payload) => payload.evidence.find((fact) => fact.label.includes("Total earnings")));
+    stale = selected[0].id;
+    return response([], JSON.stringify({ explanation: "The later cohort improved by ninety dollars.", factIds: selected.map((fact) => fact.id), comparison: "limited" }));
+  } };
+  const answer = await createAnalyst(client, "mock")("Compare periods", tools, "request-a");
+  assert.match(answer.answer, /2026-03-01–2026-03-31/); assert.match(answer.answer, /week/); assert.doesNotMatch(answer.answer, /ninety|improved by/);
+  assert.match(answer.answer, /get_period_summary \[t1\]/); assert.match(answer.answer, /get_period_summary \[t2\]/);
+  step = 0;
+  await assert.rejects(() => createAnalyst({ create: async () => ++step === 1 ? response([call("get_period_summary")])
+    : response([], JSON.stringify({ explanation: "Recorded result.", factIds: [stale], comparison: "none" })) }, "mock")("Income", registry(), "request-b"), { code: "ungrounded_answer" });
+});
+
+test("five projected settlement results fit the existing per-tool budget and carry units/counts", async () => {
+  const tools = registry(); const original = tools.execute;
+  tools.execute = async (name, args, signal) => {
+    const data = await original(name, args, signal);
+    if (name === "get_settlement_efficiency") data.settlements = Array.from({ length: 5 }, (_, index) => ({ ...data.settlements[0], paymentDate: `2026-03-${String(20 + index).padStart(2, "0")}` }));
+    return data;
+  };
+  let step = 0; const metadata = [];
+  const answer = await createAnalyst({ create: async (input) => ++step === 1 ? response([call("get_settlement_efficiency", { settlementId: null, limit: 5 })])
+    : final(input.input, (facts) => facts.filter((fact) => /Actual received adjustment/.test(fact.label))) }, "mock", (row) => metadata.push(row))("Explain settlements", tools, "eval");
+  assert.match(answer.answer, /20 USD/); assert.match(answer.answer, /known payouts: 1/); assert.match(answer.answer, /confirmed: false/);
+  assert.ok(metadata[0].toolPayloadBytes < 48_000); assert.equal(metadata[0].providerCallCount, 2);
+});
+
+test("HTTP client cancellation reaches the provider boundary and prevents further requests", { timeout: 5000 }, async () => {
+  let resolveStarted, resolveDiagnosed, providerSignal, calls = 0;
+  const started = new Promise((resolve) => { resolveStarted = resolve; });
+  const diagnosed = new Promise((resolve) => { resolveDiagnosed = resolve; });
+  const client = { create: async (_input, signal) => {
+    calls++; providerSignal = signal; resolveStarted();
+    return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("mock cancelled")), { once: true }));
+  } };
+  const fail = async () => { throw new Error("No external geocoding"); };
+  const server = createApp({ collection() { return { find() { throw new Error("No DB read expected"); } }; } }, fail, fail, createAnalyst(client, "mock", resolveDiagnosed)).listen(0, "127.0.0.1");
+  try {
+    await once(server, "listening");
+    const controller = new AbortController();
+    const request = fetch(`http://127.0.0.1:${server.address().port}/api/ai/ask`, { method: "POST", signal: controller.signal,
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: "Income" }) }).catch((error) => error);
+    await started; controller.abort(); await request;
+    const metadata = await diagnosed;
+    assert.equal(providerSignal.aborted, true); assert.equal(calls, 1);
+    assert.equal(metadata.outcome, "timeout_or_cancelled"); assert.equal(metadata.toolCallCount, 0);
+  } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
 });
