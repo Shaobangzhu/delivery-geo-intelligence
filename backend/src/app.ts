@@ -11,6 +11,7 @@ import {
 } from "./model.js";
 
 import { reconcileSettlement } from "./settlement.js";
+import { registerSessionRoutes } from "./sessionRoutes.js";
 
 function invalid(response: Response, error: ZodError) {
   return response.status(400).json({
@@ -53,6 +54,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     finally { release(); }
   }
   app.use(express.json({ limit: "32kb" }));
+  registerSessionRoutes(app, db, withReferenceWrite, invalid);
 
   app.get("/api/health", async (_request, response) => {
     try {
@@ -325,7 +327,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   app.delete("/api/deliveries/:id", async (request, response) => {
     const parsed = objectIdSchema.safeParse(request.params.id);
     if (!parsed.success) return invalid(response, parsed.error);
-    const result = await deliveries.deleteOne({ _id: new ObjectId(parsed.data) });
+    const result = await withReferenceWrite(() => deliveries.deleteOne({ _id: new ObjectId(parsed.data) }));
     if (!result.deletedCount) return response.status(404).json({ error: "Delivery not found" });
     return response.status(204).end();
   });

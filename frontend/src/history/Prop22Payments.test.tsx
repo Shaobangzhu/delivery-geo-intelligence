@@ -10,6 +10,8 @@ function install() {
     const method = init?.method ?? "GET";
     let data: unknown;
     if (url === "/api/merchants") data = { data: [] };
+    else if (url === "/api/delivery-sessions") data = { data: [] };
+    else if (url === "/api/vehicle-economics") data = { data: null, historicalMileage: [] };
     else if (url.startsWith("/api/deliveries")) data = { data: [], pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 } };
     else if (method === "GET") data = url === "/api/earnings-adjustments" ? { data: rows } : { data: rows[0], reconciliation: { status: "insufficient_data", expectedAdjustment: null, difference: null } };
     else if (method === "DELETE") { rows = []; return { ok: true, status: 204 } as Response; }
@@ -72,7 +74,7 @@ it("captures, displays, edits, and confirms deletion of independent Prop 22 paym
 it("keeps a payment modal pending, prevents duplicate saves, and shows a safe failure", async () => {
   const user = userEvent.setup(); let finish!: (value: Response) => void;
   const pending = new Promise<Response>((resolve) => { finish = resolve; });
-  const mock = vi.fn(async (_url: string, init?: RequestInit) => init?.method === "POST" ? pending : ({ ok: true, status: 200, json: async () => ({ data: [], pagination: { page: 1, total: 0, totalPages: 0 } }) } as Response));
+  const mock = vi.fn(async (url: string, init?: RequestInit) => init?.method === "POST" ? pending : ({ ok: true, status: 200, json: async () => url === "/api/vehicle-economics" ? { data: null, historicalMileage: [] } : ({ data: [], pagination: { page: 1, total: 0, totalPages: 0 } }) } as Response));
   vi.stubGlobal("fetch", mock); render(<History />);
   await user.click(screen.getByRole("button", { name: /Add Prop 22 Payment/ }));
   fireEvent.change(screen.getByLabelText("Payment Date *"), { target: { value: "2026-10-08" } });

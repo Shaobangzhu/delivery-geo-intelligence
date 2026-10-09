@@ -13,6 +13,7 @@ export interface Delivery {
   id: string;
   merchantId: string;
   pickedUpAt: string;
+  sessionId?: string;
   payout?: number;
   distanceMiles?: number;
   deliveryDurationSeconds?: number;

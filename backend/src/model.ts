@@ -82,6 +82,7 @@ export interface MerchantDocument {
 export interface DeliveryDocument {
   _id: ObjectId;
   merchantId: ObjectId;
+  sessionId?: ObjectId;
   pickedUpAt: Date;
   payout?: number;
   distanceMiles?: number;
@@ -106,6 +107,7 @@ export function deliveryResponse(delivery: DeliveryDocument) {
   return {
     id: delivery._id.toHexString(),
     merchantId: delivery.merchantId.toHexString(),
+    ...(delivery.sessionId === undefined ? {} : { sessionId: delivery.sessionId.toHexString() }),
     pickedUpAt: delivery.pickedUpAt.toISOString(),
     ...(delivery.payout === undefined ? {} : { payout: delivery.payout }),
     ...(delivery.distanceMiles === undefined ? {} : { distanceMiles: delivery.distanceMiles }),

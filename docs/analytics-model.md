@@ -51,3 +51,34 @@ A mismatch is a request for statement review, not proof of underpayment. Offsets
 Cash-basis Total Earnings still uses **only actual received `amount` by paymentDate**, plus known delivery payouts for All. The guarantee, expected adjustment, coverage dates, engaged time/miles, and difference do not affect income. Category-specific summaries, merchant earnings/rankings, charts, delivery counts, and all GIS datasets remain unchanged. No biweekly payment is spread across deliveries or merchants.
 
 **DEFERRED:** A secondary rate-based estimate requires sourced applicable wage jurisdictions and compensation rates. One Eastvale rate is not assumed to cover a multi-city statement. Prop 22 mileage compensation, IRS deductions, and actual vehicle costs are distinct and none are calculated in A.0. Coverage allocation, per-delivery optimization, and efficiency KPIs remain deferred.
+
+## A.1 personal session economics
+
+This model describes the user's 2022 Tesla Model Y Long Range and confirmed operating choices; it is not a generic EV or fleet-cost model. A complete operating Session includes driving/time outside active deliveries. Session strategy labels describe Wide-Area Marathon (2024), Home-Based Multi-Order (2025), and Eastvale Local-Only (2026), plus Other. They do not establish optimality and are never assigned automatically by year.
+
+Four independent mileage concepts coexist: Delivery distance, official Prop 22 engaged miles, independently recorded total Session driving, and manually identified IRS-eligible business miles. None substitutes for another. Official engaged seconds also remain distinct from Delivery duration and elapsed Session time. No mileage or time observation is inferred from linked Deliveries.
+
+The initial incremental energy **cash** rate is $0.00/mi, based on the user's reported near-zero net household electricity bill with 8.8 kW solar/SCE NEM 2.0 and home-only charging during Uber Eats work. Opportunity cost is outside this version. The observed four-tire Pirelli Scorpion replacement cost is $1,600; it is not evidence of lifespan or a guaranteed future replacement price. Paid repairs to date are $0, the recall was free, and America's Tire rotations/alignment have no cash cost. This does not imply zero future repair risk. DIY washing and cabin filters are excluded; insurance/other ownership costs are not modeled.
+
+```text
+tireRate = replacementSetCost / configuredExpectedLife
+modeledCostPerMile = energyCashRate + tireRate + marginalDepreciationRate
+sessionComponentCost = recordedTotalDrivenMiles × configuredComponentRate
+```
+
+Only known rates and independently recorded miles are multiplied. Unknown tire life or depreciation remains null; an explicit zero remains valid. The known + estimated subtotal sums available raw components, then rounds once to cents. Component display amounts are rounded separately and can differ from the rounded subtotal by a cent. Full economic cost is returned only when all three components are computable. Unknown Session miles makes all amounts unavailable, even if the energy rate is known zero. Nonfinite/out-of-range monetary outputs become unavailable. Tire wear is amortized estimation and marginal depreciation is an economic assumption, not a recorded cash expense or a tax depreciation calculation.
+
+All previews use the **current** vehicle profile, without historical snapshots. Changing tire assumptions can revise historical Session previews without changing Session observations. Complete means complete within the three modeled categories; excluded costs remain excluded. A.1 does not deduct these amounts from Dashboard earnings or calculate net earnings, hourly rates, or merchant profitability.
+
+## Annual mileage and Standard Mileage boundaries
+
+Confirmed history attributes all reported 2024–2025 business mileage to Uber Eats: 5,737 / 13,350 = approximately 42.97%, and 2,310 / 11,549 = approximately 20.00%. Realtor/other purposes are explicitly zero. Future unknown purpose categories prevent a claimed complete business total or percentage. Known components are still reported separately. Annual observations are not aggregated from Session miles, avoiding duplicate or inferred eligibility.
+
+The stored tax method is `standard_mileage`. Deduction preview uses entered reported business miles only for sourced supported years:
+
+- **2024:** $0.67/mi, effective January 1–December 31, per [IRS Notice 2024-08](https://www.irs.gov/irb/2024-02_IRB).
+- **2025:** $0.70/mi, effective January 1–December 31, per [IRS Notice 2025-05](https://www.irs.gov/pub/irs-drop/n-25-05.pdf).
+
+These yield $3,843.79 and $1,617.00 on the confirmed historical totals. Rates are selected by exact tax year and never carried forward. 2026/later and incomplete purpose totals display unavailable. The preview assumes the manually entered annual business classification; it does not verify eligibility, prepare returns, or estimate tax savings. No greater-than-50% threshold is imposed on ordinary Standard Mileage. Standard Mileage accounts for ordinary vehicle costs, including a tax depreciation component; the application calculates no additional actual-expense or tax depreciation deductions. [IRS business use of car guidance](https://www.irs.gov/taxtopics/tc510) explains the distinction.
+
+A deduction is not cash received, Prop 22 income, actual repair/energy expense, or an addition to profit. It does not determine marginal economic depreciation or a Prop 22 mileage rate. Starting/returning home is not automatically classified as deductible. No Session-level deduction or Realtor trip tracking is performed. **A.2 — DEFERRED:** net earnings, earnings/hour, earnings/mile, efficiency comparisons, merchant profitability, per-delivery allocation, and optimization. AI and vehicle/tax external-service integrations remain future work.

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "data:init-a1": "tsx src/initializeVehicleEconomics.ts",
     "start": "node dist/index.js",
     "test": "npm run build && node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit",

@@ -9,6 +9,8 @@ export async function ensureIndexes(db: Db): Promise<void> {
 
   await Promise.all([
     db.collection("earningsAdjustments").createIndex({ paymentDate: -1 }),
+    db.collection("deliverySessions").createIndex({ startedAt: -1, _id: -1 }),
+    deliveries.createIndex({ sessionId: 1 }, { sparse: true }),
     merchants.createIndex({ location: "2dsphere" }),
     deliveries.createIndex({ destinationLocation: "2dsphere" }),
     deliveries.createIndex({ pickedUpAt: -1, _id: -1 }),

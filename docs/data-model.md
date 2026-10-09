@@ -1,6 +1,6 @@
 # Data model and API
 
-The application uses the native MongoDB Node.js driver. The application database is `delivery_geo_intelligence`. IDs in HTTP responses are hexadecimal MongoDB ObjectId strings. The API validates request bodies and query parameters with Zod.
+The application uses the native MongoDB Node.js driver. The application database is `delivery_geo_intelligence`. Merchant, Delivery, Payment, and Session IDs in HTTP responses are hexadecimal MongoDB ObjectId strings. The vehicle profile is a singleton and annual records are keyed by numeric tax year. The API validates request bodies and query parameters with Zod.
 
 ## Collections
 
@@ -8,7 +8,10 @@ The application uses the native MongoDB Node.js driver. The application database
 | --- | --- | --- |
 | `merchants` | `_id`, `name`, `category`, `publicAddress`, `location`, `city` | `location` 2dsphere |
 | `earningsAdjustments` | `_id`, `type`, `paymentDate`, `amount`, optional `coverageStartDate`, `coverageEndDate`, `notes`, `settlementDetails` | `paymentDate` descending |
-| `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `payout`, `distanceMiles`, `deliveryDurationSeconds`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt` |
+| `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `sessionId`, `payout`, `distanceMiles`, `deliveryDurationSeconds`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt`; sparse `sessionId` |
+| `deliverySessions` | `_id`, `startedAt`, `endedAt`, optional `strategy`, `totalDrivenMiles`, `taxEligibleBusinessMiles`, `notes` | `startedAt` descending plus `_id` |
+| `vehicleEconomics` | `_id: "primary"`, vehicle name, energy/tire costs, optional tire life and marginal depreciation | built-in unique `_id` only |
+| `vehicleTaxYears` | `_id: taxYear`, `taxYear`, annual vehicle miles and miles by purpose, `taxMethod` | built-in unique `_id` only |
 
 A Merchant is one **physical pickup location**, not a brand. Two branches of one brand use separate IDs, even when they share a name. `category` is `restaurant`, `grocery`, `retail`, or `other`. `publicAddress` is a verified public business address; `location` is its exact stored-geocode GeoJSON Point in `[longitude, latitude]` order. New Merchant writes require an address and reject client-supplied coordinates. Earlier records can lack `publicAddress`; they retain their existing location until a verified address correction is supplied. No merchant or delivery records are seeded.
 
@@ -58,6 +61,61 @@ List responses contain `data` and `pagination` with `page`, `pageSize`, `total`,
 ## Verification data
 
 Integration tests use a uniquely named temporary database on the DGI MongoDB service and delete it afterward. Test merchants use synthetic public-address tokens and coordinates returned by a mock geocoder. The tests do not contain customer addresses, real destination coordinates, or fabricated real delivery history.
+
+## A.1 Session and vehicle data
+
+```ts
+interface DeliverySessionDocument {
+  _id: ObjectId;
+  startedAt: Date;
+  endedAt: Date;
+  strategy?: "wide_area_marathon" | "home_based_multi_order" | "eastvale_local_only" | "other";
+  totalDrivenMiles?: number;
+  taxEligibleBusinessMiles?: number;
+  notes?: string;
+}
+interface VehicleEconomicsProfile {
+  _id: "primary";
+  vehicleName: "2022 Tesla Model Y Long Range";
+  energyCashCostPerMile: number;
+  tireReplacementSetCost: number;
+  expectedTireSetLifeMiles?: number;
+  marginalDepreciationCostPerMile?: number;
+}
+interface VehicleTaxYearRecord {
+  _id: number; // unique tax year, no duplicate year records
+  taxYear: number;
+  totalVehicleMiles: number;
+  uberEatsBusinessMiles: number;
+  realtorBusinessMiles?: number;
+  otherBusinessMiles?: number;
+  taxMethod: "standard_mileage";
+}
+```
+
+Session input requires offset-aware ISO timestamps and `endedAt > startedAt`; UTC instants are stored as BSON Dates. `sessionDurationSeconds` is returned as `(end-start)/1000`, never persisted. Miles are optional finite nonnegative observations, with explicit zero valid. If both are provided, IRS eligible business miles cannot exceed total session miles. Missing miles remain absent. Strategy is optional per session; no year-based assignment or automatic reconstruction from Delivery timestamps occurs. Notes are trimmed and limited to 2000 characters.
+
+`DeliveryDocument.sessionId?: ObjectId` is the sole persisted association and has a sparse query index. Existing unassociated deliveries remain valid. Session requests may supply distinct `deliveryIds` (maximum 500) to explicitly replace membership. Omission preserves links; `[]` unlinks all. Responses derive `deliveryIds` and safe `linkedDeliveries` summaries (ID, merchant ID, pickup instant) from Delivery references; they do not expose destination coordinates. A normal time/mileage edit preserves links even outside the edited interval. Deletion unlinks and retains Deliveries; deleted Deliveries cannot leave stale reverse arrays. Direct client assignment through Delivery POST/PATCH remains unsupported.
+
+The vehicle profile's initial values are name above, energy cash cost `0`, and observed replacement-set cost `1600`; tire life and marginal depreciation are absent. Cost fields must be finite/nonnegative; tire life must be positive and produce a finite wear rate. Settings PATCH omission preserves values; `null` clears optional life/depreciation. Costs and coverage history are not linked to Prop 22, merchants, or customer destinations.
+
+Annual miles must be finite/nonnegative; the sum of **known** purpose components cannot exceed total vehicle miles. There is no independently maintained business total: API sums components. It returns `knownBusinessMiles` for partial observations, and `reportedBusinessMiles`/`businessUsePercentage` only when Realtor and other purposes are also known. Zero total vehicle miles makes the percentage unavailable. Missing future Realtor/other miles are unknown, not zero. Annual PUT replaces the year's observations; omitted optional categories clear them. Years 2000–2100 are accepted.
+
+Explicit idempotent initialization (`npm run data:init-a1` or History's initialize button) uses `$setOnInsert`: 2024 has 13,350 total/5,737 Uber Eats miles; 2025 has 11,549 total/2,310 Uber Eats miles. Both use Standard Mileage with Realtor/other miles explicitly zero. It preserves user edits and creates no Delivery/Session records. No migration or startup overwrite occurs.
+
+| Route | Behavior |
+| --- | --- |
+| `GET /api/delivery-sessions` | Newest-first Session DTOs with derived links, duration, and current-profile vehicle-cost preview |
+| `GET /api/delivery-sessions/:id` | One Session DTO; 404 if absent |
+| `POST /api/delivery-sessions` | Create session, optionally link explicitly selected Deliveries; 201 |
+| `PATCH /api/delivery-sessions/:id` | Validate merged observations; omitted fields/links preserved; `null` clears optional fields |
+| `DELETE /api/delivery-sessions/:id` | Unlink all Deliveries and remove Session; 204 |
+| `GET /api/vehicle-economics` | `{ data: profileOrNull, historicalMileage: derivedAnnualDtos }` |
+| `POST /api/vehicle-economics/initialize` | Insert only missing confirmed profile/history; idempotent |
+| `PATCH /api/vehicle-economics` | Update initialized singleton; 404 if not initialized |
+| `PUT /api/vehicle-mileage/:taxYear` | Validate/replace year's annual observations; 201 create or 200 edit |
+
+Malformed IDs/inputs return 400; unavailable selected Deliveries return 422; an association owned by another Session returns 409. Cost DTOs expose nullable `rates`, component `amounts`, `knownAndEstimatedCost`, `fullEconomicCost`, `missingComponents`, and `completeness` (`complete`, `partial`, `unavailable`). Computed estimates, percentages, and deductions are not stored.
 
 ## Optional official settlement observations (A.0)
 

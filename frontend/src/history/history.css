@@ -118,3 +118,24 @@
 .settlement-reconciliation dl { margin: 0; }
 .settlement-reconciliation dl div { display: flex; justify-content: space-between; gap: 12px; margin: 6px 0; }
 .settlement-reconciliation dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.session-section { margin-top: 24px; }
+.session-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.session-section h2 { margin: 0; font-size: 18px; }
+.session-table { min-width: 900px; }
+.session-table summary, .vehicle-panel summary { cursor: pointer; color: #294775; }
+.session-table summary:focus-visible, .vehicle-panel summary:focus-visible { outline: 2px solid #0875ff; outline-offset: 3px; }
+.session-cost { min-width: 250px; max-width: 380px; margin-top: 12px; font-size: 12px; }
+.session-cost dl, .vehicle-facts { margin: 0; }
+.session-cost dl div, .vehicle-facts div { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.session-cost dd, .vehicle-facts dd { margin: 0; }
+.vehicle-panel { margin-top: 16px; padding: 16px; border: 1px solid #dce8f8; border-radius: 8px; background: white; }
+.vehicle-panel > summary { font-weight: 700; font-size: 14px; }
+.vehicle-facts { margin: 16px 0; max-width: 520px; font-size: 13px; }
+.initialize-economics { margin: 12px 0; }
+.annual-mileage-table { min-width: 710px; margin-bottom: 12px; }
+.session-link { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; color: #294775; font-size: 12px; }
+.session-link input { flex-shrink: 0; }
+.session-candidate-pages { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0; font-size: 11px; }
+.session-candidate-pages .button { padding: 6px; font-size: 11px; }
+@media (max-width: 600px) { .session-section-heading { align-items: flex-start; flex-wrap: wrap; } }

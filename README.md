@@ -7,7 +7,7 @@ Delivery Geo Intelligence is a local Web GIS proof of concept for exploring **pe
 React, TypeScript, Vite, and React Router provide three primary pages:
 
 - **Dashboard** (/dashboard): period/category filters, summary cards, charts, merchant rankings, and an ArcGIS map.
-- **History** (/history): paginated Delivery CRUD, search/filter/sort, and a centered Add Delivery modal. The address field is cleared after save.
+- **History** (/history): paginated Delivery CRUD, Prop 22 payments, Uber Eats sessions, and vehicle/annual-mileage settings in centered modals. Delivery addresses are cleared after save.
 - **Merchants** (/merchants): management of verified public physical pickup locations. Two stores of the same brand are separate Merchant records.
 
 Express and Zod validate requests. The native MongoDB Node.js driver stores Merchants and Deliveries in the DGI MongoDB container. React calls Express; Express calls MongoDB and, for address geocoding, ArcGIS. Frontend and backend run on the host; Docker Compose runs MongoDB only. / redirects to /dashboard; GET /api/health checks the API.
@@ -34,6 +34,20 @@ After saving, reopen the payment to see backend-derived reconciliation: `max(0, 
 
 Dashboard **All** Total Earnings combines known delivery payouts with Prop 22 amounts received within the resolved Los Angeles calendar range. Category-specific and merchant earnings remain delivery payouts only: no Prop 22 allocation is attempted. Coverage dates do not affect current totals. Delivery payout is the delivery-level amount; entering an adjustment never changes or duplicates Delivery payouts. **DEFERRED:** coverage-period efficiency, earnings/hour, earnings/mile, and merchant/category allocation.
 
+## Uber Eats sessions and personal vehicle economics (A.1)
+
+History's **Uber Eats Sessions** section records complete operating periods with independent start/end instants, optional total driven and IRS-eligible miles, notes, and a strategy. The user-supplied strategies describe 2024 Wide-Area Marathon, 2025 Home-Based Multi-Order, and 2026 Eastvale Local-Only (local orders and returns home), plus Other. They are descriptive choices, not proven optimal strategies, and are selected per session rather than assigned from the year. Session duration is derived, including midnight/DST crossings; times display in America/Los_Angeles. A repeated fall clock hour offers a first/second occurrence choice; skipped spring times are rejected.
+
+**Link Deliveries (Optional)** lists paginated candidates in the entered interval; only checked deliveries become linked. A Delivery has at most one `sessionId`. No timing overlap creates a permanent link. Session deletion unlinks and retains deliveries; Delivery deletion naturally removes it from derived session membership. Existing delivery fields and unassociated records remain valid.
+
+The collapsed **Tesla Model Y — Vehicle Economics** panel stores one profile and editable annual mileage. Run `npm run data:init-a1`, or use **Initialize Missing Confirmed Records** in History, to insert missing user-confirmed records. Initialization is idempotent, preserves edits, and never runs automatically on startup.
+
+The initial 2022 Tesla Model Y Long Range profile uses **$0.00/mi incremental electricity cash cost**, explicitly based on the user's 8.8 kW solar/SCE NEM 2.0, approximately zero net annual household electricity bill, and home-only charging while delivering. This is a personal cash-cost assumption, not an estimate of electricity opportunity cost. One observed Pirelli Scorpion four-tire replacement cost **$1,600**. Expected lifespan and marginal mileage depreciation both start unknown. Paid repairs to date are zero (the official recall was free); America's Tire rotations/alignment have no out-of-pocket cost. Washing and cabin filters are excluded. Historical zero expenses do not guarantee future zero repair risk.
+
+Tire wear is estimated as replacement-set cost / entered expected life. Session preview multiplies independently recorded total miles by configured energy, tire wear, and marginal depreciation rates. It labels known/estimated subtotals and incomplete full economic costs rather than turning unknown assumptions into zero. Estimates use the **current profile**, including for past sessions; no historical profile snapshots exist. Complete means all three modeled components, not all vehicle ownership costs. Neither costs nor tax deductions change Dashboard income.
+
+Confirmed annual history is **2024: 13,350 total miles / 5,737 Uber Eats miles (42.97%)**, and **2025: 11,549 / 2,310 (20.00%)**. Realtor/other business miles are explicitly zero in these years. Future missing purpose categories remain unknown. Annual records are independent of session totals and preserve one derived business-mile sum. Historical Standard Mileage deduction previews use sourced 2024/2025 rates; unsupported years or incomplete purpose totals show unavailable. These previews do not determine eligibility or tax savings. [Analytics model](docs/analytics-model.md) links the IRS sources and explains the boundaries.
+
 ## Geospatial data and privacy
 
 A Merchant represents **one public physical pickup location**. Its verified public business address and exact stored-geocoded GeoJSON Point may be saved and displayed. A Delivery references a Merchant ID and may have payout, distance, notes, and a generalized destination Point. History displays only a safe destination state such as “Location Ready.”
@@ -59,7 +73,7 @@ Requires Node.js 22.12 or newer, npm, Docker Desktop, and Docker Compose.
 5. Run npm run db:up and wait for docker compose ps to report dgi-mongodb healthy.
 6. In separate terminals run npm run dev:backend and npm run dev:frontend, then open http://127.0.0.1:5173.
 
-Add verified public business locations in Merchants, then select them when recording Deliveries in History. No production seed dataset is committed. The backend connects to MongoDB and creates spatial and History query indexes at startup.
+Add verified public business locations in Merchants, then select them when recording Deliveries in History. No Merchant/Delivery history is seeded. A.1's explicit initialization inserts only the user-confirmed vehicle assumptions and annual mileage above. The backend creates spatial and History query indexes at startup.
 
 | Command | Purpose |
 | --- | --- |
@@ -69,6 +83,7 @@ Add verified public business locations in Merchants, then select them when recor
 | npm run dev:frontend / npm run dev:backend | Start Vite / Express |
 | npm run typecheck / npm run build | Verify types / build both workspaces |
 | npm test | Run backend integration and frontend interaction tests |
+| npm run data:init-a1 | Insert missing confirmed vehicle/2024–2025 mileage records without overwriting edits |
 
 Compose uses official mongo:7.0, the dgi-mongodb container, a dedicated persistent dgi_mongodb_data volume, and a healthcheck. Port 27017 is published on 127.0.0.1 only. This stack is independent of other projects' databases.
 
@@ -83,6 +98,7 @@ See [architecture](docs/architecture.md), [data model](docs/data-model.md), [geo
 
 ## Deferred operations-analysis roadmap
 
-- **A.1 — DEFERRED:** AI operations analyst, OpenAI/tool calling, and AI-assisted explanations or optimization. A.0 provides deterministic reconciliation only.
-- **A.2 — DEFERRED:** Vehicle economics, tax/IRS-mileage analysis, sessions, earnings/hour or earnings/mile, and per-delivery/merchant/category allocation.
+- **A.1 — IMPLEMENTED:** Operating sessions, explicit Delivery links, personal vehicle assumptions, cost completeness, and annual business-mileage history.
+- **A.2 — DEFERRED:** Efficiency/net-earnings analytics, earnings/hour or earnings/mile, merchant profitability, and per-delivery/merchant/category allocation.
+- **FUTURE — DEFERRED:** AI operations analyst, OpenAI/tool calling, AI explanations, and autonomous optimization.
 - **DEFERRED:** Rate-based statutory verification and historical legal rates. A multi-city settlement cannot use one Eastvale wage without evidence of applicable jurisdictions and rates. No such assumptions are made here.

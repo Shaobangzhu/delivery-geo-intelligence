@@ -4,6 +4,7 @@ import { ConfirmDelete } from "../history/ConfirmDelete";
 import { DeliveryModal } from "../history/DeliveryModal";
 import { formatDuration } from "../history/duration";
 import { Prop22Payments } from "../history/Prop22Payments";
+import { UberSessions } from "../history/UberSessions";
 import "../history/history.css";
 
 const PAGE_SIZE = 10;
@@ -87,7 +88,7 @@ export function History() {
   function refreshAfterDelete() {
     setDeleteTarget(null);
     if (result.data.length === 1 && page > 1) setPage(page - 1);
-    else setReload((value) => value + 1);
+    setReload((value) => value + 1);
   }
 
   return (
@@ -171,6 +172,7 @@ export function History() {
       </div>
 
       <Prop22Payments adding={addingPayment} onCloseAdd={() => setAddingPayment(false)} />
+      <UberSessions merchants={merchants} deliveryRevision={reload} />
       {editor !== undefined && <DeliveryModal key={editor?.id ?? "new"} delivery={editor} merchants={merchants} onClose={() => setEditor(undefined)} onSaved={refreshAfterSave} />}
       {deleteTarget && <ConfirmDelete delivery={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={refreshAfterDelete} />}
     </section>
