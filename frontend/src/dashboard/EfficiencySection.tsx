@@ -18,7 +18,8 @@ const qualityLabels: Record<string, string> = {
   deliveriesMissingDistance: "Deliveries missing distance", deliveriesWithoutSessionAssociation: "Deliveries without session association",
   sessionsMissingTotalMiles: "Sessions missing total miles", sessionsWithoutLinkedDeliveries: "Sessions without linked deliveries",
   sessionsWithIncompleteVehicleCost: "Sessions with incomplete vehicle cost", sessionsWithMissingLinkedPayout: "Sessions with missing linked payout",
-  sessionsExcludedBoundaryCrossing: "Sessions excluded at period boundaries", unclassifiedSessions: "Unclassified sessions"
+  sessionsExcludedBoundaryCrossing: "Sessions excluded at period boundaries", unclassifiedSessions: "Unclassified sessions",
+  sessionsWithIncompleteAssociations: "Sessions requiring association review"
 };
 
 export function EfficiencySection({ period, category }: { period: Period; category: Category }) {

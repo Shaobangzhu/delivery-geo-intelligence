@@ -37,6 +37,26 @@ beforeEach(() => {
   vi.mocked(api.deleteSession).mockImplementation(async () => { rows = []; });
 });
 afterEach(() => vi.resetAllMocks());
+
+it("clears stale vehicle assumptions after a failed refresh", async () => {
+  const view = render(<UberSessions merchants={merchants} deliveryRevision={0} />);
+  await screen.findByText("No Uber Eats sessions recorded.");
+  const user = userEvent.setup(); await user.click(screen.getByText("Tesla Model Y — Vehicle Economics"));
+  expect(screen.getByRole("button", { name: "Edit Vehicle Settings" })).toBeInTheDocument();
+  vi.mocked(api.getEconomics).mockRejectedValue(new Error("Synthetic load failure"));
+  view.rerender(<UberSessions merchants={merchants} deliveryRevision={1} />);
+  await screen.findByRole("alert");
+  expect(screen.queryByRole("button", { name: "Edit Vehicle Settings" })).not.toBeInTheDocument();
+  expect(screen.queryByText("$1,600.00")).not.toBeInTheDocument();
+});
+it("shows an unfinished association warning and resubmits reviewed links even when unchanged", async () => {
+  const user = userEvent.setup(), saved = vi.fn();
+  render(<SessionModal session={{ ...base, associationIntegrity: "pending", deliveryIds: ["delivery-a"], linkedDeliveries: [{ id: "delivery-a", merchantId: "merchant-a", pickedUpAt: base.startedAt }] }} merchants={merchants} onClose={vi.fn()} onSaved={saved} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("Review all delivery links");
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await waitFor(() => expect(saved).toHaveBeenCalled());
+  expect(vi.mocked(api.saveSession).mock.calls[0][0].deliveryIds).toEqual(["delivery-a"]);
+});
 function mount() { render(<UberSessions merchants={merchants} deliveryRevision={0} />); }
 
 it("creates an explicitly linked session across midnight/DST and validates independent business mileage", async () => {

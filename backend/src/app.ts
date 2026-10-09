@@ -59,7 +59,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   registerSessionRoutes(app, db, withReferenceWrite, invalid);
 
   app.get("/api/efficiency/settlements", async (_request, response) => {
-    try { return response.json(await getSettlementEfficiency(db)); }
+    try { return response.json(await withReferenceWrite(() => getSettlementEfficiency(db))); }
     catch (error) {
       if (error instanceof SettlementEfficiencyLimitError) return response.status(503).json({ error: "Settlement efficiency dataset exceeds local analysis limits" });
       throw error;
@@ -69,7 +69,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   app.get("/api/efficiency", async (request, response) => {
     const parsed = dashboardFilterSchema.safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
-    return response.json(await getEfficiencyAnalytics(db, parsed.data));
+    return response.json(await withReferenceWrite(() => getEfficiencyAnalytics(db, parsed.data)));
   });
 
   app.get("/api/health", async (_request, response) => {
@@ -84,13 +84,13 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   app.get("/api/dashboard", async (request, response) => {
     const parsed = dashboardFilterSchema.safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
-    return response.json(await getDashboardAnalytics(db, parsed.data));
+    return response.json(await withReferenceWrite(() => getDashboardAnalytics(db, parsed.data)));
   });
 
   app.get("/api/dashboard/destination-heatmap", async (request, response) => {
     const parsed = dashboardFilterSchema.safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
-    return response.json(await getDestinationHeatmap(db, parsed.data));
+    return response.json(await withReferenceWrite(() => getDestinationHeatmap(db, parsed.data)));
   });
 
   app.get("/api/earnings-adjustments", async (_request, response) => {
@@ -108,7 +108,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     const parsed = earningsAdjustmentInputSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response, parsed.error);
     const row = { _id: new ObjectId(), ...parsed.data };
-    await adjustments.insertOne(row);
+    await withReferenceWrite(() => adjustments.insertOne(row));
     return response.status(201).json({ data: earningsAdjustmentResponse(row), reconciliation: reconcileSettlement(row) });
   });
   app.patch("/api/earnings-adjustments/:id", async (request, response) => {
@@ -116,39 +116,41 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     if (!id.success) return invalid(response, id.error);
     const patch = earningsAdjustmentPatchSchema.safeParse(request.body);
     if (!patch.success) return invalid(response, patch.error);
-    const existing = await adjustments.findOne({ _id: new ObjectId(id.data) });
-    if (!existing) return response.status(404).json({ error: "Payment not found" });
-    const { _id, ...fields } = existing;
-    const merged: Record<string, unknown> = { ...fields, ...patch.data };
-    if (patch.data.settlementDetails && typeof patch.data.settlementDetails === "object") {
-      const details: Record<string, unknown> = { ...existing.settlementDetails, ...patch.data.settlementDetails };
-      for (const [key, value] of Object.entries(details)) if (value === null) delete details[key];
-      merged.settlementDetails = details;
-    }
-    for (const key of ["coverageStartDate", "coverageEndDate", "notes", "settlementDetails"]) if (merged[key] === null) delete merged[key];
-    const validated = earningsAdjustmentInputSchema.safeParse(merged);
-    if (!validated.success) return invalid(response, validated.error);
-    const set: Record<string, unknown> = {};
-    const unset: Record<string, ""> = {};
-    for (const [key, value] of Object.entries(patch.data)) {
-      if (key === "settlementDetails" && value !== null) {
-        for (const [field, entry] of Object.entries(value)) {
-          if (entry === null) unset[`settlementDetails.${field}`] = "";
-          else set[`settlementDetails.${field}`] = entry;
-        }
-      } else if (value === null) unset[key] = "";
-      else set[key] = value;
-    }
-    const updated = await adjustments.findOneAndUpdate({ _id }, {
-      ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {})
-    }, { returnDocument: "after" });
-    if (!updated) return response.status(404).json({ error: "Payment not found" });
-    return response.json({ data: earningsAdjustmentResponse(updated), reconciliation: reconcileSettlement(updated) });
+    return withReferenceWrite(async () => {
+      const existing = await adjustments.findOne({ _id: new ObjectId(id.data) });
+      if (!existing) return response.status(404).json({ error: "Payment not found" });
+      const { _id, ...fields } = existing;
+      const merged: Record<string, unknown> = { ...fields, ...patch.data };
+      if (patch.data.settlementDetails && typeof patch.data.settlementDetails === "object") {
+        const details: Record<string, unknown> = { ...existing.settlementDetails, ...patch.data.settlementDetails };
+        for (const [key, value] of Object.entries(details)) if (value === null) delete details[key];
+        merged.settlementDetails = details;
+      }
+      for (const key of ["coverageStartDate", "coverageEndDate", "notes", "settlementDetails"]) if (merged[key] === null) delete merged[key];
+      const validated = earningsAdjustmentInputSchema.safeParse(merged);
+      if (!validated.success) return invalid(response, validated.error);
+      const set: Record<string, unknown> = {};
+      const unset: Record<string, ""> = {};
+      for (const [key, value] of Object.entries(patch.data)) {
+        if (key === "settlementDetails" && value !== null) {
+          for (const [field, entry] of Object.entries(value)) {
+            if (entry === null) unset[`settlementDetails.${field}`] = "";
+            else set[`settlementDetails.${field}`] = entry;
+          }
+        } else if (value === null) unset[key] = "";
+        else set[key] = value;
+      }
+      const updated = await adjustments.findOneAndUpdate({ _id }, {
+        ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {})
+      }, { returnDocument: "after" });
+      if (!updated) return response.status(404).json({ error: "Payment not found" });
+      return response.json({ data: earningsAdjustmentResponse(updated), reconciliation: reconcileSettlement(updated) });
+    });
   });
   app.delete("/api/earnings-adjustments/:id", async (request, response) => {
     const id = objectIdSchema.safeParse(request.params.id);
     if (!id.success) return invalid(response, id.error);
-    if (!(await adjustments.deleteOne({ _id: new ObjectId(id.data) })).deletedCount) return response.status(404).json({ error: "Payment not found" });
+    if (!(await withReferenceWrite(() => adjustments.deleteOne({ _id: new ObjectId(id.data) }))).deletedCount) return response.status(404).json({ error: "Payment not found" });
     return response.status(204).send();
   });
 
@@ -183,7 +185,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
       throw error;
     }
     const merchant: MerchantDocument = { _id: new ObjectId(), ...parsed.data, location };
-    await merchants.insertOne(merchant);
+    await withReferenceWrite(() => merchants.insertOne(merchant));
     return response.status(201).json({ data: merchantResponse(merchant, 0) });
   });
 
@@ -205,7 +207,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
         throw error;
       }
     }
-    const updated = await merchants.findOneAndUpdate({ _id: objectId }, { $set: set }, { returnDocument: "after" });
+    const updated = await withReferenceWrite(() => merchants.findOneAndUpdate({ _id: objectId }, { $set: set }, { returnDocument: "after" }));
     if (!updated) return response.status(404).json({ error: "Merchant not found" });
     const deliveryCount = await deliveries.countDocuments({ merchantId: objectId });
     return response.json({ data: merchantResponse(updated, deliveryCount) });
@@ -334,7 +336,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
       );
       return { status: "updated" as const, delivery: updated };
     };
-    const outcome = changes.merchantId ? await withReferenceWrite(write) : await write();
+    const outcome = await withReferenceWrite(write);
     if (outcome.status === "merchant_missing") return response.status(422).json({ error: "Merchant not found" });
     if (!outcome.delivery) return response.status(404).json({ error: "Delivery not found" });
     return response.json({ data: deliveryResponse(outcome.delivery) });

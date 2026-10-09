@@ -6,6 +6,7 @@ const reasonLabels: Record<string, string> = {
   unconfirmed_session_coverage: "Review the period and confirm that all deliveries and sessions are recorded in the Payment modal.",
   missing_delivery_payout: "Backfill every covered delivery payout.", unlinked_delivery: "Explicitly link every covered delivery to its complete session.",
   missing_linked_session: "Repair a delivery link to a missing session.", covered_delivery_session_outside_coverage: "Review a covered delivery linked to a session outside this interval.",
+  incomplete_session_associations: "An earlier session update did not complete. Review delivery links in History and save the session again.",
   missing_session_mileage: "Record valid total driven miles for every included session.", missing_session_duration: "Correct missing or invalid session start/end times.",
   session_crosses_coverage_boundary: "Review boundary-crossing sessions; they cannot be partially allocated.",
   linked_delivery_outside_coverage: "Review sessions linked to deliveries outside this coverage period.",

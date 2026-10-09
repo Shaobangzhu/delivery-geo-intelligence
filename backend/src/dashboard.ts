@@ -26,19 +26,24 @@ function civilDate(date: Date): string {
 
 function offsetMinutes(instant: Date): number {
   const offset = offsetFormatter.formatToParts(instant).find((part) => part.type === "timeZoneName")?.value;
-  const match = /^GMT([+-])(\d{1,2})(?::(\d{2}))?$/.exec(offset ?? "");
+  const match = /^GMT([+-])(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?$/.exec(offset ?? "");
   if (!match) throw new Error("Could not resolve dashboard time zone");
-  return (match[1] === "+" ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3] ?? 0));
+  return (match[1] === "+" ? 1 : -1) * (Number(match[2]) * 60 + Number(match[3] ?? 0) + Number(match[4] ?? 0) / 60);
 }
 
 function localMidnight(date: Date): Date {
-  const utcMidnight = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  const utcMidnight = civilInstant(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()).getTime();
   const offset = offsetMinutes(new Date(utcMidnight + 8 * 60 * 60_000));
   return new Date(utcMidnight - offset * 60_000);
 }
 
 function addCivilDays(date: Date, days: number): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+  return civilInstant(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days);
+}
+function civilInstant(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  return date;
 }
 
 /** Inclusive statement dates become a half-open Los Angeles calendar interval. */
@@ -56,11 +61,11 @@ export function resolveDashboardFilters(filters: DashboardFilters, now = new Dat
     startCivil = addCivilDays(anchor, -((anchor.getUTCDay() + 6) % 7));
     endCivil = addCivilDays(startCivil, 7);
   } else if (filters.period === "month") {
-    startCivil = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
-    endCivil = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1));
+    startCivil = civilInstant(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1);
+    endCivil = civilInstant(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1);
   } else {
-    startCivil = new Date(Date.UTC(anchor.getUTCFullYear(), 0, 1));
-    endCivil = new Date(Date.UTC(anchor.getUTCFullYear() + 1, 0, 1));
+    startCivil = civilInstant(anchor.getUTCFullYear(), 0, 1);
+    endCivil = civilInstant(anchor.getUTCFullYear() + 1, 0, 1);
   }
   return {
     period: filters.period, category: filters.category, timeZone: TIME_ZONE,
@@ -75,15 +80,17 @@ type Ranking = MerchantSummary & { deliveries: number; totalEarnings: number | n
 
 function sumKnownPayouts(rows: DeliveryDocument[]) {
   const known = rows.filter((row) => row.payout !== undefined);
-  return { value: known.length ? known.reduce((sum, row) => sum + row.payout!, 0) : null, sampleCount: known.length };
+  return { value: known.length && known.every((row) => safeMoney(row.payout!) !== null)
+    ? safeMoney(known.reduce((sum, row) => sum + row.payout!, 0)) : null, sampleCount: known.length };
 }
+const safeMoney = (value: number) => Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER / 100 ? value : null;
 
 function merchantSummary(merchant: MerchantDocument): MerchantSummary {
   return { id: merchant._id.toHexString(), name: merchant.name, category: merchant.category, city: merchant.city };
 }
 
 function rankingByValue(rows: Ranking[], value: "totalEarnings" | "averageEarnings") {
-  return [...rows].filter((row) => row.sampleCount > 0).sort((a, b) =>
+  return [...rows].filter((row) => row.sampleCount > 0 && row[value] !== null).sort((a, b) =>
     (b[value] ?? 0) - (a[value] ?? 0) || b.sampleCount - a.sampleCount || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
   )[0] ?? null;
 }
@@ -149,7 +156,7 @@ export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, n
   const timeline = [];
   if (filters.period === "year") {
     for (let month = 0; month < 12; month += 1) {
-      const date = new Date(Date.UTC(range.startCivil.getUTCFullYear(), month, 1));
+      const date = civilInstant(range.startCivil.getUTCFullYear(), month, 1);
       const key = civilDate(date).slice(0, 7);
       timeline.push({ date: key, deliveries: deliveries.filter((delivery) => localDate(delivery.pickedUpAt).startsWith(key)).length });
     }
@@ -172,9 +179,11 @@ export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, n
   const payments = filters.category === "all" ? await db.collection<EarningsAdjustmentDocument>("earningsAdjustments").find({
     type: "prop22_guarantee", paymentDate: { $gte: range.startDate, $lte: range.endDate }
   }, { projection: { amount: 1 } }).toArray() : [];
-  const prop22Earnings = Math.round(payments.reduce((sum, row) => sum + row.amount, 0) * 100) / 100;
+  const prop22Earnings = safeMoney(Math.round(payments.reduce((sum, row) => sum + row.amount, 0) * 100) / 100);
+  const unsafeIncome = prop22Earnings === null || (earnings.sampleCount > 0 && earnings.value === null);
   const totalEarnings = {
-    value: earnings.value === null && payments.length === 0 ? null : Math.round(((earnings.value ?? 0) + prop22Earnings) * 100) / 100,
+    value: unsafeIncome || (earnings.value === null && payments.length === 0)
+      ? null : safeMoney(Math.round(((earnings.value ?? 0) + prop22Earnings!) * 100) / 100),
     deliveryEarnings: earnings.value, prop22Earnings,
     sampleCount: earnings.sampleCount, deliveryPayoutSampleCount: earnings.sampleCount, prop22PaymentCount: payments.length
   };

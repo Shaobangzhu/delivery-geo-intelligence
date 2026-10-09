@@ -19,6 +19,7 @@ export interface VehicleCost {
 }
 export interface LinkedDelivery { id: string; merchantId: string; pickedUpAt: string }
 export interface DeliverySession {
+  associationIntegrity?: "pending";
   id: string; startedAt: string; endedAt: string; sessionDurationSeconds: number;
   strategy?: DeliveryStrategy; totalDrivenMiles?: number; taxEligibleBusinessMiles?: number; notes?: string;
   deliveryIds: string[]; linkedDeliveries: LinkedDelivery[]; vehicleCost: VehicleCost;

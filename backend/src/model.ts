@@ -36,7 +36,7 @@ const destinationAddressSchema = z.string().trim().min(1).max(500);
 export const deliveryInputSchema = z.strictObject({
   merchantId: objectIdSchema,
   pickedUpAt: timestampSchema,
-  payout: z.number().finite().nonnegative().optional(),
+  payout: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER / 100).optional(),
   distanceMiles: z.number().finite().nonnegative().optional(),
   deliveryDurationSeconds: deliveryDurationSchema.optional(),
   destinationAddress: destinationAddressSchema.optional(),
@@ -46,7 +46,7 @@ export const deliveryInputSchema = z.strictObject({
 export const deliveryPatchSchema = z.strictObject({
   merchantId: objectIdSchema.optional(),
   pickedUpAt: timestampSchema.optional(),
-  payout: z.number().finite().nonnegative().nullable().optional(),
+  payout: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER / 100).nullable().optional(),
   distanceMiles: z.number().finite().nonnegative().nullable().optional(),
   deliveryDurationSeconds: deliveryDurationSchema.nullable().optional(),
   destinationAddress: destinationAddressSchema.optional(),

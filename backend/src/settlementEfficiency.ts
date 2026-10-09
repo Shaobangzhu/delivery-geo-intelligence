@@ -55,6 +55,7 @@ export function calculateSettlementEfficiency(payment: EarningsAdjustmentDocumen
     }
   }
   for (const row of included) {
+    if (row.associationIntegrity) issues.add("incomplete_session_associations");
     const linked = links.get(row._id.toHexString()) ?? [];
     if (!linked.length) issues.add("session_without_linked_deliveries");
     if (linked.some((delivery) => !inRange(delivery.pickedUpAt))) issues.add("linked_delivery_outside_coverage");
@@ -144,7 +145,7 @@ export async function getSettlementEfficiency(db: Db) {
     sessions = bounded(await db.collection<DeliverySessionDocument>("deliverySessions").find({ $or: [
       { startedAt: { $lt: end }, endedAt: { $gt: start } },
       { startedAt: { $gte: start, $lt: end } }, { endedAt: { $gt: start, $lte: end } }, { _id: { $in: sessionIds } }
-    ] }, { projection: { _id: 1, startedAt: 1, endedAt: 1, totalDrivenMiles: 1 } }).limit(MAX_RECORDS + 1).toArray());
+    ] }, { projection: { _id: 1, startedAt: 1, endedAt: 1, totalDrivenMiles: 1, associationIntegrity: 1 } }).limit(MAX_RECORDS + 1).toArray());
     const linked = bounded(await db.collection<DeliveryDocument>("deliveries").find({ sessionId: { $in: sessions.map((row) => row._id) } }, { projection }).limit(MAX_RECORDS + 1).toArray());
     deliveries = bounded([...new Map([...deliveries, ...linked].map((row) => [row._id.toHexString(), row])).values()]);
   }

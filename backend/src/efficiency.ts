@@ -48,8 +48,9 @@ export function calculateSessionEfficiency(session: DeliverySessionDocument, lin
   const durationHours = positive(seconds) ? finite(seconds / 3600) : null;
   const totalMiles = nonnegative(session.totalDrivenMiles) ? session.totalDrivenMiles : null;
   const vehicleCost = calculateVehicleCost(profile, session.totalDrivenMiles);
-  const revenueComplete = linked.length > 0 && known.length === linked.length && knownPayoutTotal !== null;
+  const revenueComplete = !session.associationIntegrity && linked.length > 0 && known.length === linked.length && knownPayoutTotal !== null;
   const reasons = [
+    ...(session.associationIntegrity ? ["incomplete_session_associations"] : []),
     ...(linked.length === 0 ? ["no_linked_deliveries"] : []),
     ...(known.length < linked.length ? ["missing_linked_payout"] : []),
     ...(durationHours === null ? ["invalid_session_duration"] : []),
@@ -85,7 +86,7 @@ export function aggregateSessionEfficiency(rows: SessionCalculation[]) {
     missingPayoutCount: rows.reduce((n, row) => n + row.missingPayoutCount, 0),
     incompleteSessionCount: rows.filter((row) => row.estimatedEconomicProfit === null).length,
     knownPayoutTotal: metric(sum(known.map((row) => row.knownPayoutTotal!)), "USD", known.length, total,
-      reasons.filter((reason) => ["missing_linked_payout", "no_linked_deliveries", "numeric_result_unavailable"].includes(reason))),
+      reasons.filter((reason) => ["missing_linked_payout", "no_linked_deliveries", "numeric_result_unavailable", "incomplete_session_associations"].includes(reason))),
     durationHours: metric(sum(durations.map((row) => row.durationHours!)), "hours", durations.length, total, durations.length < total ? ["invalid_session_duration"] : []),
     totalMiles: metric(sum(miles.map((row) => row.totalMiles!)), "miles", miles.length, total, miles.length < total ? ["missing_session_miles"] : []),
     payoutPerSessionHour: rate(hourly.map((row) => row.knownPayoutTotal!), hourly.map((row) => row.durationHours!), "USD/hour", total,
@@ -117,7 +118,7 @@ export async function getEfficiencyAnalytics(db: Db, filters: DashboardFilters, 
   const [deliveries, overlapping, profile] = await Promise.all([
     db.collection<DeliveryDocument>("deliveries").find({ pickedUpAt: { $gte: range.start, $lt: range.endExclusive }, merchantId: { $in: merchants.map((row) => row._id) } }, { projection }).toArray(),
     db.collection<DeliverySessionDocument>("deliverySessions").find({ startedAt: { $lt: range.endExclusive }, endedAt: { $gt: range.start } },
-      { projection: { _id: 1, startedAt: 1, endedAt: 1, strategy: 1, totalDrivenMiles: 1 } }).toArray(),
+      { projection: { _id: 1, startedAt: 1, endedAt: 1, strategy: 1, totalDrivenMiles: 1, associationIntegrity: 1 } }).toArray(),
     db.collection<VehicleProfileDocument>("vehicleEconomics").findOne({ _id: "primary" })
   ]);
   const { included, excludedBoundaryCrossingCount } = selectPeriodSessions(overlapping, range.start, range.endExclusive);
@@ -144,7 +145,8 @@ export async function getEfficiencyAnalytics(db: Db, filters: DashboardFilters, 
       sessionsWithIncompleteVehicleCost: sessions.filter((row) => row.vehicleCost.completeness !== "complete").length,
       sessionsWithMissingLinkedPayout: sessions.filter((row) => row.missingPayoutCount > 0).length,
       sessionsExcludedBoundaryCrossing: excludedBoundaryCrossingCount,
-      unclassifiedSessions: sessions.filter((row) => row.strategy === "unclassified").length
+      unclassifiedSessions: sessions.filter((row) => row.strategy === "unclassified").length,
+      sessionsWithIncompleteAssociations: included.filter((row) => row.associationIntegrity).length
     }
   };
 }

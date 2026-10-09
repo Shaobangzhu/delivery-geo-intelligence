@@ -35,6 +35,8 @@ export interface DeliverySessionDocument {
   totalDrivenMiles?: number;
   taxEligibleBusinessMiles?: number;
   notes?: string;
+  // Durable fail-closed marker for an unfinished multi-document association write.
+  associationIntegrity?: "pending";
 }
 export function sessionFieldsResponse({ _id, startedAt, endedAt, ...fields }: DeliverySessionDocument) {
   return { id: _id.toHexString(), startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(),

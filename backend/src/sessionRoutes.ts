@@ -39,15 +39,43 @@ export function registerSessionRoutes(app: Express, db: Db, withReferenceWrite: 
     await deliveries.updateMany({ sessionId: id, _id: { $nin: ids } }, { $unset: { sessionId: "" } });
     if (ids.length) await deliveries.updateMany({ _id: { $in: ids } }, { $set: { sessionId: id } });
   }
+  async function linkedIds(id: ObjectId) {
+    return (await deliveries.find({ sessionId: id }, { projection: { _id: 1 } }).toArray()).map((row) => row._id);
+  }
+  // Standalone MongoDB has no multi-document transaction. Mark before mutating,
+  // compensate recoverable failures, and leave the marker if recovery fails.
+  async function changeSession(before: DeliverySessionDocument | null, after: DeliverySessionDocument | null, ids?: ObjectId[]) {
+    const id = (before ?? after)!._id;
+    const previousLinks = await linkedIds(id);
+    try {
+      if (before) await sessions.updateOne({ _id: id }, { $set: { associationIntegrity: "pending" } });
+      else await sessions.insertOne({ ...after!, associationIntegrity: "pending" });
+      if (after && before) await sessions.replaceOne({ _id: id }, { ...after, associationIntegrity: "pending" });
+      if (ids !== undefined) await replaceLinks(id, ids);
+      if (after) await sessions.updateOne({ _id: id }, { $unset: { associationIntegrity: "" } });
+      else await sessions.deleteOne({ _id: id });
+    } catch (error) {
+      try {
+        // Restore only Session fields and references; never rewrite Delivery facts.
+        if (before) await sessions.replaceOne({ _id: id }, { ...before, associationIntegrity: "pending" }, { upsert: true });
+        await replaceLinks(id, previousLinks);
+        if (before && !before.associationIntegrity) await sessions.updateOne({ _id: id }, { $unset: { associationIntegrity: "" } });
+        else if (!before) await sessions.deleteOne({ _id: id });
+      } catch { /* The persisted marker prevents complete efficiency until reviewed. */ }
+      throw error;
+    }
+  }
   app.get("/api/delivery-sessions", async (_request, response) => {
-    return response.json({ data: await responses(await sessions.find().sort({ startedAt: -1, _id: -1 }).toArray()) });
+    return withReferenceWrite(async () => response.json({ data: await responses(await sessions.find().sort({ startedAt: -1, _id: -1 }).toArray()) }));
   });
   app.get("/api/delivery-sessions/:id", async (request, response) => {
     const parsed = objectIdSchema.safeParse(request.params.id);
     if (!parsed.success) return invalid(response, parsed.error);
-    const row = await sessions.findOne({ _id: new ObjectId(parsed.data) });
-    if (!row) return response.status(404).json({ error: "Session not found" });
-    return response.json({ data: (await responses([row]))[0] });
+    return withReferenceWrite(async () => {
+      const row = await sessions.findOne({ _id: new ObjectId(parsed.data) });
+      if (!row) return response.status(404).json({ error: "Session not found" });
+      return response.json({ data: (await responses([row]))[0] });
+    });
   });
   app.post("/api/delivery-sessions", async (request, response) => {
     const parsed = sessionCreateSchema.safeParse(request.body);
@@ -55,15 +83,12 @@ export function registerSessionRoutes(app: Express, db: Db, withReferenceWrite: 
     const { deliveryIds, startedAt, endedAt, ...fields } = parsed.data;
     const row: DeliverySessionDocument = { _id: new ObjectId(), startedAt: new Date(startedAt), endedAt: new Date(endedAt), ...fields };
     const ids = (deliveryIds ?? []).map((id) => new ObjectId(id));
-    const error = await withReferenceWrite(async () => {
+    return withReferenceWrite(async () => {
       const error = await checkLinks(ids, row._id);
-      if (error) return error;
-      await sessions.insertOne(row);
-      await replaceLinks(row._id, ids);
-      return null;
+      if (error) return linkError(response, error);
+      await changeSession(null, row, ids);
+      return response.status(201).json({ data: (await responses([row]))[0] });
     });
-    if (error) return linkError(response, error);
-    return response.status(201).json({ data: (await responses([row]))[0] });
   });
   app.patch("/api/delivery-sessions/:id", async (request, response) => {
     const id = objectIdSchema.safeParse(request.params.id);
@@ -74,8 +99,9 @@ export function registerSessionRoutes(app: Express, db: Db, withReferenceWrite: 
     const outcome = await withReferenceWrite(async () => {
       const existing = await sessions.findOne({ _id: sessionId });
       if (!existing) return { kind: "missing" as const };
-      const { _id, ...fields } = existing;
+      const { _id, associationIntegrity, ...fields } = existing;
       const { deliveryIds, ...changes } = patch.data;
+      if (associationIntegrity && deliveryIds === undefined) return { kind: "review" as const };
       const merged: Record<string, unknown> = { ...fields, startedAt: existing.startedAt.toISOString(), endedAt: existing.endedAt.toISOString(), ...changes };
       for (const [key, value] of Object.entries(merged)) if (value === null) delete merged[key];
       const validated = sessionInputSchema.safeParse(merged);
@@ -85,42 +111,32 @@ export function registerSessionRoutes(app: Express, db: Db, withReferenceWrite: 
         const error = await checkLinks(ids, _id);
         if (error) return { kind: "links" as const, error };
       }
-      const set: Record<string, unknown> = {};
-      const unset: Record<string, ""> = {};
-      for (const [key, value] of Object.entries(changes)) {
-        if (value === null) unset[key] = "";
-        else set[key] = key === "startedAt" || key === "endedAt" ? new Date(String(value)) : value;
-      }
-      let updated = existing;
-      if (Object.keys(set).length || Object.keys(unset).length) {
-        updated = (await sessions.findOneAndUpdate({ _id }, {
-          ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {})
-        }, { returnDocument: "after" }))!;
-      }
-      if (ids) await replaceLinks(_id, ids);
-      return { kind: "updated" as const, row: updated };
+      const { startedAt, endedAt, ...observations } = validated.data;
+      const updated = { _id, startedAt: new Date(startedAt), endedAt: new Date(endedAt), ...observations };
+      await changeSession(existing, updated, ids);
+      return { kind: "updated" as const, data: (await responses([updated]))[0] };
     });
     if (outcome.kind === "missing") return response.status(404).json({ error: "Session not found" });
     if (outcome.kind === "invalid") return invalid(response, outcome.error);
     if (outcome.kind === "links") return linkError(response, outcome.error);
-    return response.json({ data: (await responses([outcome.row]))[0] });
+    if (outcome.kind === "review") return response.status(409).json({ error: "Review and resubmit delivery associations before saving this session" });
+    return response.json({ data: outcome.data });
   });
   app.delete("/api/delivery-sessions/:id", async (request, response) => {
     const parsed = objectIdSchema.safeParse(request.params.id);
     if (!parsed.success) return invalid(response, parsed.error);
     const id = new ObjectId(parsed.data);
     const deleted = await withReferenceWrite(async () => {
-      if (!(await sessions.findOne({ _id: id }, { projection: { _id: 1 } }))) return false;
-      // Unlink before removal: a partial failure never leaves dangling delivery references.
-      await deliveries.updateMany({ sessionId: id }, { $unset: { sessionId: "" } });
-      await sessions.deleteOne({ _id: id });
+      const existing = await sessions.findOne({ _id: id });
+      if (!existing) return false;
+      await changeSession(existing, null, []);
       return true;
     });
     if (!deleted) return response.status(404).json({ error: "Session not found" });
     return response.status(204).end();
   });
 
-  app.get("/api/vehicle-economics", async (_request, response) => response.json(await vehicleEconomicsResponse(db)));
+  app.get("/api/vehicle-economics", async (_request, response) => response.json(await withReferenceWrite(() => vehicleEconomicsResponse(db))));
   app.post("/api/vehicle-economics/initialize", async (_request, response) => {
     await withReferenceWrite(() => initializeVehicleEconomics(db));
     return response.json(await vehicleEconomicsResponse(db));

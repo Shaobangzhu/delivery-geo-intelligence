@@ -55,7 +55,7 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
       setError("Enter nonnegative miles; IRS eligible miles cannot exceed total driven miles."); return;
     }
     const original = session?.deliveryIds ?? [];
-    const linksChanged = selected.length !== original.length || selected.some((item) => !original.includes(item));
+    const linksChanged = Boolean(session?.associationIntegrity) || selected.length !== original.length || selected.some((item) => !original.includes(item));
     pending.current = true; setBusy(true);
     try {
       await saveSession({ startedAt: startIso, endedAt: endIso,
@@ -72,6 +72,7 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
   const deliveryLabel = (delivery: { id: string; merchantId: string; pickedUpAt: string }) => `${displaySessionTime(delivery.pickedUpAt)} · ${merchants.find((merchant) => merchant.id === delivery.merchantId)?.name ?? "Delivery"} · ${delivery.id.slice(-6)}`;
   return <DialogFrame title={session ? "Edit Session" : "Add Session"} onClose={onClose} busy={busy} className="delivery-dialog">
     <p className="dialog-intro">Record the complete operating period, including driving and time outside active deliveries. Times use America/Los_Angeles.</p>
+    {session?.associationIntegrity && <p role="alert" className="form-error">An earlier session update did not complete. Review all delivery links before saving. Complete efficiency is blocked until this review succeeds.</p>}
     <button type="button" className="dialog-close" aria-label="Close dialog" disabled={busy} onClick={onClose}>×</button>
     <form onSubmit={submit} noValidate aria-busy={busy}>
       <div className="form-grid">

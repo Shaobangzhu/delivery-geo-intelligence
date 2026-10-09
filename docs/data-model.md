@@ -7,19 +7,19 @@ The application uses the native MongoDB Node.js driver. The application database
 | Collection | Fields | Indexes |
 | --- | --- | --- |
 | `merchants` | `_id`, `name`, `category`, `publicAddress`, `location`, `city` | `location` 2dsphere |
-| `earningsAdjustments` | `_id`, `type`, `paymentDate`, `amount`, optional `coverageStartDate`, `coverageEndDate`, `notes`, `settlementDetails` | `paymentDate` descending |
+| `earningsAdjustments` | `_id`, `type`, `paymentDate`, `amount`, optional `coverageStartDate`, `coverageEndDate`, `notes`, `settlementDetails`, `sessionCoverageConfirmed` | `paymentDate` descending |
 | `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `sessionId`, `payout`, `distanceMiles`, `deliveryDurationSeconds`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt`; sparse `sessionId` |
-| `deliverySessions` | `_id`, `startedAt`, `endedAt`, optional `strategy`, `totalDrivenMiles`, `taxEligibleBusinessMiles`, `notes` | `startedAt` descending plus `_id` |
+| `deliverySessions` | `_id`, `startedAt`, `endedAt`, optional `strategy`, `totalDrivenMiles`, `taxEligibleBusinessMiles`, `notes`, server-owned `associationIntegrity` | `startedAt` descending plus `_id` |
 | `vehicleEconomics` | `_id: "primary"`, vehicle name, energy/tire costs, optional tire life and marginal depreciation | built-in unique `_id` only |
 | `vehicleTaxYears` | `_id: taxYear`, `taxYear`, annual vehicle miles and miles by purpose, `taxMethod` | built-in unique `_id` only |
 
 A Merchant is one **physical pickup location**, not a brand. Two branches of one brand use separate IDs, even when they share a name. `category` is `restaurant`, `grocery`, `retail`, or `other`. `publicAddress` is a verified public business address; `location` is its exact stored-geocode GeoJSON Point in `[longitude, latitude]` order. New Merchant writes require an address and reject client-supplied coordinates. Earlier records can lack `publicAddress`; they retain their existing location until a verified address correction is supplied. No merchant or delivery records are seeded.
 
-`merchantId` references a Merchant record. `pickedUpAt` is stored as a BSON Date. `payout` is the manually recorded gross payout; absence means unknown, while an explicit `0` means zero. The API does not default absent payout to zero. Optional `destinationLocation` holds a generalized GeoJSON Point and has a 2dsphere index. No persisted `destinationAddress` field exists.
+`merchantId` references a Merchant record. `pickedUpAt` is stored as a BSON Date. `payout` is the manually recorded gross payout; absence means unknown, while an explicit `0` means zero. The API does not default absent payout to zero. Payout must be finite/nonnegative and no larger than `Number.MAX_SAFE_INTEGER / 100`; existing fractional-payout semantics are preserved. Unsafe aggregate amounts are unavailable, not converted to zero or partial cash income. Optional `destinationLocation` holds a generalized GeoJSON Point and has a 2dsphere index. No persisted `destinationAddress` field exists.
 
 `deliveryDurationSeconds?: number` is manually observed elapsed delivery duration from delivery history/Uber Eats records, stored as positive integer seconds. It is not derived from `pickedUpAt`. For example, 1 hr 12 mins 35 secs becomes `4355`. Missing means unknown/not yet entered, not zero. POST may omit the field; when supplied it must be a finite positive integer. PATCH accepts a positive integer to set/replace, `null` to `$unset`, or omission to preserve. API responses include the field only when present. No migration, estimates, or automatic backfill is performed.
 
-The centered Add/Edit modal uses optional Hours (integer >= 0), Minutes (0–59), and Seconds (0–59). Blank components count as zero only when another component is entered; an all-blank group represents unknown duration. An entered total of zero is invalid. Known durations prepopulate the components; blanking all three clears a previously recorded duration. History shows formatted units or `—` for unknown values. **DEFERRED:** duration averages, distributions, rankings, earnings/hour, and other Dashboard analytics.
+The centered Add/Edit modal uses optional Hours (integer >= 0), Minutes (0–59), and Seconds (0–59). Blank components count as zero only when another component is entered; an all-blank group represents unknown duration. An entered total of zero is invalid. Known durations prepopulate the components; blanking all three clears a previously recorded duration. History shows formatted units or `—` for unknown values. A.2 Core implements payout per recorded hour. Duration distributions and duration-based rankings remain **DEFERRED**.
 
 ## Earnings adjustments
 
@@ -62,7 +62,7 @@ List responses contain `data` and `pagination` with `page`, `pageSize`, `total`,
 
 `EarningsAdjustmentDocument` adds only optional `sessionCoverageConfirmed?: boolean`. Legacy absence means unconfirmed; explicit false/true are accepted by the existing strict POST/PATCH schemas and returned through existing payment responses. Omitted PATCH preserves the flag; null and string coercion are rejected. The Payment modal sends the flag only when manually changed. No defaults, automatic completeness inference, new collection, index, or migration are introduced. The flag never changes the actual received amount, A.0 reconciliation, or cash-basis earnings. It remains stored even if coverage dates are cleared or structural checks fail.
 
-Coverage dates retain their inclusive ISO date meaning. Derived A.2.1 analysis resolves LA midnight boundaries and uses existing Delivery pickup times and explicit `sessionId` links; it stores no analytics results. `GET /api/efficiency/settlements` returns `{ data, limit: 20, totalSettlements, hasMore }` with newest-first settlement aggregates, confirmation/structural status, counts, rates, costs, and reasons. Output contains no Delivery IDs, notes or destination coordinates. Limits fail closed rather than truncating input cohorts; see [analytics model](analytics-model.md). No uniqueness constraint or automatic merging is applied to overlapping payments. A.2.2 final audit remains deferred.
+Coverage dates retain their inclusive ISO date meaning. Derived A.2.1 analysis resolves LA midnight boundaries and uses existing Delivery pickup times and explicit `sessionId` links; it stores no analytics results. `GET /api/efficiency/settlements` returns `{ data, limit: 20, totalSettlements, hasMore }` with newest-first settlement aggregates, confirmation/structural status, counts, rates, costs, and reasons. Output contains no Delivery IDs, notes or destination coordinates. Limits fail closed rather than truncating input cohorts; see [analytics model](analytics-model.md). No uniqueness constraint or automatic merging is applied to overlapping payments. A.2.2 audited and froze this local implementation.
 
 ## Verification data
 
@@ -79,6 +79,7 @@ interface DeliverySessionDocument {
   totalDrivenMiles?: number;
   taxEligibleBusinessMiles?: number;
   notes?: string;
+  associationIntegrity?: "pending"; // server-owned write/recovery guard
 }
 interface VehicleEconomicsProfile {
   _id: "primary";
@@ -102,6 +103,10 @@ interface VehicleTaxYearRecord {
 Session input requires offset-aware ISO timestamps and `endedAt > startedAt`; UTC instants are stored as BSON Dates. `sessionDurationSeconds` is returned as `(end-start)/1000`, never persisted. Miles are optional finite nonnegative observations, with explicit zero valid. If both are provided, IRS eligible business miles cannot exceed total session miles. Missing miles remain absent. Strategy is optional per session; no year-based assignment or automatic reconstruction from Delivery timestamps occurs. Notes are trimmed and limited to 2000 characters.
 
 `DeliveryDocument.sessionId?: ObjectId` is the sole persisted association and has a sparse query index. Existing unassociated deliveries remain valid. Session requests may supply distinct `deliveryIds` (maximum 500) to explicitly replace membership. Omission preserves links; `[]` unlinks all. Responses derive `deliveryIds` and safe `linkedDeliveries` summaries (ID, merchant ID, pickup instant) from Delivery references; they do not expose destination coordinates. A normal time/mileage edit preserves links even outside the edited interval. Deletion unlinks and retains Deliveries; deleted Deliveries cannot leave stale reverse arrays. Direct client assignment through Delivery POST/PATCH remains unsupported.
+
+A.2.2 uses optional server-owned `associationIntegrity: "pending"` during Session writes and compensation. Clients cannot set it through strict request schemas. Recoverable failures restore prior Session fields and references; unrecovered changes retain the marker and fail complete revenue/rates/profit checks. Session DTOs expose the marker to support review. A marked Session PATCH without explicit `deliveryIds` returns 409; reviewed membership can be resubmitted (including `[]`) to finish the operation. Normal records need no migration or marker. No previous-membership journal is stored: a crash or persistent outage can require manual review. This is not a MongoDB transaction.
+
+The single-process queue coordinates domain writes with multi-query analytics/Session reads. Payment PATCH read/merge/validation/write is serialized, preserving nested omission/clearing while preventing concurrent partial date edits from creating an invalid coverage pair. External database writers and other processes are outside this safeguard.
 
 The vehicle profile's initial values are name above, energy cash cost `0`, and observed replacement-set cost `1600`; tire life and marginal depreciation are absent. Cost fields must be finite/nonnegative; tire life must be positive and produce a finite wear rate. Settings PATCH omission preserves values; `null` clears optional life/depreciation. Costs and coverage history are not linked to Prop 22, merchants, or customer destinations.
 
