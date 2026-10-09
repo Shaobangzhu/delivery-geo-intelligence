@@ -8,7 +8,7 @@ interface DialogFrameProps {
   className?: string;
 }
 
-const focusSelector = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])";
+const focusSelector = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex='-1'])";
 
 export function DialogFrame({ title, onClose, busy, children, className = "" }: DialogFrameProps) {
   const titleId = useId();

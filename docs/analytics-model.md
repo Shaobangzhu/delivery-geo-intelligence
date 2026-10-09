@@ -28,8 +28,26 @@ Known delivery payouts alone contribute to merchant/category totals and merchant
 
 ## Cash-basis Total Earnings
 
-For Category=All, Total Earnings = known Delivery payouts + Prop 22 adjustments whose `paymentDate` is between resolved local `startDate` and `endDate`, inclusive. Canonical date strings compare in calendar order, avoiding timestamp/timezone conversion for payment dates. Coverage dates are future analysis metadata and do not allocate current earnings.
+For Category=All, Total Earnings = known Delivery payouts + Prop 22 adjustments whose `paymentDate` is between resolved local `startDate` and `endDate`, inclusive. Canonical date strings compare in calendar order, avoiding timestamp/timezone conversion for payment dates. Coverage dates are statement metadata and do not allocate current earnings.
 
 The summary returns `value`, nullable `deliveryEarnings`, `prop22Earnings`, `deliveryPayoutSampleCount`, and `prop22PaymentCount`. Existing `sampleCount` remains the known delivery payout count. No known payouts and no payments yields `value: null`; payments alone produce their sum with zero delivery samples. A recorded zero payout is still known. Monetary combined sums are rounded to cents.
 
 Every category-specific view excludes adjustments. Merchant rankings, averages, popup earnings, delivery counts, timelines, and map datasets remain Delivery-based. Delivery payout must represent the delivery-level amount, while Prop 22 is entered separately; no amount is duplicated across deliveries. **DEFERRED:** coverage-period allocation and duration/distance efficiency research.
+
+## A.0 settlement reconciliation: diagnostics, not income
+
+The pure backend `reconcileSettlement` function takes one received adjustment and its optional settlement observations. It uses only Uber's reported guarantee and eligible earnings **excluding tips**:
+
+```text
+expectedCents = max(0, round(reportedGuaranteedAmount × 100)
+                        − round(eligibleEarningsExcludingTips × 100))
+differenceCents = round(amount × 100) − expectedCents
+```
+
+An absolute difference of at most one cent is `matched`; a larger difference is `mismatch`. A missing, nonfinite, negative, non-cent, or unsafe comparison input is `insufficient_data`, with null expected amount/difference. Valid official zero is included. Integer-cent comparison handles binary floating-point subtraction such as 0.30 − 0.20 without unsafe currency equality. Received amount stays authoritative; results are derived on demand and not persisted.
+
+A mismatch is a request for statement review, not proof of underpayment. Offsets, corrections, and separate payment components may invalidate this limited formula; no reason is invented. Engaged time/miles are retained for audit but do not influence this primary comparison.
+
+Cash-basis Total Earnings still uses **only actual received `amount` by paymentDate**, plus known delivery payouts for All. The guarantee, expected adjustment, coverage dates, engaged time/miles, and difference do not affect income. Category-specific summaries, merchant earnings/rankings, charts, delivery counts, and all GIS datasets remain unchanged. No biweekly payment is spread across deliveries or merchants.
+
+**DEFERRED:** A secondary rate-based estimate requires sourced applicable wage jurisdictions and compensation rates. One Eastvale rate is not assumed to cover a multi-city statement. Prop 22 mileage compensation, IRS deductions, and actual vehicle costs are distinct and none are calculated in A.0. Coverage allocation, per-delivery optimization, and efficiency KPIs remain deferred.

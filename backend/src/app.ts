@@ -10,6 +10,8 @@ import {
   type EarningsAdjustmentDocument, type DeliveryDocument, type MerchantDocument
 } from "./model.js";
 
+import { reconcileSettlement } from "./settlement.js";
+
 function invalid(response: Response, error: ZodError) {
   return response.status(400).json({
     error: "Invalid request",
@@ -82,14 +84,14 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     if (!id.success) return invalid(response, id.error);
     const row = await adjustments.findOne({ _id: new ObjectId(id.data) });
     if (!row) return response.status(404).json({ error: "Payment not found" });
-    return response.json({ data: earningsAdjustmentResponse(row) });
+    return response.json({ data: earningsAdjustmentResponse(row), reconciliation: reconcileSettlement(row) });
   });
   app.post("/api/earnings-adjustments", async (request, response) => {
     const parsed = earningsAdjustmentInputSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response, parsed.error);
     const row = { _id: new ObjectId(), ...parsed.data };
     await adjustments.insertOne(row);
-    return response.status(201).json({ data: earningsAdjustmentResponse(row) });
+    return response.status(201).json({ data: earningsAdjustmentResponse(row), reconciliation: reconcileSettlement(row) });
   });
   app.patch("/api/earnings-adjustments/:id", async (request, response) => {
     const id = objectIdSchema.safeParse(request.params.id);
@@ -100,20 +102,30 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     if (!existing) return response.status(404).json({ error: "Payment not found" });
     const { _id, ...fields } = existing;
     const merged: Record<string, unknown> = { ...fields, ...patch.data };
-    for (const key of ["coverageStartDate", "coverageEndDate", "notes"]) if (merged[key] === null) delete merged[key];
+    if (patch.data.settlementDetails && typeof patch.data.settlementDetails === "object") {
+      const details: Record<string, unknown> = { ...existing.settlementDetails, ...patch.data.settlementDetails };
+      for (const [key, value] of Object.entries(details)) if (value === null) delete details[key];
+      merged.settlementDetails = details;
+    }
+    for (const key of ["coverageStartDate", "coverageEndDate", "notes", "settlementDetails"]) if (merged[key] === null) delete merged[key];
     const validated = earningsAdjustmentInputSchema.safeParse(merged);
     if (!validated.success) return invalid(response, validated.error);
     const set: Record<string, unknown> = {};
     const unset: Record<string, ""> = {};
     for (const [key, value] of Object.entries(patch.data)) {
-      if (value === null) unset[key] = "";
+      if (key === "settlementDetails" && value !== null) {
+        for (const [field, entry] of Object.entries(value)) {
+          if (entry === null) unset[`settlementDetails.${field}`] = "";
+          else set[`settlementDetails.${field}`] = entry;
+        }
+      } else if (value === null) unset[key] = "";
       else set[key] = value;
     }
     const updated = await adjustments.findOneAndUpdate({ _id }, {
       ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {})
     }, { returnDocument: "after" });
     if (!updated) return response.status(404).json({ error: "Payment not found" });
-    return response.json({ data: earningsAdjustmentResponse(updated) });
+    return response.json({ data: earningsAdjustmentResponse(updated), reconciliation: reconcileSettlement(updated) });
   });
   app.delete("/api/earnings-adjustments/:id", async (request, response) => {
     const id = objectIdSchema.safeParse(request.params.id);

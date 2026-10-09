@@ -115,13 +115,30 @@ export function deliveryResponse(delivery: DeliveryDocument) {
   };
 }
 
+// Cent values must stay within integer arithmetic's exact range.
+const settlementCurrencySchema = z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER / 100).multipleOf(0.01);
+export const settlementDetailsSchema = z.strictObject({
+  engagedSeconds: z.number().finite().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  engagedMiles: z.number().finite().nonnegative().optional(),
+  eligibleEarningsExcludingTips: settlementCurrencySchema.optional(),
+  reportedGuaranteedAmount: settlementCurrencySchema.optional()
+});
+export type Prop22SettlementDetails = z.infer<typeof settlementDetailsSchema>;
+const settlementDetailsPatchSchema = z.strictObject({
+  engagedSeconds: settlementDetailsSchema.shape.engagedSeconds.unwrap().nullable().optional(),
+  engagedMiles: settlementDetailsSchema.shape.engagedMiles.unwrap().nullable().optional(),
+  eligibleEarningsExcludingTips: settlementCurrencySchema.nullable().optional(),
+  reportedGuaranteedAmount: settlementCurrencySchema.nullable().optional()
+}).refine((value) => Object.keys(value).length > 0, { message: "At least one settlement field is required" });
+
 const adjustmentFields = {
   type: z.literal("prop22_guarantee"),
   paymentDate: z.iso.date(),
-  amount: z.number().finite().positive().multipleOf(0.01),
+  amount: settlementCurrencySchema.positive(),
   coverageStartDate: z.iso.date().optional(),
   coverageEndDate: z.iso.date().optional(),
-  notes: z.string().trim().max(2000).optional()
+  notes: z.string().trim().max(2000).optional(),
+  settlementDetails: settlementDetailsSchema.optional()
 };
 export const earningsAdjustmentInputSchema = z.strictObject(adjustmentFields).refine(
   (value) => (value.coverageStartDate === undefined && value.coverageEndDate === undefined) ||
@@ -132,7 +149,8 @@ export const earningsAdjustmentPatchSchema = z.strictObject({
   ...adjustmentFields,
   coverageStartDate: z.iso.date().nullable().optional(),
   coverageEndDate: z.iso.date().nullable().optional(),
-  notes: z.string().trim().max(2000).nullable().optional()
+  notes: z.string().trim().max(2000).nullable().optional(),
+  settlementDetails: settlementDetailsPatchSchema.nullable().optional()
 }).partial().refine((value) => Object.keys(value).length > 0, { message: "At least one field is required" });
 export type EarningsAdjustmentDocument = z.infer<typeof earningsAdjustmentInputSchema> & { _id: ObjectId };
 export function earningsAdjustmentResponse({ _id, ...fields }: EarningsAdjustmentDocument) {

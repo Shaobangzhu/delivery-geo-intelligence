@@ -44,6 +44,22 @@ Residential addresses and exact geocoded residential coordinates are not stored 
 
 ## Period earnings adjustments
 
-History sends independent Prop 22 CRUD requests to Express `/api/earnings-adjustments`; Zod validates them and the native driver stores `earningsAdjustments` with a payment-date query index. These documents have no merchant or Delivery relationship. Coverage dates are optional research metadata.
+History sends independent Prop 22 CRUD requests to Express `/api/earnings-adjustments`; Zod validates them and the native driver stores `earningsAdjustments` with a payment-date query index. These documents have no merchant or Delivery relationship. Coverage dates are optional inclusive statement dates.
 
 Dashboard All-category Total Earnings queries payments by the resolved Los Angeles calendar date range and combines their received amounts with known delivery payouts. Category and merchant earnings remain Delivery-only. This is cash-basis accounting, with no coverage allocation, per-delivery adjustment, migration, or efficiency analytics. ArcGIS and destination privacy are unaffected.
+
+## A.0 settlement audit flow
+
+```text
+Uber statement → manual entry in existing History payment modal
+  → optional official settlementDetails on the same EarningsAdjustment ID
+  → Express/Zod validation → existing MongoDB earningsAdjustments
+  → pure backend reconciliation on detail/create/update response
+  → saved diagnostic summary in the centered modal
+```
+
+Nested PATCH writes merge and validate the resulting document, then update only supplied fields with dotted MongoDB paths; siblings survive. Explicit null clears a field or the whole optional object. Legacy records require no migration. The list DTO envelope is unchanged.
+
+`backend/src/settlement.ts` owns the deterministic `reported_guarantee` comparison. It does not access MongoDB, Delivery data, providers, or an LLM. A future sourced rate-based method can be a separate diagnostic calculator; A.0 makes no wage assumptions. React fetches the saved detail result with abort/active guards, never replaces entered money, and hides stale diagnostics after edits. Reopen after saving for the new result. Native details/summary provides progressive disclosure within the existing modal and focus management.
+
+Dashboard queries still project only received amounts and payment dates. No extra income, new KPI, new route, new collection, new index, dependency, Docker change, or GIS/privacy change is introduced. Real statements, private exports, and credentials are not committed. **A.1/A.2 — DEFERRED:** AI assistance and economic/optimization modeling; no OpenAI calls, agent, RAG, vector storage, vehicle/tax calculations, or autonomous decisions exist in A.0.

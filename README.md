@@ -28,6 +28,10 @@ Delivery History captures optional observed delivery duration from your delivery
 
 History also manages **Prop 22 Payments** as independent `EarningsAdjustment` records (`prop22_guarantee`). The secondary Add Prop 22 Payment action opens a centered modal; a separate newest-first table supports edit and confirmed delete. `paymentDate` is a `YYYY-MM-DD` date, while optional paired coverage dates capture the period shown in your Uber record.
 
+The centered payment modal labels the authoritative income **Amount Received**. Its collapsed **Settlement Details (Optional)** section captures official Uber-reported engaged time, engaged miles, eligible earnings **excluding tips**, and guaranteed earnings. Blank means unknown; a reported zero is retained. Engaged Hours/Minutes/Seconds become one nonnegative `engagedSeconds` integer. These observations are never inferred from Delivery duration, distance, or payouts. Existing payments can be backfilled in place without a migration or a duplicate record.
+
+After saving, reopen the payment to see backend-derived reconciliation: `max(0, reported guarantee − eligible earnings excluding tips)`, compared with the received amount using integer cents and an inclusive one-cent tolerance. Status is Matched, Needs review, or Insufficient data. Edits hide the old result until saved and reopened. Uber statements are the source of truth; offsets, corrections, or separate components can cause a mismatch that this simple comparison cannot explain. Calculated values are diagnostic and never replace received money.
+
 Dashboard **All** Total Earnings combines known delivery payouts with Prop 22 amounts received within the resolved Los Angeles calendar range. Category-specific and merchant earnings remain delivery payouts only: no Prop 22 allocation is attempted. Coverage dates do not affect current totals. Delivery payout is the delivery-level amount; entering an adjustment never changes or duplicates Delivery payouts. **DEFERRED:** coverage-period efficiency, earnings/hour, earnings/mile, and merchant/category allocation.
 
 ## Geospatial data and privacy
@@ -76,3 +80,9 @@ Compose uses official mongo:7.0, the dgi-mongodb container, a dedicated persiste
 - **DEFERRED:** CSV export, temporal Merchant location history, and application-managed backup/restore are not implemented.
 
 See [architecture](docs/architecture.md), [data model](docs/data-model.md), [geocoding](docs/geocoding.md), [analytics model](docs/analytics-model.md), and [privacy model](docs/privacy-model.md) for implementation details.
+
+## Deferred operations-analysis roadmap
+
+- **A.1 — DEFERRED:** AI operations analyst, OpenAI/tool calling, and AI-assisted explanations or optimization. A.0 provides deterministic reconciliation only.
+- **A.2 — DEFERRED:** Vehicle economics, tax/IRS-mileage analysis, sessions, earnings/hour or earnings/mile, and per-delivery/merchant/category allocation.
+- **DEFERRED:** Rate-based statutory verification and historical legal rates. A multi-city settlement cannot use one Eastvale wage without evidence of applicable jurisdictions and rates. No such assumptions are made here.

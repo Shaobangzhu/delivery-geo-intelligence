@@ -108,3 +108,13 @@
 .prop22-section { margin-top: 24px; }
 .prop22-section h2 { font-size: 18px; }
 .payment-table { min-width: 570px; }
+
+.settlement-details { margin-top: 16px; border: 1px solid #dce8f8; border-radius: 8px; padding: 12px; }
+.settlement-details summary { cursor: pointer; color: #294775; font-size: 13px; font-weight: 700; }
+.settlement-details summary:focus-visible { outline: 2px solid #0875ff; outline-offset: 4px; }
+.settlement-details .form-grid { margin-top: 14px; }
+.settlement-reconciliation { margin-top: 14px; background: #f3f8ff; padding: 10px; border-radius: 6px; font-size: 12px; }
+.settlement-reconciliation p { margin: 0 0 6px; }
+.settlement-reconciliation dl { margin: 0; }
+.settlement-reconciliation dl div { display: flex; justify-content: space-between; gap: 12px; margin: 6px 0; }
+.settlement-reconciliation dd { margin: 0; font-variant-numeric: tabular-nums; }

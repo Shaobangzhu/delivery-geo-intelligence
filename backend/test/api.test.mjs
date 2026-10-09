@@ -373,6 +373,48 @@ test("Merchant and Delivery API against an isolated DGI MongoDB test database", 
       assert.deepEqual((await api("GET", "/api/earnings-adjustments")).body.data, []);
     });
 
+    await t.test("settlement backfill, nested partial updates, explicit clearing, identity, and derived detail output", async () => {
+      const base = { type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
+      const legacy = await api("POST", "/api/earnings-adjustments", base);
+      const id = legacy.body.data.id;
+      const path = `/api/earnings-adjustments/${id}`;
+      assert.equal(legacy.body.reconciliation.status, "insufficient_data");
+      assert.equal(Object.hasOwn(legacy.body.data, "settlementDetails"), false);
+      const details = { engagedSeconds: 30240, engagedMiles: 38.123456, eligibleEarningsExcludingTips: 100, reportedGuaranteedAmount: 124.17 };
+      const other = await api("POST", "/api/earnings-adjustments", { ...base, settlementDetails: details });
+      assert.equal(other.status, 201);
+      const backfilled = await api("PATCH", path, { settlementDetails: details });
+      assert.equal(backfilled.status, 200); assert.equal(backfilled.body.data.id, id);
+      assert.equal(backfilled.body.data.amount, 24.17);
+      assert.deepEqual(backfilled.body.data.settlementDetails, details);
+      assert.equal(backfilled.body.reconciliation.status, "matched");
+      const stored = await db.collection("earningsAdjustments").findOne({ _id: new ObjectId(id) });
+      assert.equal(Object.hasOwn(stored, "reconciliation"), false);
+      assert.equal(Object.hasOwn(stored, "expectedAdjustment"), false);
+      const edited = await api("PATCH", path, { settlementDetails: { engagedMiles: 40.123456 } });
+      assert.deepEqual(edited.body.data.settlementDetails, { ...details, engagedMiles: 40.123456 });
+      assert.deepEqual((await api("GET", `/api/earnings-adjustments/${other.body.data.id}`)).body.data.settlementDetails, details);
+      const mismatch = await api("PATCH", path, { settlementDetails: { reportedGuaranteedAmount: 130 } });
+      assert.equal(mismatch.body.reconciliation.status, "mismatch");
+      assert.equal(mismatch.body.reconciliation.difference, -5.83);
+      const removed = await api("PATCH", path, { settlementDetails: { eligibleEarningsExcludingTips: null } });
+      assert.equal(Object.hasOwn(removed.body.data.settlementDetails, "eligibleEarningsExcludingTips"), false);
+      assert.equal(removed.body.data.settlementDetails.engagedSeconds, 30240);
+      assert.equal(removed.body.reconciliation.status, "insufficient_data");
+      assert.equal((await api("PATCH", path, { settlementDetails: { engagedSeconds: 0, eligibleEarningsExcludingTips: 0, reportedGuaranteedAmount: 24.17 } })).body.reconciliation.status, "matched");
+      assert.equal((await api("PATCH", path, { coverageStartDate: "2026-09-21", coverageEndDate: "2026-09-21" })).status, 200);
+      assert.equal((await api("PATCH", path, { coverageEndDate: "2026-09-20" })).status, 400);
+      const clear = await api("PATCH", path, { settlementDetails: null });
+      assert.equal(clear.status, 200); assert.equal(Object.hasOwn(clear.body.data, "settlementDetails"), false);
+      assert.equal(clear.body.data.amount, 24.17);
+      assert.equal((await api("GET", path)).body.reconciliation.status, "insufficient_data");
+      assert.equal(Object.hasOwn((await api("GET", "/api/earnings-adjustments")).body, "reconciliation"), false);
+      for (const bad of [{ engagedSeconds: -1 }, { engagedSeconds: 1.5 }, { engagedMiles: -1 }, { reportedGuaranteedAmount: 1.001 }]) {
+        assert.equal((await api("PATCH", path, { settlementDetails: bad })).status, 400);
+      }
+      for (const paymentId of [id, other.body.data.id]) await api("DELETE", `/api/earnings-adjustments/${paymentId}`);
+    });
+
     await t.test("History and Dashboard resolve current merchant metadata by ID", async () => {
       const before = (await api("GET", "/api/dashboard?period=month&asOf=2026-04-20")).body;
       const sameName = before.map.pickupVolume.filter((merchant) => merchant.name === "Synthetic Pickup A");

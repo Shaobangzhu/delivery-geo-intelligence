@@ -136,7 +136,7 @@ test("dashboard API applies one filter to every dataset and preserves payout sam
     assert.equal(year.pickupTimeline.length, 12);
     await db.collection("earningsAdjustments").insertMany([
       { type: "prop22_guarantee", paymentDate: "2026-04-20", amount: 5, coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14" },
-      { type: "prop22_guarantee", paymentDate: "2026-04-26", amount: 20 },
+      { type: "prop22_guarantee", paymentDate: "2026-04-26", amount: 20, settlementDetails: { engagedSeconds: 30240, engagedMiles: 38.123456, eligibleEarningsExcludingTips: 100, reportedGuaranteedAmount: 5000 } },
       { type: "prop22_guarantee", paymentDate: "2026-04-19", amount: 3 },
       { type: "prop22_guarantee", paymentDate: "2026-04-27", amount: 7 },
       { type: "prop22_guarantee", paymentDate: "2026-05-01", amount: 11 },

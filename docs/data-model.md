@@ -7,7 +7,7 @@ The application uses the native MongoDB Node.js driver. The application database
 | Collection | Fields | Indexes |
 | --- | --- | --- |
 | `merchants` | `_id`, `name`, `category`, `publicAddress`, `location`, `city` | `location` 2dsphere |
-| `earningsAdjustments` | `_id`, `type`, `paymentDate`, `amount`, optional `coverageStartDate`, `coverageEndDate`, `notes` | `paymentDate` descending |
+| `earningsAdjustments` | `_id`, `type`, `paymentDate`, `amount`, optional `coverageStartDate`, `coverageEndDate`, `notes`, `settlementDetails` | `paymentDate` descending |
 | `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `payout`, `distanceMiles`, `deliveryDurationSeconds`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt` |
 
 A Merchant is one **physical pickup location**, not a brand. Two branches of one brand use separate IDs, even when they share a name. `category` is `restaurant`, `grocery`, `retail`, or `other`. `publicAddress` is a verified public business address; `location` is its exact stored-geocode GeoJSON Point in `[longitude, latitude]` order. New Merchant writes require an address and reject client-supplied coordinates. Earlier records can lack `publicAddress`; they retain their existing location until a verified address correction is supplied. No merchant or delivery records are seeded.
@@ -58,3 +58,35 @@ List responses contain `data` and `pagination` with `page`, `pageSize`, `total`,
 ## Verification data
 
 Integration tests use a uniquely named temporary database on the DGI MongoDB service and delete it afterward. Test merchants use synthetic public-address tokens and coordinates returned by a mock geocoder. The tests do not contain customer addresses, real destination coordinates, or fabricated real delivery history.
+
+## Optional official settlement observations (A.0)
+
+The existing `earningsAdjustments` collection is extended, with no migration, competing collection, or new index:
+
+```ts
+{
+  _id: ObjectId,
+  type: "prop22_guarantee",
+  paymentDate: string, // YYYY-MM-DD; date actual money was received
+  amount: number, // positive USD, at most two decimals; authoritative receipt
+  coverageStartDate?: string,
+  coverageEndDate?: string,
+  notes?: string,
+  settlementDetails?: {
+    engagedSeconds?: number, // nonnegative safe integer, official engaged time
+    engagedMiles?: number, // nonnegative finite observation, not rounded in storage
+    eligibleEarningsExcludingTips?: number, // nonnegative USD, at most two decimals
+    reportedGuaranteedAmount?: number // nonnegative USD, at most two decimals
+  }
+}
+```
+
+Currency is bounded to a safe integer-cent range. Settlement zero is valid and differs from missing. Delivery duration and distance are manually recorded delivery observations; they do not substitute for official engaged time or miles. Delivery payouts are not used to derive eligible earnings. Tips do not enter the guarantee comparison. No statement files/screenshots, reconciliation output, expected amount, or other redundant calculations are persisted.
+
+Coverage dates remain an inclusive pair of statement dates and may be equal. No automatic inference from payment date or timestamp conversion occurs. If a future calculation needs an exact window, interpret `[start date midnight, midnight after end date)` in `America/Los_Angeles`; Uber's actual cutoff hour may differ. A.0 does not allocate income over that window.
+
+POST accepts optional `settlementDetails`; its fields cannot be null. PATCH omission preserves existing values. A nested partial object merges with its existing siblings; a field's `null` removes that field, and `settlementDetails: null` removes the entire object. Empty nested PATCH objects are rejected. The resulting document is validated before MongoDB dotted `$set`/`$unset` writes. Amount/date and original identity are preserved unless explicitly edited. Clearing all observations in the modal clears the object. Existing records with no details remain editable with blank controls.
+
+GET list retains `{ data: [...] }`. GET detail, POST, and PATCH return `{ data, reconciliation }`. The derived result includes `method: "reported_guarantee"`, `status`, `receivedAdjustment`, nullable `expectedAdjustment`/`difference`, and `tolerance: 0.01`. Missing or unusable comparison inputs produce `insufficient_data`. A documented method identifies this calculation independently of any future sourced rate-based verification.
+
+Uber statements supply the manually entered observations and receipts. No real statement is part of the repository or test fixtures.

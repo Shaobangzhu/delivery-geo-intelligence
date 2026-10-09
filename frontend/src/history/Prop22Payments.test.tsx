@@ -11,7 +11,7 @@ function install() {
     let data: unknown;
     if (url === "/api/merchants") data = { data: [] };
     else if (url.startsWith("/api/deliveries")) data = { data: [], pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 } };
-    else if (method === "GET") data = { data: rows };
+    else if (method === "GET") data = url === "/api/earnings-adjustments" ? { data: rows } : { data: rows[0], reconciliation: { status: "insufficient_data", expectedAdjustment: null, difference: null } };
     else if (method === "DELETE") { rows = []; return { ok: true, status: 204 } as Response; }
     else {
       const payload = JSON.parse(String(init?.body));
@@ -35,7 +35,7 @@ it("captures, displays, edits, and confirms deletion of independent Prop 22 paym
   fireEvent.change(screen.getByLabelText("Payment Date *"), { target: { value: "2026-10-08" } });
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
   expect(mock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
-  await user.type(screen.getByLabelText("Amount *"), "24.17");
+  await user.type(screen.getByLabelText("Amount Received *"), "24.17");
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   const section = screen.getByRole("heading", { name: "Prop 22 Payments" }).closest("section")!;
@@ -44,8 +44,8 @@ it("captures, displays, edits, and confirms deletion of independent Prop 22 paym
   const post = mock.mock.calls.find(([, init]) => init?.method === "POST")!;
   expect(JSON.parse(String(post[1]?.body))).toEqual({ type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 });
   await user.click(screen.getByRole("button", { name: "Edit Prop 22 payment 2026-10-08" }));
-  expect(screen.getByLabelText("Amount *")).toHaveValue(24.17);
-  await user.clear(screen.getByLabelText("Amount *")); await user.type(screen.getByLabelText("Amount *"), "25");
+  expect(screen.getByLabelText("Amount Received *")).toHaveValue(24.17);
+  await user.clear(screen.getByLabelText("Amount Received *")); await user.type(screen.getByLabelText("Amount Received *"), "25");
   fireEvent.change(screen.getByLabelText("Payment Date *"), { target: { value: "2026-10-09" } });
   fireEvent.change(screen.getByLabelText("Coverage Start Date"), { target: { value: "2026-09-21" } });
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
@@ -76,7 +76,7 @@ it("keeps a payment modal pending, prevents duplicate saves, and shows a safe fa
   vi.stubGlobal("fetch", mock); render(<History />);
   await user.click(screen.getByRole("button", { name: /Add Prop 22 Payment/ }));
   fireEvent.change(screen.getByLabelText("Payment Date *"), { target: { value: "2026-10-08" } });
-  await user.type(screen.getByLabelText("Amount *"), "10");
+  await user.type(screen.getByLabelText("Amount Received *"), "10");
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
   expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
   expect(screen.getByLabelText("Payment Date *")).toBeDisabled();
