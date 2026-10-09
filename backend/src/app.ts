@@ -13,6 +13,7 @@ import {
 import { reconcileSettlement } from "./settlement.js";
 import { registerSessionRoutes } from "./sessionRoutes.js";
 import { getEfficiencyAnalytics } from "./efficiency.js";
+import { getSettlementEfficiency, SettlementEfficiencyLimitError } from "./settlementEfficiency.js";
 
 function invalid(response: Response, error: ZodError) {
   return response.status(400).json({
@@ -56,6 +57,14 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   }
   app.use(express.json({ limit: "32kb" }));
   registerSessionRoutes(app, db, withReferenceWrite, invalid);
+
+  app.get("/api/efficiency/settlements", async (_request, response) => {
+    try { return response.json(await getSettlementEfficiency(db)); }
+    catch (error) {
+      if (error instanceof SettlementEfficiencyLimitError) return response.status(503).json({ error: "Settlement efficiency dataset exceeds local analysis limits" });
+      throw error;
+    }
+  });
 
   app.get("/api/efficiency", async (request, response) => {
     const parsed = dashboardFilterSchema.safeParse(request.query);

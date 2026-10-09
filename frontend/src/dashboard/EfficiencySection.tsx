@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Category, Period } from "./api";
 import { loadEfficiency, type EfficiencyData, type EfficiencyMetric } from "./efficiencyApi";
 import { strategies } from "../history/sessionApi";
+import { SettlementEfficiencySection } from "./SettlementEfficiencySection";
 
 function valueLabel(metric: EfficiencyMetric) {
   if (metric.value === null) return "—";
@@ -71,5 +72,6 @@ export function EfficiencySection({ period, category }: { period: Period; catego
       <details><summary>Data completeness</summary><dl className="efficiency-quality">{Object.entries(data.dataQuality).map(([key, value]) =>
         <div key={key}><dt>{qualityLabels[key] ?? key}</dt><dd>{value}</dd></div>)}</dl></details>
     </>}
+    <SettlementEfficiencySection />
   </section>;
 }

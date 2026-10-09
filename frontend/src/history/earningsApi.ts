@@ -21,6 +21,7 @@ export interface EarningsAdjustment {
   amount: number;
   coverageStartDate?: string;
   coverageEndDate?: string;
+  sessionCoverageConfirmed?: boolean;
   notes?: string;
   settlementDetails?: SettlementDetails;
 }

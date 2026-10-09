@@ -41,6 +41,13 @@ function addCivilDays(date: Date, days: number): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
 }
 
+/** Inclusive statement dates become a half-open Los Angeles calendar interval. */
+export function resolveCoverageDates(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  return { start: localMidnight(start), endExclusive: localMidnight(addCivilDays(end, 1)), timeZone: TIME_ZONE };
+}
+
 export function resolveDashboardFilters(filters: DashboardFilters, now = new Date()) {
   const anchor = new Date(`${filters.asOf ?? localDate(now)}T00:00:00Z`);
   let startCivil: Date;

@@ -58,6 +58,12 @@ Merchant list/detail responses include `deliveryCount`, derived from Delivery re
 
 List responses contain `data` and `pagination` with `page`, `pageSize`, `total`, and `totalPages`. A malformed ID or request returns 400. A well-formed missing delivery returns 404. A missing referenced merchant returns 422. All API errors avoid echoing request contents or database errors.
 
+## A.2.1 settlement completeness metadata
+
+`EarningsAdjustmentDocument` adds only optional `sessionCoverageConfirmed?: boolean`. Legacy absence means unconfirmed; explicit false/true are accepted by the existing strict POST/PATCH schemas and returned through existing payment responses. Omitted PATCH preserves the flag; null and string coercion are rejected. The Payment modal sends the flag only when manually changed. No defaults, automatic completeness inference, new collection, index, or migration are introduced. The flag never changes the actual received amount, A.0 reconciliation, or cash-basis earnings. It remains stored even if coverage dates are cleared or structural checks fail.
+
+Coverage dates retain their inclusive ISO date meaning. Derived A.2.1 analysis resolves LA midnight boundaries and uses existing Delivery pickup times and explicit `sessionId` links; it stores no analytics results. `GET /api/efficiency/settlements` returns `{ data, limit: 20, totalSettlements, hasMore }` with newest-first settlement aggregates, confirmation/structural status, counts, rates, costs, and reasons. Output contains no Delivery IDs, notes or destination coordinates. Limits fail closed rather than truncating input cohorts; see [analytics model](analytics-model.md). No uniqueness constraint or automatic merging is applied to overlapping payments. A.2.2 final audit remains deferred.
+
 ## Verification data
 
 Integration tests use a uniquely named temporary database on the DGI MongoDB service and delete it afterward. Test merchants use synthetic public-address tokens and coordinates returned by a mock geocoder. The tests do not contain customer addresses, real destination coordinates, or fabricated real delivery history.

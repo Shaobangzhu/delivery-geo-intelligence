@@ -32,7 +32,7 @@ The centered payment modal labels the authoritative income **Amount Received**. 
 
 After saving, reopen the payment to see backend-derived reconciliation: `max(0, reported guarantee − eligible earnings excluding tips)`, compared with the received amount using integer cents and an inclusive one-cent tolerance. Status is Matched, Needs review, or Insufficient data. Edits hide the old result until saved and reopened. Uber statements are the source of truth; offsets, corrections, or separate components can cause a mismatch that this simple comparison cannot explain. Calculated values are diagnostic and never replace received money.
 
-Dashboard **All** Total Earnings combines known delivery payouts with Prop 22 amounts received within the resolved Los Angeles calendar range. Category-specific and merchant earnings remain delivery payouts only: no Prop 22 allocation is attempted. Coverage dates do not affect current totals. Delivery payout is the delivery-level amount; entering an adjustment never changes or duplicates Delivery payouts. **DEFERRED:** Prop 22-adjusted coverage-period efficiency and merchant/category allocation.
+Dashboard **All** Total Earnings combines known delivery payouts with Prop 22 amounts received within the resolved Los Angeles calendar range. Category-specific and merchant earnings remain delivery payouts only: no Prop 22 allocation is attempted. Coverage dates do not affect current totals. Delivery payout is the delivery-level amount; entering an adjustment never changes or duplicates Delivery payouts. A.2.1 adds a separate settlement-period efficiency view; individual/merchant/category adjustment allocation remains **DEFERRED**.
 
 ## Uber Eats sessions and personal vehicle economics (A.1)
 
@@ -104,10 +104,21 @@ Complete-session and strategy metrics explicitly remain **All Categories**, even
 
 Estimated session profit uses complete linked payouts minus complete A.1 modeled vehicle cost, with valid duration and known miles. Partial costs stay visible and incomplete sessions are excluded from profit cohorts. Zero miles permits a known zero modeled cost, but no per-mile rate. Cost previews use current vehicle settings. Profit is **pre-tax, excluding unallocated Prop 22 adjustments**; IRS deductions are neither revenue nor vehicle cost. Existing cash-basis Dashboard earnings, rankings, settlements, and maps are unchanged. Data-quality counts identify missing observations and excluded sessions. No AI or recommendations are implemented.
 
+## Prop 22 settlement-aware efficiency (A.2.1)
+
+Dashboard's **Prop 22 Work-Period Efficiency** subsection has its own recent-settlement selector, independent of calendar/category filters: **All Categories · Settlement Coverage Period**. `GET /api/efficiency/settlements` returns the 20 newest payments and checks coverage conflicts against all stored settlements within documented local analysis limits. It never adds these work-period totals to cash-basis Dashboard earnings.
+
+Inclusive statement coverage dates resolve to `[Los Angeles midnight on start, midnight after end)`, including DST. Covered Delivery revenue uses `pickedUpAt` as an attribution approximation and adds only the specific payment's actual received amount, never its reported guarantee or expected adjustment. Missing payout remains unknown; known zero is valid. Recorded gross revenue can be shown before session completeness is established and is not independent proof that all activity was captured.
+
+The existing Payment modal has a manually controlled **I have recorded all Uber Eats deliveries and sessions for this settlement period** checkbox. Absent metadata is unconfirmed. Confirmation is retained even when checks fail; it never changes payment amounts or A.0 reconciliation. Complete-session hours/miles and adjusted rates require confirmation plus complete known payouts and consistent explicit links. Missing sessions/miles, unlinked deliveries, boundary-crossing or overlapping sessions, pickups outside linked sessions/coverage, and overlapping/duplicate settlements block full-period rates. No boundary splitting or payment allocation is performed. Empty activity is not assumed to be zero revenue.
+
+Profit subtracts complete current A.1 modeled costs only when full period coverage passes; partial costs remain labeled observations from included sessions. Unknown tire life/depreciation blocks profit even when earnings efficiency is ready. Zero miles permits no per-mile denominator. No IRS deductions, taxes, or generic electricity assumptions are added. This is a user-confirmed convenience sample with approximate statement cutoffs, not independently verified complete Uber data. A.2.2 Final Audit & Freeze and AI remain deferred.
+
 ## Operations-analysis roadmap
 
 - **A.1 — IMPLEMENTED:** Operating sessions, explicit Delivery links, personal vehicle assumptions, cost completeness, and annual business-mileage history.
 - **A.2 CORE — IMPLEMENTED:** Deterministic delivery/session rates, modeled pre-tax session profit, descriptive strategy comparison, and data completeness.
-- **DEFERRED:** Prop 22-adjusted biweekly operating efficiency, settlement-to-session matching, merchant profitability, and adjustment allocation.
+- **A.2.1 — IMPLEMENTED:** Settlement-period gross revenue, explicitly confirmed complete-session denominators, adjusted rates, and modeled work-period profit with consistency safeguards.
+- **A.2.2 — DEFERRED:** Final Audit & Freeze. Merchant profitability and individual/session/strategy adjustment allocation remain outside the implemented scope.
 - **FUTURE — DEFERRED:** AI operations analyst, OpenAI/tool calling, AI explanations, and autonomous optimization.
 - **DEFERRED:** Rate-based statutory verification and historical legal rates. A multi-city settlement cannot use one Eastvale wage without evidence of applicable jurisdictions and rates. No such assumptions are made here.

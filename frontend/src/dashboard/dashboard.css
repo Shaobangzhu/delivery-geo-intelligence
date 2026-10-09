@@ -72,3 +72,6 @@
 .efficiency-section td small { display: block; margin-top: 4px; color: #547297; }
 .efficiency-quality > div { display: flex; justify-content: space-between; gap: 10px; max-width: 580px; padding: 4px 0; font-size: 11px; }
 .efficiency-section summary { cursor: pointer; }
+.settlement-efficiency { margin-top: 18px; padding-top: 6px; border-top: 1px solid #dce8f7; }
+.settlement-efficiency ul { padding-left: 20px; font-size: 11px; line-height: 1.6; }
+.settlement-efficiency .form-field { max-width: 580px; margin-top: 10px; }

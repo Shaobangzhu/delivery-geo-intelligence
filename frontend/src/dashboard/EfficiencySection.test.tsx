@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { EfficiencySection } from "./EfficiencySection";
 import type { EfficiencyData, EfficiencyMetric, SessionEfficiency } from "./efficiencyApi";
 
+vi.mock("./SettlementEfficiencySection", () => ({ SettlementEfficiencySection: () => <section aria-label="Settlement efficiency" /> }));
+
 const metric = (value: number | null, unit: EfficiencyMetric["unit"] = "USD", sampleCount = 1, excludedCount = 0): EfficiencyMetric =>
   ({ value, unit, sampleCount, excludedCount, reasons: value === null ? ["incomplete_vehicle_cost"] : [] });
 const sessions: SessionEfficiency = {

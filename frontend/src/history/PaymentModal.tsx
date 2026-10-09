@@ -11,6 +11,7 @@ export function PaymentModal({ payment, onClose, onSaved }: {
   const [start, setStart] = useState(payment?.coverageStartDate ?? "");
   const [end, setEnd] = useState(payment?.coverageEndDate ?? "");
   const [notes, setNotes] = useState(payment?.notes ?? "");
+  const [coverageConfirmed, setCoverageConfirmed] = useState(payment?.sessionCoverageConfirmed === true);
   const details = payment?.settlementDetails;
   const [hours, setHours] = useState(details?.engagedSeconds === undefined ? "" : String(Math.floor(details.engagedSeconds / 3600)));
   const [minutes, setMinutes] = useState(details?.engagedSeconds === undefined ? "" : String(Math.floor(details.engagedSeconds % 3600 / 60)));
@@ -74,7 +75,8 @@ export function PaymentModal({ payment, onClose, onSaved }: {
       await savePayment({ type: "prop22_guarantee", paymentDate: date, amount: value,
         ...(start ? { coverageStartDate: start, coverageEndDate: end } : payment ? { coverageStartDate: null, coverageEndDate: null } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : payment ? { notes: null } : {}),
-        ...settlementPayload
+        ...settlementPayload,
+        ...(coverageConfirmed !== (payment?.sessionCoverageConfirmed === true) ? { sessionCoverageConfirmed: coverageConfirmed } : {})
       }, payment?.id);
       onSaved();
     } catch { setError(paymentError()); }
@@ -90,6 +92,10 @@ export function PaymentModal({ payment, onClose, onSaved }: {
         <div className="form-field"><label htmlFor={`${id}-start`}>Coverage Start Date</label><input id={`${id}-start`} type="date" value={start} onChange={(e) => setStart(e.target.value)} disabled={busy} /></div>
         <div className="form-field"><label htmlFor={`${id}-end`}>Coverage End Date</label><input id={`${id}-end`} type="date" value={end} onChange={(e) => setEnd(e.target.value)} disabled={busy} /></div>
         <div className="form-field form-wide"><label htmlFor={`${id}-notes`}>Optional Notes</label><textarea id={`${id}-notes`} rows={3} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} /></div>
+      </div>
+      <div className="form-field coverage-confirmation">
+        <label><input type="checkbox" checked={coverageConfirmed} onChange={(e) => setCoverageConfirmed(e.target.checked)} disabled={busy} /> I have recorded all Uber Eats deliveries and sessions for this settlement period.</label>
+        <p className="duration-help">This manual confirmation enables full-period efficiency when coverage dates and consistency checks pass. It does not change received income or prove that no activity is missing.</p>
       </div>
       <details className="settlement-details">
         <summary>Settlement Details (Optional)</summary>

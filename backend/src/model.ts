@@ -139,6 +139,7 @@ const adjustmentFields = {
   amount: settlementCurrencySchema.positive(),
   coverageStartDate: z.iso.date().optional(),
   coverageEndDate: z.iso.date().optional(),
+  sessionCoverageConfirmed: z.boolean().optional(),
   notes: z.string().trim().max(2000).optional(),
   settlementDetails: settlementDetailsSchema.optional()
 };
