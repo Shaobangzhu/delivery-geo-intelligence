@@ -40,6 +40,7 @@ it("loads one dashboard response for the cards, timeline, ranking, and map shell
   expect(within(screen.getByRole("table")).getByText("Synthetic Pickup")).toBeInTheDocument();
   expect(screen.getByText("1 filtered merchant locations available")).toBeInTheDocument();
   expect(String(fetchMock.mock.calls[0][0])).toContain("period=week&category=all");
+  expect(fetchMock.mock.calls.every(([url]) => !String(url).includes("/api/ai/ask"))).toBe(true);
 });
 
 it("uses only the metric selector for canonical representations and filters destination cells", async () => {
@@ -75,6 +76,7 @@ it("uses only the metric selector for canonical representations and filters dest
   await user.click(screen.getByRole("button", { name: "Month" }));
   await user.click(screen.getByRole("button", { name: "Grocery" }));
   await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("destination-heatmap?period=month&category=grocery"))).toBe(true));
+  expect(fetchMock.mock.calls.every(([url]) => !String(url).includes("/api/ai/ask"))).toBe(true);
   expect(screen.getByText("Observed destination activity associated with grocery deliveries.")).toBeInTheDocument();
 });
 

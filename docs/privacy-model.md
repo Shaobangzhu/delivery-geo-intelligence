@@ -37,3 +37,13 @@ Changing the precision setting affects new or replaced destinations only; existi
 - Free-text notes must not be used for customer addresses or other private location details; this boundary concerns the dedicated destination field and cannot classify every possible free-text note.
 
 No real address, exact residential coordinate, or fabricated delivery history is included in code, tests, or documentation.
+
+## Prompt B: AI explanation data boundary
+
+The on-demand Ask DGI endpoint sends the submitted question and compact domain aggregates to OpenAI. It excludes stored Delivery/Session/Payment notes, Merchant names/addresses, exact/generalized destination points, raw map payloads and credentials. Settlement IDs/dates and aggregate financial observations can be transmitted. Questions are user input: do not paste private addresses, notes or secrets. The application does not claim automatic detection/redaction of everything a user might type.
+
+The OpenAI key is read only on the backend from `OPENAI_API_KEY`, never a VITE variable or response field. Optional `OPENAI_MODEL` selects a supported Responses/function-calling model. Existing frontend/private ArcGIS credential separation and residential generalization remain unchanged. Tool schemas reject arbitrary fields/query operators; their fixed allowlist only calls existing read-only services through the process coordination queue. No filesystem, shell, network-search or write tools exist. Retrieved values are treated as data rather than instructions, and no raw free-text records enter the model context.
+
+User questions, answers, provider errors and tool payloads are not persisted or logged. With `NODE_ENV=development`, logs contain only generated request ID, model, allowlisted tool names/count, latency, provider token totals and outcome. Errors expose controlled codes/messages, not SDK objects or keys. HTTP responses use `Cache-Control: no-store`; OpenAI requests use `store: false`. These settings do not assert that the provider retains no data under its own policies. Existing privacy limits of observational data remain applicable.
+
+React renders answers as escaped plain text. Close/unmount aborts pending requests; there is no chat collection or long-term memory. Numeric metrics are rendered from this request's evidence, but qualitative LLM explanations can still be mistaken or manipulated; this is not a complete prompt-injection or semantic correctness guarantee. No live provider test was performed, and mocked tests use only synthetic records in isolated databases.

@@ -62,7 +62,7 @@ Nested PATCH writes merge and validate the resulting document, then update only 
 
 `backend/src/settlement.ts` owns the deterministic `reported_guarantee` comparison. It does not access MongoDB, Delivery data, providers, or an LLM. A future sourced rate-based method can be a separate diagnostic calculator; A.0 makes no wage assumptions. React fetches the saved detail result with abort/active guards, never replaces entered money, and hides stale diagnostics after edits. Reopen after saving for the new result. Native details/summary provides progressive disclosure within the existing modal and focus management.
 
-Dashboard queries still project only received amounts and payment dates. A.0 introduced no extra income or Dashboard KPI. Real statements, private exports, and credentials are not committed. A.1 adds the independent operating/cost foundation below; A.2/A.2.1 implement separate efficiency views. AI assistance remains deferred.
+Dashboard queries still project only received amounts and payment dates. A.0 introduced no extra income or Dashboard KPI. Real statements, private exports, and credentials are not committed. A.1 adds the independent operating/cost foundation below; A.2/A.2.1 implement separate efficiency views. Prompt B adds optional read-only explanations below.
 
 ## A.1 operating sessions and vehicle assumptions
 
@@ -76,7 +76,7 @@ This protection is for the existing single Express process. Multiple collections
 
 Vehicle/annual initialization is an explicit CLI or UI action using `$setOnInsert` and fixed unique `_id` keys. It inserts missing confirmed records, never overwrites edits, and is absent from normal startup. The API calculates session costs from the current profile with a pure service; it persists observations/assumptions, not derived costs. Settings changes refresh displayed previews and do not modify past Session records. Historical profile versions and expense ledgers are not implemented.
 
-Annual mileage separates Uber Eats, Realtor, and other purposes; it does not aggregate or assume deduction eligibility from sessions. Only sourced 2024/2025 deduction rates are supported. Economic cost and deduction previews do not enter cash-basis Dashboard earnings or Prop 22 reconciliation. No external vehicle APIs, timers, tracking, AI, or tax-return engine are implemented. Deterministic efficiency and modeled pre-tax Session/work-period profit are implemented; merchant profitability and optimization remain deferred.
+Annual mileage separates Uber Eats, Realtor, and other purposes; it does not aggregate or assume deduction eligibility from sessions. Only sourced 2024/2025 deduction rates are supported. Economic cost and deduction previews do not enter cash-basis Dashboard earnings or Prop 22 reconciliation. No external vehicle APIs, timers, tracking, or tax-return engine are implemented. Deterministic efficiency and modeled pre-tax Session/work-period profit are implemented; merchant profitability and optimization remain deferred.
 
 ## Deterministic analytics and A.2.2 freeze
 
@@ -84,4 +84,23 @@ Annual mileage separates Uber Eats, Realtor, and other purposes; it does not agg
 
 The existing process queue now coordinates domain writes with Dashboard, destination-heatmap, Core, settlement, and Session multi-query reads. It prevents those reads from observing intermediate association changes or different write states across queries in this Express process. Payment PATCH performs read/merge/validation/write in the same queue. Separate HTTP requests are not a shared snapshot; external writes, other processes, and future direct service callers need equivalent coordination. Geocoding runs before queued writes and never holds the queue while waiting for ArcGIS.
 
-**A.2 CORE FROZEN:** A.0–A.2.1 passed the A.2.2 synthetic regression, typecheck, and build gates. Frozen scope is the local single-process PoC, with documented nontransactional recovery and analytical limits. Future read-only Agent integration can reuse the deterministic calculations but must preserve read/write coordination and privacy projections. No Agent, OpenAI calls, SDK, or tool wrappers are implemented.
+**A.2 CORE FROZEN:** A.0–A.2.1 passed the A.2.2 synthetic regression, typecheck, and build gates. Frozen scope is the local single-process PoC, with documented nontransactional recovery and analytical limits. Prompt B reuses those calculations with the same coordination and aggregate privacy boundary, without changing the frozen services.
+
+## Prompt B: on-demand AI Operations Analyst
+
+```text
+Dashboard Ask DGI → POST /api/ai/ask → Express orchestrator
+  ↔ OpenAI Responses API (official Node SDK, function calling)
+  → fixed six-tool registry → existing process read/write queue
+  → Dashboard / Core / settlement domain services → MongoDB
+  → compact aggregates + evidence → model qualitative explanation
+  → server resolves evidence IDs to deterministic metric displays → React plain text
+```
+
+`ai/provider.ts` creates only a server-side SDK client; `ai/tools.ts` owns strict schemas, Zod validation, typed handlers and aggregate projections. `ai/agent.ts` bounds execution, tool payloads and time, validates final structured output, and emits metadata only. `ai/routes.ts` validates the HTTP boundary, generates request IDs, handles safe errors and client cancellation. App registration injects the existing queue; no HTTP round-trip, independent calculation engine, write tool, model-generated query, or new collection is used.
+
+Six tools are `get_period_summary`, `get_delivery_efficiency`, `get_session_efficiency`, `compare_strategies`, `get_settlement_efficiency`, and `get_data_quality`; schemas/service mappings and configuration are listed in README. A request pins calendar resolution time, but separate tool reads can see later completed edits. No queue is held during OpenAI requests. Already-running MongoDB operations are not forcibly cancelled; a cancelled queued tool checks its signal before reading.
+
+`OPENAI_API_KEY` stays in backend environment only. `OPENAI_MODEL` defaults to documented `gpt-4.1-mini`; invalid AI configuration disables just the endpoint. SDK retries are off; three rounds/six executions/four provider requests and per-response token, payload and 60-second limits prevent indefinite loops. Structured final explanations cannot supply their own numeric metric values; server-rendered evidence preserves null/zero, units, sample counts and reasons. This does not guarantee the model selected the right scope or qualitative interpretation.
+
+Only explicit Ask submissions contact OpenAI. The panel is independent of Dashboard filters, aborts on close/unmount, prevents duplicate submits and clears stale results. Development diagnostics contain request metadata/token totals only, with no prompts, replies or tool payloads. Provider storage is disabled for Responses (`store: false`); no persistent conversation or local telemetry database exists. Mocked tests cover SDK exchanges and safe failures; isolated MongoDB integration confirms no domain mutation. Live OpenAI access is unverified in this milestone.

@@ -14,6 +14,8 @@ import { reconcileSettlement } from "./settlement.js";
 import { registerSessionRoutes } from "./sessionRoutes.js";
 import { getEfficiencyAnalytics } from "./efficiency.js";
 import { getSettlementEfficiency, SettlementEfficiencyLimitError } from "./settlementEfficiency.js";
+import { registerAiRoutes } from "./ai/routes.js";
+import type { Analyst } from "./ai/agent.js";
 
 function invalid(response: Response, error: ZodError) {
   return response.status(400).json({
@@ -41,7 +43,7 @@ const sorts: Record<string, Sort> = {
   distanceAsc: { distanceMiles: 1, _id: 1 }
 };
 
-export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geocodeMerchant: MerchantGeocoder) {
+export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geocodeMerchant: MerchantGeocoder, analyst?: Analyst) {
   const app = express();
   const merchants = db.collection<MerchantDocument>("merchants");
   const deliveries = db.collection<DeliveryDocument>("deliveries");
@@ -57,6 +59,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   }
   app.use(express.json({ limit: "32kb" }));
   registerSessionRoutes(app, db, withReferenceWrite, invalid);
+  registerAiRoutes(app, db, withReferenceWrite, analyst);
 
   app.get("/api/efficiency/settlements", async (_request, response) => {
     try { return response.json(await withReferenceWrite(() => getSettlementEfficiency(db))); }

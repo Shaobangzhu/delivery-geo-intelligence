@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { loadDashboard, loadDestinationHeatmap, type Category, type DashboardData, type DestinationHeatmapData, type MerchantRanking, type Metric, type Period } from "../dashboard/api";
 import { DashboardMap } from "../dashboard/DashboardMap";
 import { EfficiencySection } from "../dashboard/EfficiencySection";
+import { AskDgi } from "../dashboard/AskDgi";
 import "../dashboard/dashboard.css";
 
 const periods: { value: Period; label: string }[] = [
@@ -148,6 +149,7 @@ export function Dashboard() {
     <div className="dashboard-heading"><div><div className="section-kicker">Dashboard</div><h1 id="dashboard-title">Observed Delivery Activity</h1></div>
       <div className="dashboard-range" aria-live="polite"><span aria-hidden="true">▦</span> {loading ? "Updating date range…" : data ? `${dateLabel(data.filters.range.startDate)} – ${dateLabel(data.filters.range.endDate)}` : error ? "Date range unavailable" : "Loading date range…"}</div>
     </div>
+    <AskDgi />
     <div className="dashboard-filters">
       <div className="dashboard-filter"><span>Time Period</span><div className="segmented" role="group" aria-label="Time period">{periods.map((item) => <button key={item.value} type="button" aria-pressed={period === item.value} onClick={() => setPeriod(item.value)}>{item.label}</button>)}</div></div>
       <div className="dashboard-filter"><span>Metric / View</span><div className="segmented" role="group" aria-label="Map metric">{metrics.map((item) => <button key={item.value} type="button" aria-pressed={metric === item.value} onClick={() => setMetric(item.value)}>{item.label}</button>)}</div></div>

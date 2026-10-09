@@ -102,7 +102,7 @@ Dashboard has a compact read-only Efficiency Analytics section powered by `GET /
 
 Complete-session and strategy metrics explicitly remain **All Categories**, even when a delivery category is selected. Only sessions whose entire `[startedAt, endedAt)` interval lies within the Los Angeles calendar period are included; overlapping boundary-crossing sessions are counted and excluded without splitting. Session revenue comes solely from explicit Delivery links, including links outside the pickup-date range. Partial known payout remains visible, but payout rates require complete linked revenue; an unlinked session is not assumed to have zero revenue. Strategy groups come only from stored labels, including an Unclassified group, and are descriptive rather than optimality claims.
 
-Estimated session profit uses complete linked payouts minus complete A.1 modeled vehicle cost, with valid duration and known miles. Partial costs stay visible and incomplete sessions are excluded from profit cohorts. Zero miles permits a known zero modeled cost, but no per-mile rate. Cost previews use current vehicle settings. Profit is **pre-tax, excluding unallocated Prop 22 adjustments**; IRS deductions are neither revenue nor vehicle cost. Existing cash-basis Dashboard earnings, rankings, settlements, and maps are unchanged. Data-quality counts identify missing observations and excluded sessions. No AI or recommendations are implemented.
+Estimated session profit uses complete linked payouts minus complete A.1 modeled vehicle cost, with valid duration and known miles. Partial costs stay visible and incomplete sessions are excluded from profit cohorts. Zero miles permits a known zero modeled cost, but no per-mile rate. Cost previews use current vehicle settings. Profit is **pre-tax, excluding unallocated Prop 22 adjustments**; IRS deductions are neither revenue nor vehicle cost. Existing cash-basis Dashboard earnings, rankings, settlements, and maps are unchanged. Data-quality counts identify missing observations and excluded sessions. Prompt B below adds optional explanations, not new calculations or autonomous recommendations.
 
 ## Prop 22 settlement-aware efficiency (A.2.1)
 
@@ -131,5 +131,40 @@ Unsafe monetary inputs are rejected; unsafe Dashboard monetary aggregates return
 - **A.2 CORE — IMPLEMENTED:** Deterministic delivery/session rates, modeled pre-tax session profit, descriptive strategy comparison, and data completeness.
 - **A.2.1 — IMPLEMENTED:** Settlement-period gross revenue, explicitly confirmed complete-session denominators, adjusted rates, and modeled work-period profit with consistency safeguards.
 - **A.2.2 — COMPLETE · A.2 CORE FROZEN:** Final audit, integration hardening, and regression verification for the existing local PoC. Merchant profitability and individual/session/strategy adjustment allocation remain outside the implemented scope.
-- **FUTURE — DEFERRED:** AI operations analyst, OpenAI/tool calling, AI explanations, and autonomous optimization.
+- **PROMPT B — IMPLEMENTED:** On-demand Ask DGI, OpenAI Responses function calling, six read-only aggregate tools, and evidence-backed metric display.
+- **FUTURE — DEFERRED:** Advanced Agent evaluation, deployment, and autonomous optimization.
 - **DEFERRED:** Rate-based statutory verification and historical legal rates. A multi-city settlement cannot use one Eastvale wage without evidence of applicable jurisdictions and rates. No such assumptions are made here.
+
+## Ask DGI — AI Operations Analyst (Prompt B)
+
+The existing Dashboard contains an expandable **Ask DGI** panel. Suggested questions populate its textarea; pressing Ask is the only trigger for OpenAI requests. Page loads, filter changes, record edits, and deterministic analytics never trigger AI calls. Specify the desired period/category in the question: AI scope is independent of the displayed Dashboard filters. Questions can cover cash income, recorded-delivery/session efficiency, explicit strategies, latest Prop 22 work periods, modeled costs, unavailable profit, and supported History backfills. Chinese questions receive Chinese explanations; source metric labels remain English.
+
+The backend uses the official `openai` Node SDK (installed 7.31.0), Responses API, strict function schemas, and a small custom loop. Configure only `backend/.env`:
+
+```text
+OPENAI_API_KEY=<existing backend-only credential>
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+The key already supplied remains untouched. Model omission uses the documented `gpt-4.1-mini` default, a relatively inexpensive model supporting tool calling/structured output without a reasoning step; see [official model documentation](https://developers.openai.com/api/docs/models/gpt-4.1-mini). It can still choose the wrong scope or give a mistaken interpretation. Different configured models must support Responses function calling and strict structured output; unsupported models fail safely. No speculative model IDs, extra Agent framework, or reasoning settings are used. Missing credentials/invalid model configuration disables AI with 503 while ordinary DGI APIs start normally. Restart the backend after changing configuration.
+
+`POST /api/ai/ask` accepts only `{ "question": "How efficient were my delivery sessions?" }` with trimmed length 1–1,000. Success returns `{ requestId, answer, toolsUsed, warnings }`; invalid input returns 400, provider/tool/grounding failures return controlled 502/503 with `{ requestId, error, code }`. Responses are non-streaming and `Cache-Control: no-store`. There is no persistent chat.
+
+| Tool | Strict arguments | Existing service / output |
+| --- | --- | --- |
+| `get_period_summary` | `period`, `category`, nullable `asOf` | Dashboard cash-basis counts/earnings; no merchant/map payload |
+| `get_delivery_efficiency` | same | Core recorded-delivery rates and sample/completeness metadata |
+| `get_session_efficiency` | `period`, nullable `asOf` | Core all-category whole-session payout, costs/profit, quality |
+| `compare_strategies` | same | Core explicit strategy groups, including Unclassified |
+| `get_settlement_efficiency` | nullable `settlementId`, `limit` 1–5 | Existing bounded settlement service; latest by default, ID only within its 20 recent results |
+| `get_data_quality` | `period`, nullable `asOf` | Core quality plus up to five recent settlement completeness summaries |
+
+Period is week/month/year; category is all/restaurant/grocery/retail/other. JSON schemas require every property; optional dates/IDs use null. Zod validates before database access. Tools call the frozen services directly through the existing process read/write queue; they cannot mutate records, generate query expressions, browse, or run code. Different tool reads are not one shared snapshot.
+
+Final responses require successful tool evidence. The model returns a qualitative explanation and evidence IDs; the server validates those IDs and appends exact deterministic values, units, sample/excluded counts and reasons. Null remains unavailable, zero remains known. Unreferenced numeric prose, forged references, and no-evidence answers fail closed. This syntactic guard is not a semantic proof: scope selection and qualitative explanations can still be wrong. Cash/work-period income, partial/full costs, and descriptive/causal comparisons remain distinct. No new financial formula or before/after rate calculation is introduced.
+
+Limits: three tool-calling rounds, six total executions, at most four Responses requests, 1,000 output tokens per request, 60 seconds total, 48,000 bytes per tool result and 128,000 total result bytes. SDK retries are disabled; limits return a controlled failure without a fabricated partial analysis. Cancellation stops further work where possible; an already-running read or provider operation may finish. Repeated explicit submissions can incur additional charges; no budget ledger is implemented.
+
+With `NODE_ENV=development`, the backend prints only structured request ID, configured model, tool names/count, latency, summed provider input/output token usage (when available), and outcome. Questions, answers, raw tool data, credentials and earnings records are not logged or persisted. Usage sums each Responses exchange, including repeated conversation input; it is not a dollar estimate or cached-token billing breakdown. With other NODE_ENV values, those logs are off. No live provider smoke test was performed; mocked SDK tests and isolated MongoDB tests verify the local integration, not account/model access.
+
+OpenAI receives the submitted question and compact aggregate results, not stored notes, addresses, destination points, raw map data, or credentials. Requests use `store: false`; this does not assert zero provider retention. Do not paste private addresses or secrets into questions. Answers render as escaped plain text. No RAG, embeddings, persistent memory, writes, scheduling, streaming, new page, or deployment was added.
