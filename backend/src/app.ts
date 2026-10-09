@@ -12,6 +12,7 @@ import {
 
 import { reconcileSettlement } from "./settlement.js";
 import { registerSessionRoutes } from "./sessionRoutes.js";
+import { getEfficiencyAnalytics } from "./efficiency.js";
 
 function invalid(response: Response, error: ZodError) {
   return response.status(400).json({
@@ -55,6 +56,12 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   }
   app.use(express.json({ limit: "32kb" }));
   registerSessionRoutes(app, db, withReferenceWrite, invalid);
+
+  app.get("/api/efficiency", async (request, response) => {
+    const parsed = dashboardFilterSchema.safeParse(request.query);
+    if (!parsed.success) return invalid(response, parsed.error);
+    return response.json(await getEfficiencyAnalytics(db, parsed.data));
+  });
 
   app.get("/api/health", async (_request, response) => {
     try {

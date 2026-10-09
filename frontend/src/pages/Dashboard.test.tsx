@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { Dashboard } from "./Dashboard";
 import type { DashboardData } from "../dashboard/api";
 
+vi.mock("../dashboard/EfficiencySection", () => ({ EfficiencySection: () => <section aria-label="Efficiency Analytics" /> }));
+
 vi.mock("../dashboard/DashboardMap", () => ({ DashboardMap: ({ metric, destinationCells }: { metric: string; destinationCells: unknown[] }) =>
   <div data-testid="dashboard-map" data-metric={metric} data-destination-count={destinationCells.length} /> }));
 

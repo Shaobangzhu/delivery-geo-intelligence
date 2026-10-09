@@ -24,7 +24,7 @@ Each Dashboard metric determines one canonical ArcGIS representation; there is n
 
 One MapView survives filter and metric changes. Client-side FeatureLayer data and renderers update without recreating the view. Merchant popups show only public pickup and aggregate delivery information. [Dashboard analytics](docs/dashboard.md) explains filters and renderers.
 
-Delivery History captures optional observed delivery duration from your delivery history/Uber Eats record. Add/Edit uses Hours, Minutes, and Seconds; MongoDB stores one positive integer `deliveryDurationSeconds`. Missing duration means unknown or not yet recorded, never zero. Existing records can be manually backfilled, corrected, or cleared by leaving all three fields blank. No migration or automatic backfill is performed. History displays concise durations; duration analytics are **DEFERRED**.
+Delivery History captures optional observed delivery duration from your delivery history/Uber Eats record. Add/Edit uses Hours, Minutes, and Seconds; MongoDB stores one positive integer `deliveryDurationSeconds`. Missing duration means unknown or not yet recorded, never zero. Existing records can be manually backfilled, corrected, or cleared by leaving all three fields blank. No migration or automatic backfill is performed. History displays concise durations; A.2 Core uses recorded duration for delivery-level efficiency, separately from official Prop 22 engaged time.
 
 History also manages **Prop 22 Payments** as independent `EarningsAdjustment` records (`prop22_guarantee`). The secondary Add Prop 22 Payment action opens a centered modal; a separate newest-first table supports edit and confirmed delete. `paymentDate` is a `YYYY-MM-DD` date, while optional paired coverage dates capture the period shown in your Uber record.
 
@@ -32,7 +32,7 @@ The centered payment modal labels the authoritative income **Amount Received**. 
 
 After saving, reopen the payment to see backend-derived reconciliation: `max(0, reported guarantee − eligible earnings excluding tips)`, compared with the received amount using integer cents and an inclusive one-cent tolerance. Status is Matched, Needs review, or Insufficient data. Edits hide the old result until saved and reopened. Uber statements are the source of truth; offsets, corrections, or separate components can cause a mismatch that this simple comparison cannot explain. Calculated values are diagnostic and never replace received money.
 
-Dashboard **All** Total Earnings combines known delivery payouts with Prop 22 amounts received within the resolved Los Angeles calendar range. Category-specific and merchant earnings remain delivery payouts only: no Prop 22 allocation is attempted. Coverage dates do not affect current totals. Delivery payout is the delivery-level amount; entering an adjustment never changes or duplicates Delivery payouts. **DEFERRED:** coverage-period efficiency, earnings/hour, earnings/mile, and merchant/category allocation.
+Dashboard **All** Total Earnings combines known delivery payouts with Prop 22 amounts received within the resolved Los Angeles calendar range. Category-specific and merchant earnings remain delivery payouts only: no Prop 22 allocation is attempted. Coverage dates do not affect current totals. Delivery payout is the delivery-level amount; entering an adjustment never changes or duplicates Delivery payouts. **DEFERRED:** Prop 22-adjusted coverage-period efficiency and merchant/category allocation.
 
 ## Uber Eats sessions and personal vehicle economics (A.1)
 
@@ -96,9 +96,18 @@ Compose uses official mongo:7.0, the dgi-mongodb container, a dedicated persiste
 
 See [architecture](docs/architecture.md), [data model](docs/data-model.md), [geocoding](docs/geocoding.md), [analytics model](docs/analytics-model.md), and [privacy model](docs/privacy-model.md) for implementation details.
 
-## Deferred operations-analysis roadmap
+## Efficiency Analytics (A.2 Core)
+
+Dashboard has a compact read-only Efficiency Analytics section powered by `GET /api/efficiency`, using the existing week/month/year and category filters. Delivery gross payout per recorded hour/mile uses a ratio of sums on the same eligible cohort, never an unweighted mean of individual rates. Known zero payouts are valid; absent payouts and zero/missing denominators are unavailable. Every metric returns sample/excluded counts, units, and incomplete-data reasons.
+
+Complete-session and strategy metrics explicitly remain **All Categories**, even when a delivery category is selected. Only sessions whose entire `[startedAt, endedAt)` interval lies within the Los Angeles calendar period are included; overlapping boundary-crossing sessions are counted and excluded without splitting. Session revenue comes solely from explicit Delivery links, including links outside the pickup-date range. Partial known payout remains visible, but payout rates require complete linked revenue; an unlinked session is not assumed to have zero revenue. Strategy groups come only from stored labels, including an Unclassified group, and are descriptive rather than optimality claims.
+
+Estimated session profit uses complete linked payouts minus complete A.1 modeled vehicle cost, with valid duration and known miles. Partial costs stay visible and incomplete sessions are excluded from profit cohorts. Zero miles permits a known zero modeled cost, but no per-mile rate. Cost previews use current vehicle settings. Profit is **pre-tax, excluding unallocated Prop 22 adjustments**; IRS deductions are neither revenue nor vehicle cost. Existing cash-basis Dashboard earnings, rankings, settlements, and maps are unchanged. Data-quality counts identify missing observations and excluded sessions. No AI or recommendations are implemented.
+
+## Operations-analysis roadmap
 
 - **A.1 — IMPLEMENTED:** Operating sessions, explicit Delivery links, personal vehicle assumptions, cost completeness, and annual business-mileage history.
-- **A.2 — DEFERRED:** Efficiency/net-earnings analytics, earnings/hour or earnings/mile, merchant profitability, and per-delivery/merchant/category allocation.
+- **A.2 CORE — IMPLEMENTED:** Deterministic delivery/session rates, modeled pre-tax session profit, descriptive strategy comparison, and data completeness.
+- **DEFERRED:** Prop 22-adjusted biweekly operating efficiency, settlement-to-session matching, merchant profitability, and adjustment allocation.
 - **FUTURE — DEFERRED:** AI operations analyst, OpenAI/tool calling, AI explanations, and autonomous optimization.
 - **DEFERRED:** Rate-based statutory verification and historical legal rates. A multi-city settlement cannot use one Eastvale wage without evidence of applicable jurisdictions and rates. No such assumptions are made here.

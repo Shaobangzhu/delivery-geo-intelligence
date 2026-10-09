@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { loadDashboard, loadDestinationHeatmap, type Category, type DashboardData, type DestinationHeatmapData, type MerchantRanking, type Metric, type Period } from "../dashboard/api";
 import { DashboardMap } from "../dashboard/DashboardMap";
+import { EfficiencySection } from "../dashboard/EfficiencySection";
 import "../dashboard/dashboard.css";
 
 const periods: { value: Period; label: string }[] = [
@@ -178,5 +179,6 @@ export function Dashboard() {
       </div>
     </div>}
     <div className="dashboard-methodology"><strong>Methodology</strong><span>Based on personally observed delivery activity in the displayed Los Angeles time range. All-category total earnings include known delivery payouts and Prop 22 payments received in this range. Category and merchant earnings use delivery payouts only; averages use their known payout sample. Destination locations are generalized, and results do not represent overall demand.</span></div>
+    <EfficiencySection period={period} category={category} />
   </section>;
 }
