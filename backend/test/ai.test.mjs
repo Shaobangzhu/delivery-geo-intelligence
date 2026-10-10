@@ -19,11 +19,11 @@ const session = { _id: sessionId, startedAt: new Date("2026-03-08T09:00:00Z"), e
 const delivery = { _id: new ObjectId(), merchantId, pickedUpAt: session.startedAt, sessionId, payout: 0, distanceMiles: 1, deliveryDurationSeconds: 3600 };
 const payment = { _id: new ObjectId(), type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 20,
   coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: false };
-const args = { period: "month", asOf: "2026-03-08" };
+const args = { period: "month", asOf: "2026-03-08", year: null };
 const defaultArgs = (name) => name === "get_annual_uber_summary" ? { years: [2022], includeMonthly: false } : name === "get_settlement_efficiency" ? { settlementId: null, limit: 1 }
   : { ...args, ...(["get_period_summary", "get_delivery_efficiency"].includes(name) ? { category: "all" } : {}) };
 function fixture() {
-  const range = resolveDashboardFilters({ ...args, category: "all" }, now);
+  const range = resolveDashboardFilters({ period: args.period, asOf: args.asOf, category: "all" }, now);
   const filters = { period: range.period, category: range.category, range: { startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone } };
   const efficiency = { filters, deliveryEfficiency: calculateDeliveryEfficiency([delivery]), sessionEfficiency: aggregateSessionEfficiency([calculateSessionEfficiency(session, [delivery], null)]),
     strategyComparison: ["wide_area_marathon", "home_based_multi_order", "eastvale_local_only", "other", "unclassified"].map((strategy) => ({ strategy, ...aggregateSessionEfficiency(strategy === session.strategy ? [calculateSessionEfficiency(session, [delivery], null)] : []) })),
@@ -146,7 +146,7 @@ test("AI endpoint uses isolated MongoDB analytics, preserves every collection an
     await db.collection("deliveries").insertOne({ ...delivery, notes: "SYNTHETIC_PRIVATE_NOTE", destinationLocation: { type: "Point", coordinates: [0.1, 0.2] } });
     await db.collection("deliverySessions").insertOne(session); await db.collection("earningsAdjustments").insertOne(payment);
     const snapshot = async () => JSON.stringify(await Promise.all(["merchants", "deliveries", "deliverySessions", "earningsAdjustments", "vehicleEconomics", "vehicleTaxYears"].map((name) => db.collection(name).find().toArray())));
-    const before = await snapshot(), dashboardBefore = await getDashboardAnalytics(db, { ...args, category: "all" }, now);
+    const before = await snapshot(), dashboardBefore = await getDashboardAnalytics(db, { period: args.period, asOf: args.asOf, category: "all" }, now);
     let mode = "valid", requests = 0; const diagnostics = [];
     const sdk = { async create(input) {
       requests++;
@@ -164,7 +164,7 @@ test("AI endpoint uses isolated MongoDB analytics, preserves every collection an
     assert.equal(diagnostics.length, 3); assert.ok(diagnostics.every((data) => data.outcome === "invalid_question" && data.toolCallCount === 0 && !data.usageAvailable));
     const result = await api({ question: "Explain recorded operations" }); assert.equal(result.status, 200); assert.equal(result.cache, "no-store"); assert.equal(result.body.toolsUsed.length, 6);
     mode = "error"; const failed = await api({ question: "Explain recorded operations" }); assert.equal(failed.status, 502); assert.equal(failed.body.code, "provider_failure"); assert.equal(JSON.stringify(failed.body).includes("SYNTHETIC_SECRET"), false);
-    assert.equal(await snapshot(), before); assert.deepEqual(await getDashboardAnalytics(db, { ...args, category: "all" }, now), dashboardBefore);
+    assert.equal(await snapshot(), before); assert.deepEqual(await getDashboardAnalytics(db, { period: args.period, asOf: args.asOf, category: "all" }, now), dashboardBefore);
     await new Promise((resolve) => server.close(resolve)); server = createApp(db, fail, fail).listen(0, "127.0.0.1"); await once(server, "listening");
     assert.equal((await api({ question: "Explain" })).status, 503);
     assert.equal((await fetch(`http://127.0.0.1:${server.address().port}/api/health`)).status, 200);
@@ -178,7 +178,7 @@ test("same-tool executions retain separate scopes and evidence from another requ
   const tools = registry();
   const original = tools.execute;
   tools.execute = async (name, args, signal) => {
-    const data = await original(name, args, signal), range = resolveDashboardFilters({ ...args, category: "all" }, now);
+    const data = await original(name, args, signal), range = resolveDashboardFilters({ period: args.period, asOf: args.asOf, category: "all" }, now);
     return { ...data, scope: { period: range.period, category: range.category, range: { startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone } } };
   };
   let step = 0, stale;

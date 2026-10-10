@@ -1,6 +1,6 @@
 # Analytics model
 
-All dashboard datasets use the same validated `period` and `category` filters. Periods follow the Los Angeles calendar: Monday-start week, calendar month, or calendar year. A category selects deliveries by their pickup merchant's category. `all` includes every observed category. The displayed range is inclusive in local calendar dates and uses an exclusive UTC end instant for database queries.
+All dashboard datasets use the same validated `period` and `category` filters. Periods follow the Los Angeles calendar: Monday-start Week, calendar Month, selected calendar Year (2026 onward), or cumulative detailed All from 2026-01-01 through the reference local day. A category selects deliveries by their pickup merchant's category. Category `all` includes every observed category. The displayed range is inclusive in local calendar dates and uses an exclusive UTC end instant for database queries.
 
 ## Pickup Volume
 
@@ -142,3 +142,11 @@ Annual metrics include trips, reported annual Online Miles, miles/trip, Gross Pa
 Adjacent available-year comparisons use the same metric key/definition/unit, reported or calculated basis, source values and denominators. Absolute monetary changes use cents; percentage is `(current−previous)/previous*100`. Zero baselines or unavailable operands yield null; nonfinite results are unavailable. `consecutiveYears` distinguishes true year-over-year comparisons from gaps. Ratios retain full finite calculation precision; History currency displays round to two decimals. Historical cohort composition/coverage may differ: descriptive changes do not prove causality, strategy superiority, market demand or tax eligibility.
 
 The seventh AI tool uses these already-calculated results for at most two selected completed years. Only calculated comparison evidence for one year pair/execution permits the specialized server-authored annual explanation. Mixing reported-year facts, other pairs, monthly scopes or Delivery/Session/settlement evidence retains the existing comparison restriction. The model cannot calculate, add annual income to DGI cash receipts, classify NEC as Prop 22 or reconstruct missing detailed observations.
+
+## Detailed historical calendar selection
+
+All Dashboard datasets and Delivery efficiency share the LA half-open interval from `resolveDashboardFilters`: Week is Monday–Sunday, Month is the calendar month, Year is a full selected calendar year (2026 through current), and All is 2026-01-01 through the reference local day. Year may use a deterministic `asOf` instead of `year`; combining them fails. All's `asOf` cannot precede 2026 or follow today. Current-year and option validation use the trusted Los Angeles clock. Timelines count in one pass, with daily Week/Month, monthly Year, and yearly All buckets including empty periods.
+
+Only detailed Delivery observations determine maps, distinct physical merchants, rankings and chart counts. Official 2024/2025 Uber annual aggregates do not participate. Early 2026 backfill may be incomplete; regular tracking begins September 24. Missing observations do not establish missing activity was zero. Selected-year/All cash earnings retain known payouts plus actual received Prop 22 once for Category All only, with known sample counts and no annual Net Payout. No adjustments are assigned to merchants, Sessions or strategies.
+
+Efficiency uses the same range, retaining complete whole Sessions and explicit boundary exclusions, all-category Session/strategy cohorts and ratio-of-sums. Missing vehicle assumptions remain unknown. Biweekly Settlement Efficiency is independent of Dashboard calendar/category filters. No historical Sessions are inferred from reports or Deliveries.

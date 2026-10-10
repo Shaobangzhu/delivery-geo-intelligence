@@ -89,3 +89,11 @@
 .settlement-efficiency { margin-top: 18px; padding-top: 6px; border-top: 1px solid #dce8f7; }
 .settlement-efficiency ul { padding-left: 20px; font-size: 11px; line-height: 1.6; }
 .settlement-efficiency .form-field { max-width: 580px; margin-top: 10px; }
+
+/* Keep the native Year selector and four time controls within the filter width. */
+.time-period { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2.4fr) minmax(0, .8fr); overflow: visible; }
+.time-period button { padding-inline: 4px; }
+.dashboard-year { width: 100%; min-width: 0; min-height: 34px; padding: 5px 2px; border: 1px solid #d3e2f5; border-radius: 5px; background: white; color: #285080; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.dashboard-year[data-active="true"] { background: #1262df; border-color: #1262df; color: white; }
+.dashboard-year option { background: white; color: #285080; }
+.dashboard-year:focus-visible { outline: 3px solid #8bbaff; outline-offset: 2px; }

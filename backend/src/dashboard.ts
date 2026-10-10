@@ -2,11 +2,29 @@ import type { Db, Filter } from "mongodb";
 import { z } from "zod";
 import { categorySchema, type EarningsAdjustmentDocument, type DeliveryDocument, type MerchantDocument } from "./model.js";
 
-export const dashboardFilterSchema = z.strictObject({
-  period: z.enum(["week", "month", "year"]).default("week"),
-  category: z.union([z.literal("all"), categorySchema]).default("all"),
-  asOf: z.iso.date().optional()
-});
+/** Validate against the trusted Los Angeles clock at parse time, not process startup. */
+export function createDashboardFilterSchema(now?: Date) {
+  return z.strictObject({
+    period: z.enum(["week", "month", "year", "all"]).default("week"),
+    category: z.union([z.literal("all"), categorySchema]).default("all"),
+    asOf: z.iso.date().optional(),
+    year: z.union([z.number().int(), z.string().length(4).regex(/^\d{4}$/).transform(Number)]).optional()
+  }).superRefine((filters, context) => {
+    const today = localDate(now ?? new Date());
+    const currentYear = Number(today.slice(0, 4));
+    const issue = (field: string, message: string) => context.addIssue({ code: "custom", path: [field], message });
+    if (filters.year !== undefined && filters.period !== "year") issue("year", "Year is only supported in Year mode");
+    if (filters.year !== undefined && filters.asOf !== undefined) issue("year", "Use year or asOf, not both");
+    if (filters.period === "year" || filters.year !== undefined) {
+      const year = filters.year ?? Number((filters.asOf ?? today).slice(0, 4));
+      if (year < 2026 || year > currentYear) issue("year", "Year must be between 2026 and the current Los Angeles year");
+    }
+    if (filters.period === "all" && filters.asOf !== undefined && (filters.asOf < "2026-01-01" || filters.asOf > today)) {
+      issue("asOf", "All reference date must be between 2026-01-01 and the current Los Angeles date");
+    }
+  });
+}
+export const dashboardFilterSchema = createDashboardFilterSchema();
 export type DashboardFilters = z.infer<typeof dashboardFilterSchema>;
 
 const TIME_ZONE = "America/Los_Angeles";
@@ -54,6 +72,7 @@ export function resolveCoverageDates(startDate: string, endDate: string) {
 }
 
 export function resolveDashboardFilters(filters: DashboardFilters, now = new Date()) {
+  filters = createDashboardFilterSchema(now).parse(filters);
   const anchor = new Date(`${filters.asOf ?? localDate(now)}T00:00:00Z`);
   let startCivil: Date;
   let endCivil: Date;
@@ -63,12 +82,17 @@ export function resolveDashboardFilters(filters: DashboardFilters, now = new Dat
   } else if (filters.period === "month") {
     startCivil = civilInstant(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1);
     endCivil = civilInstant(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1);
+  } else if (filters.period === "year") {
+    const year = filters.year ?? anchor.getUTCFullYear();
+    startCivil = civilInstant(year, 0, 1);
+    endCivil = civilInstant(year + 1, 0, 1);
   } else {
-    startCivil = civilInstant(anchor.getUTCFullYear(), 0, 1);
-    endCivil = civilInstant(anchor.getUTCFullYear() + 1, 0, 1);
+    startCivil = civilInstant(2026, 0, 1);
+    endCivil = addCivilDays(anchor, 1);
   }
   return {
-    period: filters.period, category: filters.category, timeZone: TIME_ZONE,
+    period: filters.period, category: filters.category,
+    ...(filters.period === "year" ? { year: startCivil.getUTCFullYear() } : {}), timeZone: TIME_ZONE,
     start: localMidnight(startCivil), endExclusive: localMidnight(endCivil),
     startDate: civilDate(startCivil), endDate: civilDate(addCivilDays(endCivil, -1)),
     startCivil, endCivil
@@ -153,18 +177,20 @@ export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, n
     category, deliveries: deliveries.filter((delivery) => merchantById.get(delivery.merchantId.toHexString())?.category === category).length
   }));
 
-  const timeline = [];
-  if (filters.period === "year") {
-    for (let month = 0; month < 12; month += 1) {
-      const date = civilInstant(range.startCivil.getUTCFullYear(), month, 1);
-      const key = civilDate(date).slice(0, 7);
-      timeline.push({ date: key, deliveries: deliveries.filter((delivery) => localDate(delivery.pickedUpAt).startsWith(key)).length });
-    }
-  } else {
-    for (let date = range.startCivil; date < range.endCivil; date = addCivilDays(date, 1)) {
-      const key = civilDate(date);
-      timeline.push({ date: key, deliveries: deliveries.filter((delivery) => localDate(delivery.pickedUpAt) === key).length });
-    }
+  // Count observations once; then materialize empty calendar buckets.
+  const counts = new Map<string, number>();
+  const keyLength = filters.period === "all" ? 4 : filters.period === "year" ? 7 : 10;
+  for (const delivery of deliveries) {
+    const key = localDate(delivery.pickedUpAt).slice(0, keyLength);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const timeline: { date: string; deliveries: number }[] = [];
+  for (let date = range.startCivil; date < range.endCivil;) {
+    const key = civilDate(date).slice(0, keyLength);
+    timeline.push({ date: key, deliveries: counts.get(key) ?? 0 });
+    date = filters.period === "all" ? civilInstant(date.getUTCFullYear() + 1, 0, 1)
+      : filters.period === "year" ? civilInstant(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)
+      : addCivilDays(date, 1);
   }
 
   const pickupVolume = rankings.map((ranking) => ({
@@ -190,7 +216,7 @@ export async function getDashboardAnalytics(db: Db, filters: DashboardFilters, n
 
   return {
     filters: {
-      period: range.period, category: range.category,
+      period: range.period, category: range.category, ...(range.year !== undefined ? { year: range.year } : {}),
       range: { start: range.start.toISOString(), endExclusive: range.endExclusive.toISOString(),
         startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone }
     },

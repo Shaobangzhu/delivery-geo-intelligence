@@ -4,15 +4,37 @@
 
 | Parameter | Values | Default |
 | --- | --- | --- |
-| `period` | `week`, `month`, `year` | `week` |
+| `period` | `week`, `month`, `year`, `all` | `week` |
 | `category` | `all`, `restaurant`, `grocery`, `retail`, `other` | `all` |
+| `year` | Integer from 2026 through the trusted current Los Angeles year; Year mode only | current year (or the year of `asOf`) |
 | `asOf` | ISO calendar date, `YYYY-MM-DD` | current date in `America/Los_Angeles` |
 
 Periods use Los Angeles calendar time. A week begins Monday and ends before the next Monday; a month or year follows the local calendar. The response includes UTC `start` and exclusive `endExclusive` instants, local `startDate` and inclusive `endDate`, and the time zone. `asOf` is intended for deterministic requests and tests; the Dashboard uses the current date.
 
-The response contains `summary`, `categoryDistribution`, `pickupTimeline`, `topMerchants`, and `map`. The same period and category filter is applied to every dataset. Week and month timelines contain daily buckets; year timelines contain monthly buckets. Zero buckets are actual zero counts for the selected period.
+The response contains `summary`, `categoryDistribution`, `pickupTimeline`, `topMerchants`, and `map`. The same period and category filter is applied to every dataset. Week and month timelines contain daily buckets; Year contains twelve monthly buckets; All contains yearly buckets from 2026 through the resolved reference year. Timeline counts use one pass over observations, including explicit empty buckets. Zero buckets are actual zero counts for the selected period.
 
 `map.pickupVolume` contains observed merchant pickup locations with delivery counts. `map.merchantDiversity` contains active merchant locations, categories, and one `distinctMerchantCount` unit per merchant. A separate `GET /api/dashboard/destination-heatmap` endpoint returns only grouped persisted generalized coordinates and counts needed for heatmap rendering. Its query uses the same period and category definition. The metric alone determines representation; there is no separate map display selector.
+
+
+## Historical Year and detailed All scope
+
+The native Year dropdown defaults to Current Year, generates descending Los Angeles calendar years down to **2026**, and remembers the selection within the page session. Current follows the clock into a new year; an explicitly selected historical year remains selected. Time and category selections are independent. A minute timer and focus/visibility refresh advance an open page after a local date rollover. Preferences are not persisted.
+
+All covers **2026-01-01 through the current Los Angeles calendar date**. Its exclusive end is the following local midnight, so future calendar days are excluded. It is detailed DGI history, not a combination of annual statements. The full selected calendar year is used in Year mode, including Current Year. All chart labels are full years; Year chart titles identify the selected year.
+
+All three endpoints (`/api/dashboard`, `/api/dashboard/destination-heatmap`, `/api/efficiency`) use the same strict schema and resolver. Examples:
+
+```text
+/api/dashboard?period=year&year=2026&category=grocery
+/api/dashboard/destination-heatmap?period=year&year=2026&category=grocery
+/api/efficiency?period=all&category=all
+```
+
+`year` is valid only in Year mode; supplying both `year` and `asOf` is rejected (no precedence). With Year and only `asOf`, its calendar year is selected for legacy deterministic requests. With neither, the trusted current LA year is selected. All may use an explicit `asOf` from 2026-01-01 through the trusted current local date. Week/Month retain their existing deterministic `asOf` behavior. Invalid/malformed/future years, unknown fields and conflicting combinations return HTTP 400 on each endpoint. Boundaries use `[start, endExclusive)` with LA DST offsets, leap days and year transitions.
+
+Request identity includes period, category, applicable year and local reference date. Superseded requests are aborted and ignored; previous widgets are hidden while updating, while the mounted MapView is retained. Destination requests use the same identity and only persisted generalized cells. There are no new GIS layers or destination inspection controls.
+
+**Data limitations:** detailed tracking starts in 2026; January 1–September 23 backfill may be incomplete, with regular tracking from September 24 onward. Counts describe recorded observations, not proof that all activity was recorded. Official 2024/2025 Uber reports remain independent aggregates and never supply Dashboard earnings, Delivery/Session rows or map locations. Session/strategy metrics still include whole intervals only, exclude/count crossings without splitting, and retain ratio-of-sums and unknown-cost rules. Settlement Efficiency retains its own biweekly coverage and selection independently.
 
 ## Pickup Volume map
 
@@ -36,7 +58,7 @@ Only observed records contribute to analytics. Merchant names and rankings come 
 
 ## Efficiency Analytics (A.2 Core)
 
-Below the main Dashboard content, a separate compact section loads `GET /api/efficiency?period=week|month|year&category=all|restaurant|grocery|retail|other`. It shares the Dashboard's validated filters, including optional deterministic `asOf`, but does not change cards, rankings, GIS requests, or cash-basis Total Earnings. Fetch cleanup aborts and ignores superseded requests; stale efficiency values are hidden when filters change. Loading, unavailable values (`—`), errors, and retry are handled independently of the main Dashboard.
+Below the main Dashboard content, a separate compact section loads `GET /api/efficiency?period=week|month|year|all&category=all|restaurant|grocery|retail|other`. It shares the Dashboard's validated filters, including optional deterministic `asOf`, but does not change cards, rankings, GIS requests, or cash-basis Total Earnings. Fetch cleanup aborts and ignores superseded requests; stale efficiency values are hidden when filters change. Loading, unavailable values (`—`), errors, and retry are handled independently of the main Dashboard.
 
 Delivery cards show gross payout per **recorded delivery hour** and per **delivery mile**, with eligible/excluded delivery counts. Session cards show payout per **complete session hour/mile**, partial known linked payout, known/estimated cost components, full modeled cost, profit, and profit/hour. Session/strategy metrics are labeled **All Categories** regardless of the category filter. Their eligible/excluded samples count sessions; partial payout or cost totals are explicitly labeled. Profit is **Pre-tax, excluding unallocated Prop 22 adjustments**, and unavailable without complete linked payouts, valid session duration, known miles, and complete A.1 costs. IRS deductions remain separate.
 

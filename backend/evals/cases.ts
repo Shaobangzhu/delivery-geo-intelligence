@@ -12,10 +12,10 @@ export interface AgentEvalCase {
   id: string; category: string; question: string; expectedTools?: ToolName[];
   expectedOutcome: "success" | "controlled_failure"; run: (context: EvalContext) => Promise<void>;
 }
-interface Plan { tools: ToolName[]; explanation: string; select?: RegExp; completeCosts?: boolean; comparison?: "none" | "limited"; args?: Record<string, unknown> }
+interface Plan { tools: ToolName[]; explanation: string; select?: RegExp; completeCosts?: boolean; comparison?: "none" | "limited"; args?: Record<string, unknown>; reference?: Date }
 const safeExplanation = "Recorded observations are limited; unknown, not zero. Review completeness and supported History backfills.";
 async function runPlan(context: EvalContext, question: string, plan: Plan) {
-  const fixture = syntheticRegistry(plan.completeCosts), requests: Parameters<ResponsesClient["create"]>[0][] = [];
+  const fixture = syntheticRegistry(plan.completeCosts, plan.reference), requests: Parameters<ResponsesClient["create"]>[0][] = [];
   const client: ResponsesClient = { async create(input) {
     requests.push(structuredClone(input));
     if (requests.length === 1) return mockResponse(plan.tools.map((name) => functionCall(name, plan.args?.[name] ?? argsFor(name))));
@@ -54,6 +54,31 @@ const controlled = (error: unknown, code: string, status?: number) => {
 const reject = (promise: Promise<unknown>, code: string, status?: number) => assert.rejects(promise, (error) => controlled(error, code, status));
 
 export const cases: AgentEvalCase[] = [
+  success("detailed-all", "Calendar Scope", "How much have I recorded in DGI since 2026?", { tools: ["get_period_summary"], explanation: safeExplanation, select: /Total earnings/,
+    args: { get_period_summary: { period: "all", category: "all", asOf: null, year: null } } }, ({ result, fixture }) => {
+    assert.match(result.answer, /2026-01-01–2026-03-08/);
+    assert.deepEqual(fixture.calls[0].filters, { period: "all", category: "all" });
+  }),
+  success("detailed-historical-year", "Calendar Scope", "Explain recorded DGI income in 2027.", { tools: ["get_period_summary"], explanation: safeExplanation, select: /Total earnings/,
+    reference: new Date("2028-06-01T12:00:00Z"), args: { get_period_summary: { period: "year", category: "all", asOf: null, year: 2027 } } }, ({ result, fixture }) => {
+    assert.match(result.answer, /2027-01-01–2027-12-31/);
+    assert.deepEqual(fixture.calls[0].filters, { period: "year", category: "all", year: 2027 });
+  }),
+  success("official-historical-years", "Calendar Scope", "How much did I earn in 2024 and 2025 according to Uber?", { tools: ["get_annual_uber_summary"], explanation: "Independent reported annual payouts are not additional recorded DGI income.", select: /Net Payout/,
+    args: { get_annual_uber_summary: { years: [2024, 2025], includeMonthly: false } } }, ({ result, fixture }) => {
+    assert.deepEqual(fixture.calls.map((row) => row.service), ["annual"]);
+    assert.match(result.answer, /2024/); assert.match(result.answer, /2025/);
+  }),
+  failure("invalid-detailed-year", "Calendar Scope", "Reject invalid detailed calendar scopes before reads.", async () => {
+    const fixture = syntheticRegistry();
+    for (const args of [
+      { period: "year", year: 2025, asOf: null }, { period: "year", year: 2027, asOf: null },
+      { period: "year", year: 2026, asOf: "2026-02-01" }, { period: "month", year: 2026, asOf: null },
+      { period: "month", year: null, asOf: "2024-02-01" }, { period: "all", year: null, asOf: "2026-03-09" }
+    ]) await reject(fixture.registry.execute("get_data_quality", args), "invalid_tool_arguments");
+    assert.equal(fixture.calls.length, 0); assert.equal(fixture.coordinated(), 0);
+  }),
+
   success("cash-income", "Basic Analytics", "How much did I earn this month?", { tools: ["get_period_summary"], explanation: "Cash income uses recorded payouts and actual received adjustments.", select: /Total earnings/ }, ({ result, fixture }) => {
     assert.match(result.answer, /20 USD.*sample: 1/); assert.match(result.answer, /2026-03-01–2026-03-31/); assert.deepEqual(fixture.calls[0].filters, { period: "month", category: "all", asOf: "2026-03-08" });
   }),

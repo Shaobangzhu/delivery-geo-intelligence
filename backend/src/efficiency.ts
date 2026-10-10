@@ -130,7 +130,7 @@ export async function getEfficiencyAnalytics(db: Db, filters: DashboardFilters, 
   }
   const sessions = included.map((row) => calculateSessionEfficiency(row, bySession.get(row._id.toHexString()) ?? [], profile));
   return {
-    filters: { period: range.period, category: range.category, range: { start: range.start.toISOString(), endExclusive: range.endExclusive.toISOString(), startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone } },
+    filters: { period: range.period, category: range.category, ...(range.year !== undefined ? { year: range.year } : {}), range: { start: range.start.toISOString(), endExclusive: range.endExclusive.toISOString(), startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone } },
     deliveryEfficiency: calculateDeliveryEfficiency(deliveries),
     sessionEfficiency: aggregateSessionEfficiency(sessions),
     strategyComparison: [...strategySchema.options, "unclassified"].map((strategy) => ({ strategy,

@@ -3,7 +3,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { ObjectId, type Db, type Filter, type Sort } from "mongodb";
 import { ZodError } from "zod";
 import { GeocodingError, type DestinationGeocoder, type MerchantGeocoder } from "./geocoding.js";
-import { dashboardFilterSchema, getDashboardAnalytics, getDestinationHeatmap } from "./dashboard.js";
+import { createDashboardFilterSchema, getDashboardAnalytics, getDestinationHeatmap } from "./dashboard.js";
 import {
   deliveryInputSchema, deliveryPatchSchema, deliveryQuerySchema, deliveryResponse,
   merchantInputSchema, merchantPatchSchema, merchantResponse, objectIdSchema,
@@ -44,7 +44,7 @@ const sorts: Record<string, Sort> = {
   distanceAsc: { distanceMiles: 1, _id: 1 }
 };
 
-export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geocodeMerchant: MerchantGeocoder, analyst?: Analyst) {
+export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geocodeMerchant: MerchantGeocoder, analyst?: Analyst, clock: () => Date = () => new Date()) {
   const app = express();
   const merchants = db.collection<MerchantDocument>("merchants");
   const deliveries = db.collection<DeliveryDocument>("deliveries");
@@ -71,9 +71,10 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   });
 
   app.get("/api/efficiency", async (request, response) => {
-    const parsed = dashboardFilterSchema.safeParse(request.query);
+    const now = clock();
+    const parsed = createDashboardFilterSchema(now).safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
-    return response.json(await withReferenceWrite(() => getEfficiencyAnalytics(db, parsed.data)));
+    return response.json(await withReferenceWrite(() => getEfficiencyAnalytics(db, parsed.data, now)));
   });
 
   app.get("/api/uber-annual-summaries", async (_request, response) => {
@@ -92,15 +93,17 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   });
 
   app.get("/api/dashboard", async (request, response) => {
-    const parsed = dashboardFilterSchema.safeParse(request.query);
+    const now = clock();
+    const parsed = createDashboardFilterSchema(now).safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
-    return response.json(await withReferenceWrite(() => getDashboardAnalytics(db, parsed.data)));
+    return response.json(await withReferenceWrite(() => getDashboardAnalytics(db, parsed.data, now)));
   });
 
   app.get("/api/dashboard/destination-heatmap", async (request, response) => {
-    const parsed = dashboardFilterSchema.safeParse(request.query);
+    const now = clock();
+    const parsed = createDashboardFilterSchema(now).safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
-    return response.json(await withReferenceWrite(() => getDestinationHeatmap(db, parsed.data)));
+    return response.json(await withReferenceWrite(() => getDestinationHeatmap(db, parsed.data, now)));
   });
 
   app.get("/api/earnings-adjustments", async (_request, response) => {

@@ -1,7 +1,7 @@
 import { getAnnualSummaries, completedYearSchema } from "../uberAnnualSummary.js";
 import type { Db } from "mongodb";
 import { z } from "zod";
-import { dashboardFilterSchema, getDashboardAnalytics } from "../dashboard.js";
+import { createDashboardFilterSchema, dashboardFilterSchema, getDashboardAnalytics } from "../dashboard.js";
 import { getEfficiencyAnalytics } from "../efficiency.js";
 import { getSettlementEfficiency } from "../settlementEfficiency.js";
 import { objectIdSchema } from "../model.js";
@@ -11,7 +11,8 @@ import { projectAggregate } from "./projection.js";
 const period = dashboardFilterSchema.shape.period.removeDefault();
 const asOf = z.iso.date().nullable().describe("Use null for the current period. For a historical period use a date in that period; the trusted current Los Angeles date is in instructions.");
 const category = dashboardFilterSchema.shape.category.removeDefault();
-const periodArgs = z.strictObject({ period, asOf });
+const year = z.number().int().min(2026).nullable().describe("Selected detailed calendar year, or null. Only for Year; do not combine with asOf. Never use official annual years before 2026.");
+const periodArgs = z.strictObject({ period, asOf, year });
 const categoryArgs = periodArgs.extend({ category });
 const annualArgs = z.strictObject({ years: z.array(z.number().int().min(2000)).min(1).max(2).refine((years) => new Set(years).size === years.length), includeMonthly: z.boolean() });
 const settlementArgs = z.strictObject({ settlementId: objectIdSchema.nullable(), limit: z.number().int().min(1).max(5) });
@@ -26,7 +27,7 @@ const limitations = ["Personally observed convenience sample, not market demand.
 const sessionLimitations = ["All categories; whole sessions only. Boundary crossings are excluded.", "Partial known payout and partial costs are not complete revenue or full cost.", "Current vehicle assumptions; pre-tax profit excludes unallocated Prop 22. IRS deduction is separate."];
 const descriptions = {
   get_annual_uber_summary: "Independent Uber annual statements for up to two completed years. Optional monthly gross 1099-K transactions, not monthly net income. Changes are calculated by the backend; never merge with DGI cash income or infer Prop 22 from 1099-NEC.",
-  get_period_summary: "Cash-basis Dashboard summary. Actual received adjustments use payment dates; category earnings exclude them.",
+  get_period_summary: "Detailed DGI cash-basis Dashboard summary from 2026 onward. All is cumulative detailed history; Year accepts a selected year. Actual received adjustments use payment dates; category earnings exclude them.",
   get_delivery_efficiency: "Gross recorded-delivery payout/hour and payout/mile, matched eligible cohorts, units and sample counts.",
   get_session_efficiency: "All-category whole-session linked payout, weighted rates, current modeled costs, pre-tax profit and completeness.",
   compare_strategies: "Descriptive comparison of explicitly recorded strategies, including unclassified; no causal or inferred superiority.",
@@ -50,7 +51,7 @@ export const toolDefinitions = (Object.keys(descriptions) as ToolName[]).map((na
 
 export function createToolRegistry(db: Db, coordinate: ReadCoordinator, domain: DomainServices = services, now = new Date()) {
   const filters = (args: z.infer<typeof periodArgs>, selectedCategory: z.infer<typeof category> = "all") =>
-    dashboardFilterSchema.parse({ period: args.period, category: selectedCategory, ...(args.asOf ? { asOf: args.asOf } : {}) });
+    createDashboardFilterSchema(now).parse({ period: args.period, category: selectedCategory, ...(args.asOf ? { asOf: args.asOf } : {}), ...(args.year !== null ? { year: args.year } : {}) });
   const handlers = {
     async get_annual_uber_summary(args: z.infer<typeof annualArgs>) {
       const data = await domain.annual(db, args.years, now);
@@ -108,6 +109,12 @@ export function createToolRegistry(db: Db, coordinate: ReadCoordinator, domain: 
     const parsed = schemas[name].safeParse(args);
     if (!parsed.success) throw new AnalystError("invalid_tool_arguments");
     if (name === "get_annual_uber_summary" && (parsed.data as z.infer<typeof annualArgs>).years.some((year) => !completedYearSchema(now).safeParse(year).success)) throw new AnalystError("invalid_tool_arguments");
+    if (name !== "get_annual_uber_summary" && name !== "get_settlement_efficiency") {
+      const input = parsed.data as z.infer<typeof periodArgs>;
+      // Validate temporal combinations before entering the read coordinator.
+      try { filters(input); } catch { throw new AnalystError("invalid_tool_arguments"); }
+      if (input.asOf !== null && input.asOf < "2026-01-01") throw new AnalystError("invalid_tool_arguments");
+    }
     // Name/schema pairing is validated above; the allowlist never accepts query expressions.
     const handler = handlers[name] as (input: typeof parsed.data) => ReturnType<typeof handlers[K]>;
     return coordinate(async () => {

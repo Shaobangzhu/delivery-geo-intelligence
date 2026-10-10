@@ -2,6 +2,14 @@
 
 Delivery Geo Intelligence is a local Web GIS proof of concept for exploring **personally observed** last-mile delivery activity around Eastvale, California. It helps the observer maintain records and examine where pickups and privacy-reduced destinations concentrate. These records are a convenience sample: maps and rankings do not describe overall demand, residents' preferences, or the whole delivery market. The image in docs/ui.ux.design.png is a design mockup, not a source of live statistics.
 
+## Dashboard calendar scope
+
+Time filters are **Week**, **Month**, a native **Year** dropdown, and **All**. Week remains Monday–Sunday in `America/Los_Angeles`. Year lists Current and descending past years starting in **2026**, expanding automatically as the local year changes; it selects the full calendar year. All covers detailed DGI observations from **2026-01-01 through today in Los Angeles**, with yearly chart buckets. Category and remembered year remain independent; filters update cards, GIS datasets and Efficiency together without recreating the mounted MapView.
+
+The shared API accepts `period=week|month|year|all`, `category`, and optional `year` in Year mode only. `year` and deterministic `asOf` cannot be combined. Invalid or future years return 400. See [Dashboard date rules](docs/dashboard.md).
+
+Official 2024/2025 annual aggregates stay separate from detailed analytics; no annual financial amount or trip is converted into Dashboard income or a map observation. Early 2026 backfill may be incomplete. All-category income still uses known Delivery payouts plus actual Prop 22 receipts in the selected payment-date range; category income excludes adjustments. Whole-session/strategy rules and unknown costs remain unchanged; Settlement Efficiency uses its own coverage periods. Ask DGI's seven tools support detailed All and Year scopes while historical official questions use the existing annual tool.
+
 ## Implemented application
 
 React, TypeScript, Vite, and React Router provide three primary pages:
@@ -184,7 +192,7 @@ npm run build
 git diff --check
 ```
 
-The default evaluator uses 35 synthetic, scripted-provider scenarios (the original 32 plus three annual scenarios) across eight categories. It needs no `.env`, production database or OpenAI credentials and makes zero real OpenAI calls. Assertions determine category results and failures return a nonzero exit status. The report measures mock request/tool counts, token fields, payload size and local duration; these are not real billing or provider latency. Existing integration tests require the local DGI MongoDB and create only isolated synthetic databases. Details and blind spots: [AI evaluation](docs/ai-evaluation.md).
+The default evaluator uses 39 synthetic, scripted-provider scenarios (the original 32 plus three annual and four calendar scenarios) across nine categories. It needs no `.env`, production database or OpenAI credentials and makes zero real OpenAI calls. Assertions determine category results and failures return a nonzero exit status. The report measures mock request/tool counts, token fields, payload size and local duration; these are not real billing or provider latency. Existing integration tests require the local DGI MongoDB and create only isolated synthetic databases. Details and blind spots: [AI evaluation](docs/ai-evaluation.md).
 
 **DEFERRED:** Explicitly authorized live model evaluation, real tool-selection/language accuracy measurement and published-rate billing estimates. No live OpenAI request was made in Prompt C; mock tool plans and Chinese text do not prove model behavior. No optional live command was added.
 

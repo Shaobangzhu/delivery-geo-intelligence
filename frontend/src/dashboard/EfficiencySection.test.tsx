@@ -62,3 +62,22 @@ it("filter changes clear stale values and ignore superseded responses while sess
   view.rerender(<EfficiencySection period="year" category="all" />);
   expect(screen.queryByText("$7.00/hr")).not.toBeInTheDocument(); expect(screen.getByRole("status")).toBeInTheDocument();
 });
+
+it("includes selected year in request identity and hides superseded Year/All rates", async () => {
+  const pending: { finish: (value: unknown) => void; signal?: AbortSignal }[] = [];
+  const mock = vi.fn((_url: string, options?: RequestInit) => new Promise((finish) => pending.push({ finish, signal: options?.signal ?? undefined })));
+  vi.stubGlobal("fetch", mock);
+  const view = render(<EfficiencySection period="year" category="grocery" year={2027} />);
+  pending[0].finish({ ok: true, json: async () => fixture });
+  expect(await screen.findByText("$25.00/hr")).toBeInTheDocument();
+  view.rerender(<EfficiencySection period="year" category="grocery" year={2026} />);
+  expect(screen.queryByText("$25.00/hr")).not.toBeInTheDocument();
+  expect(mock.mock.calls[1][0]).toContain("period=year&category=grocery&year=2026");
+  view.rerender(<EfficiencySection period="all" category="grocery" year={2026} />);
+  expect(mock.mock.calls[2][0]).toBe("/api/efficiency?period=all&category=grocery");
+  expect(pending[1].signal?.aborted).toBe(true);
+  pending[2].finish({ ok: true, json: async () => ({ ...fixture, deliveryEfficiency: { ...fixture.deliveryEfficiency, payoutPerRecordedHour: metric(7, "USD/hour") } }) });
+  expect(await screen.findByText("$7.00/hr")).toBeInTheDocument();
+  pending[1].finish({ ok: true, json: async () => fixture });
+  expect(screen.queryByText("$25.00/hr")).not.toBeInTheDocument();
+});

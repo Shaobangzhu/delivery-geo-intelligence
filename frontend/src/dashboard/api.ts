@@ -1,4 +1,4 @@
-export type Period = "week" | "month" | "year";
+export type Period = "week" | "month" | "year" | "all";
 export type Category = "all" | "restaurant" | "grocery" | "retail" | "other";
 export type Metric = "pickupVolume" | "merchantDiversity" | "destinationHeatmap";
 
@@ -16,7 +16,7 @@ export interface MerchantRanking {
 interface GeoPoint { type: "Point"; coordinates: [number, number] }
 
 export interface DashboardData {
-  filters: { period: Period; category: Category; range: {
+  filters: { period: Period; category: Category; year?: number; range: {
     start: string; endExclusive: string; startDate: string; endDate: string; timeZone: string;
   } };
   summary: {
@@ -41,16 +41,23 @@ export interface DestinationHeatmapData {
   cells: { location: GeoPoint; count: number }[];
 }
 
-export async function loadDashboard(period: Period, category: Category, signal?: AbortSignal): Promise<DashboardData> {
-  const query = new URLSearchParams({ period, category });
+export async function loadDashboard(period: Period, category: Category, signal?: AbortSignal, year?: number): Promise<DashboardData> {
+  const query = dashboardQuery(period, category, year);
   const response = await fetch(`/api/dashboard?${query}`, { signal });
   if (!response.ok) throw new Error("Dashboard analytics are unavailable. Try again.");
   return response.json() as Promise<DashboardData>;
 }
 
-export async function loadDestinationHeatmap(period: Period, category: Category, signal?: AbortSignal): Promise<DestinationHeatmapData> {
-  const query = new URLSearchParams({ period, category });
+export async function loadDestinationHeatmap(period: Period, category: Category, signal?: AbortSignal, year?: number): Promise<DestinationHeatmapData> {
+  const query = dashboardQuery(period, category, year);
   const response = await fetch(`/api/dashboard/destination-heatmap?${query}`, { signal });
   if (!response.ok) throw new Error("Destination heatmap is unavailable. Try again.");
   return response.json() as Promise<DestinationHeatmapData>;
+}
+
+/** Shared wire contract: a remembered year never affects another period. */
+export function dashboardQuery(period: Period, category: Category, year?: number) {
+  const query = new URLSearchParams({ period, category });
+  if (period === "year" && year !== undefined) query.set("year", String(year));
+  return query;
 }

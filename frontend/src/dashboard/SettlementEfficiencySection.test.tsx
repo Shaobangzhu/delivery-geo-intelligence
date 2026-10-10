@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { EfficiencySection } from "./EfficiencySection";
 import { SettlementEfficiencySection } from "./SettlementEfficiencySection";
 import type { SettlementEfficiency, SettlementEfficiencyPage } from "./settlementEfficiencyApi";
 
@@ -50,4 +51,17 @@ it("preserves selection on refresh and announces the bounded recent list", async
   expect(await screen.findByText("unavailable")).toBeInTheDocument(); expect(screen.getByLabelText("Settlement")).toHaveValue(partial.settlementId);
   expect(screen.getByText("Showing the 20 most recent payments of 24.")).toBeInTheDocument();
   expect(within(screen.getByLabelText("Settlement")).getAllByRole("option")).toHaveLength(2);
+});
+
+it("retains the real settlement component and its selected coverage when parent Year/All/category filters change", async () => {
+  const mock = vi.fn(async (url: string) => url.startsWith("/api/efficiency/settlements")
+    ? { ok: true, json: async () => page } : { ok: false });
+  vi.stubGlobal("fetch", mock); const user = userEvent.setup();
+  const view = render(<EfficiencySection period="year" category="all" year={2027} />);
+  await screen.findByText("ready");
+  await user.selectOptions(screen.getByLabelText("Settlement"), partial.settlementId);
+  view.rerender(<EfficiencySection period="year" category="grocery" year={2026} />);
+  view.rerender(<EfficiencySection period="all" category="grocery" />);
+  expect(screen.getByLabelText("Settlement")).toHaveValue(partial.settlementId);
+  expect(mock.mock.calls.filter(([url]) => url.startsWith("/api/efficiency/settlements"))).toHaveLength(1);
 });

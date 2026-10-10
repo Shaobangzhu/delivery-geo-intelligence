@@ -22,20 +22,21 @@ const qualityLabels: Record<string, string> = {
   sessionsWithIncompleteAssociations: "Sessions requiring association review"
 };
 
-export function EfficiencySection({ period, category }: { period: Period; category: Category }) {
-  const [result, setResult] = useState<{ period: Period; category: Category; data: EfficiencyData } | null>(null);
+export function EfficiencySection({ period, category, year, referenceDate = "" }: { period: Period; category: Category; year?: number; referenceDate?: string }) {
+  const key = `${period}/${category}/${period === "year" ? year ?? "current" : ""}/${referenceDate}`;
+  const [result, setResult] = useState<{ key: string; data: EfficiencyData } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     const controller = new AbortController(); let active = true;
     setLoading(true); setError(""); setResult(null);
-    loadEfficiency(period, category, controller.signal).then((data) => {
-      if (active) { setResult({ period, category, data }); setLoading(false); }
+    loadEfficiency(period, category, controller.signal, year).then((data) => {
+      if (active) { setResult({ key, data }); setLoading(false); }
     }).catch(() => { if (active) { setError("Efficiency analytics are unavailable. Try again."); setLoading(false); } });
     return () => { active = false; controller.abort(); };
-  }, [period, category, retry]);
-  const data = result?.period === period && result.category === category ? result.data : null;
+  }, [period, category, year, key, retry]);
+  const data = result?.key === key ? result.data : null;
   return <section className="dash-card efficiency-section" aria-labelledby="efficiency-title">
     <h2 id="efficiency-title">Efficiency Analytics</h2>
     {loading && <p role="status">Loading efficiency analytics…</p>}

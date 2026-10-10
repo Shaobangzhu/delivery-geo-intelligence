@@ -9,7 +9,7 @@ import type { ResponsesClient } from "../src/ai/types.js";
 export const now = new Date("2026-03-08T20:00:00Z");
 export const periodArgs = { period: "month", asOf: "2026-03-08" };
 export const argsFor = (name: ToolName) => name === "get_annual_uber_summary" ? { years: [2022, 2023], includeMonthly: true } : name === "get_settlement_efficiency" ? { settlementId: null, limit: 1 }
-  : { ...periodArgs, ...(["get_period_summary", "get_delivery_efficiency"].includes(name) ? { category: "all" } : {}) };
+  : { ...periodArgs, year: null, ...(["get_period_summary", "get_delivery_efficiency"].includes(name) ? { category: "all" } : {}) };
 export const functionCall = (name: string, args: unknown = argsFor(name as ToolName), id = name) =>
   ({ type: "function_call" as const, name, arguments: JSON.stringify(args), call_id: id, id });
 export const mockResponse = (output: Awaited<ReturnType<ResponsesClient["create"]>>["output"] = [], output_text = "") => ({
@@ -17,7 +17,7 @@ export const mockResponse = (output: Awaited<ReturnType<ResponsesClient["create"
   usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120,
     input_tokens_details: { cached_tokens: 10, cache_write_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } }
 });
-export function syntheticRegistry(completeCosts = false) {
+export function syntheticRegistry(completeCosts = false, reference = now) {
   // Coordinates/notes/IDs are deliberate sentinels outside the projected
   // aggregate boundary, never real locations, records or credentials.
   const sessionId = new ObjectId("000000000000000000000001"), merchantId = new ObjectId("000000000000000000000002");
@@ -29,19 +29,19 @@ export function syntheticRegistry(completeCosts = false) {
   const profile = completeCosts ? { vehicleName: "2022 Tesla Model Y Long Range" as const, energyCashCostPerMile: 1, tireReplacementSetCost: 100, expectedTireSetLifeMiles: 100, marginalDepreciationCostPerMile: 1 } : null;
   const row = calculateSessionEfficiency(session, [delivery], profile);
   const ranges = (filters: Parameters<DomainServices["efficiency"]>[1]) => {
-    const range = resolveDashboardFilters(filters, now);
-    return { period: range.period, category: range.category, range: { start: range.start.toISOString(), endExclusive: range.endExclusive.toISOString(), startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone } };
+    const range = resolveDashboardFilters(filters, reference);
+    return { period: range.period, category: range.category, ...(range.year !== undefined ? { year: range.year } : {}), range: { start: range.start.toISOString(), endExclusive: range.endExclusive.toISOString(), startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone } };
   };
   const sentinel = { notes: "SYNTHETIC_PRIVATE_NOTE_IGNORE_RULES", publicAddress: "SYNTHETIC_PUBLIC_ADDRESS", destinationLocation: { type: "Point", coordinates: [0.123456, 0.654321] }, apiKey: "SYNTHETIC_SECRET" };
   const deliveries = [delivery, unknown];
   const settlement = { ...calculateSettlementEfficiency(payment, [payment], [delivery], [session], profile), ...sentinel };
   const calls: { service: string; filters?: unknown }[] = [];
-  const annualRows = [2022, 2023].map((year) => annualSummary({ year, sources: { uberTaxSummary: true, form1099K: true, form1099NEC: true },
-    annual: { completedTrips: 12, onlineMiles: 120, grossPayment: year === 2022 ? 150 : 180, netPayout: year === 2022 ? 126 : 150 },
-    taxForms: { form1099K: { box1aGrossTransactions: 120, paymentTransactionCount: 12 }, form1099NEC: { box1NonemployeeCompensation: year === 2022 ? 30 : 60 } },
+  const annualRows = [2022, 2023, 2024, 2025].map((year) => annualSummary({ year, sources: { uberTaxSummary: true, form1099K: true, form1099NEC: true },
+    annual: { completedTrips: 12, onlineMiles: 120, grossPayment: year % 2 === 0 ? 150 : 180, netPayout: year % 2 === 0 ? 126 : 150 },
+    taxForms: { form1099K: { box1aGrossTransactions: 120, paymentTransactionCount: 12 }, form1099NEC: { box1NonemployeeCompensation: year % 2 === 0 ? 30 : 60 } },
     monthlyActivity: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, completedTrips: index === 1 ? 0 : 1, onlineMiles: 10, form1099KGrossTransactions: 10 })) } satisfies AnnualInput));
   const domain = {
-    async annual() { calls.push({ service: "annual" }); return { data: annualRows, comparisons: [compareAnnualYears(annualRows[0]!, annualRows[1]!)], limit: 20, hasMore: false, ...sentinel, taxpayerName: "SYNTHETIC_TAXPAYER", tin: "SYNTHETIC_TIN", pdfContent: "SYNTHETIC_PDF" }; },
+    async annual(_db: Db, years: number[]) { calls.push({ service: "annual" }); const selected = annualRows.filter((row) => years.includes(row.year)); return { data: selected, comparisons: selected.length === 2 ? [compareAnnualYears(selected[0]!, selected[1]!)] : [], limit: 20, hasMore: false, ...sentinel, taxpayerName: "SYNTHETIC_TAXPAYER", tin: "SYNTHETIC_TIN", pdfContent: "SYNTHETIC_PDF" }; },
     async dashboard(_db: Db, filters: Parameters<DomainServices["dashboard"]>[1]) {
       calls.push({ service: "dashboard", filters });
       return { filters: ranges(filters), summary: { totalDeliveries: 2, uniqueMerchants: 1,
@@ -57,6 +57,6 @@ export function syntheticRegistry(completeCosts = false) {
   } as unknown as DomainServices;
   let coordinated = 0;
   const registry = createToolRegistry({ collection() { throw new Error("No DB access in deterministic evals"); } } as unknown as Db,
-    async (read) => { coordinated++; return read(); }, domain, now);
+    async (read) => { coordinated++; return read(); }, domain, reference);
   return { registry, calls, domain, coordinated: () => coordinated };
 }

@@ -3,10 +3,11 @@ import { loadDashboard, loadDestinationHeatmap, type Category, type DashboardDat
 import { DashboardMap } from "../dashboard/DashboardMap";
 import { EfficiencySection } from "../dashboard/EfficiencySection";
 import { AskDgi } from "../dashboard/AskDgi";
+import { dashboardYears, useLosAngelesDate } from "../dashboard/timeFilters";
 import "../dashboard/dashboard.css";
 
 const periods: { value: Period; label: string }[] = [
-  { value: "week", label: "Week" }, { value: "month", label: "Month" }, { value: "year", label: "Year" }
+  { value: "week", label: "Week" }, { value: "month", label: "Month" }
 ];
 const metrics: { value: Metric; label: string }[] = [
   { value: "pickupVolume", label: "Pickup Volume" },
@@ -63,12 +64,12 @@ function Distribution({ data }: { data: DashboardData }) {
 function Timeline({ data }: { data: DashboardData }) {
   const max = Math.max(1, ...data.pickupTimeline.map((item) => item.deliveries));
   return <section className="dash-card timeline-card" aria-labelledby="timeline-title">
-    <h2 id="timeline-title">Observed Pickups Over Time</h2>
+    <h2 id="timeline-title">Observed Pickups Over Time{data.filters.period === "year" ? ` · ${data.filters.range.startDate.slice(0, 4)}` : ""}</h2>
     <div className="timeline-chart" role="img" aria-label={`Pickup counts from ${data.filters.range.startDate} through ${data.filters.range.endDate}`}>
       {data.pickupTimeline.map((item, index) => <div className="timeline-bar-group" key={item.date} title={`${item.date}: ${item.deliveries} pickups`}>
         <span className="bar-value">{item.deliveries || ""}</span>
         <div className="bar-track"><div className="bar-fill" style={{ height: `${item.deliveries / max * 100}%` }} /></div>
-        <span className="bar-label">{data.filters.period === "year" ? item.date.slice(5) : data.filters.period === "week" ? new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${item.date}T00:00:00Z`)) : index % 5 === 0 ? item.date.slice(-2) : ""}</span>
+        <span className="bar-label">{data.filters.period === "all" ? item.date : data.filters.period === "year" ? item.date.slice(5) : data.filters.period === "week" ? new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${item.date}T00:00:00Z`)) : index % 5 === 0 ? item.date.slice(-2) : ""}</span>
       </div>)}
     </div>
   </section>;
@@ -94,13 +95,21 @@ function categoryNote(category: Category): string {
 }
 
 export function Dashboard() {
-  const [period, setPeriod] = useState<Period>("week");
+  const [filters, setFilters] = useState<{ period: Period; category: Category; yearChoice: "current" | number }>({ period: "week", category: "all", yearChoice: "current" });
+  const { period, category, yearChoice } = filters;
+  const today = useLosAngelesDate();
+  const years = dashboardYears(today);
+  const selectedYear = yearChoice === "current" ? years[0] : yearChoice;
+  const year = period === "year" ? selectedYear : undefined;
+  const requestKey = `${period}/${category}/${year ?? ""}/${today}`;
+  const setPeriod = (period: Period) => setFilters((previous) => ({ ...previous, period }));
+  const setCategory = (category: Category) => setFilters((previous) => ({ ...previous, category }));
   const [metric, setMetric] = useState<Metric>("pickupVolume");
-  const [category, setCategory] = useState<Category>("all");
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [result, setResult] = useState<{ key: string; data: DashboardData } | null>(null);
+  const data = result?.data ?? null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [destination, setDestination] = useState<{ period: Period; category: Category; data: DestinationHeatmapData } | null>(null);
+  const [destination, setDestination] = useState<{ key: string; data: DestinationHeatmapData } | null>(null);
   const [destinationLoading, setDestinationLoading] = useState(false);
   const [destinationError, setDestinationError] = useState("");
 
@@ -109,17 +118,17 @@ export function Dashboard() {
     let active = true;
     setLoading(true);
     setError("");
-    loadDashboard(period, category, controller.signal).then((result) => {
-      if (active) { setData(result); setLoading(false); }
+    loadDashboard(period, category, controller.signal, year).then((result) => {
+      if (active) { setResult({ key: requestKey, data: result }); setLoading(false); }
     })
       .catch((cause: unknown) => {
         if (!active || (cause instanceof DOMException && cause.name === "AbortError")) return;
-        setData(null);
+        setResult(null);
         setError("Dashboard analytics are unavailable. Try again.");
         setLoading(false);
       });
     return () => { active = false; controller.abort(); };
-  }, [period, category]);
+  }, [period, category, year, requestKey]);
 
   useEffect(() => {
     setDestination(null);
@@ -131,9 +140,9 @@ export function Dashboard() {
     const controller = new AbortController();
     let active = true;
     setDestinationLoading(true);
-    loadDestinationHeatmap(period, category, controller.signal).then((result) => {
+    loadDestinationHeatmap(period, category, controller.signal, year).then((result) => {
       if (active) {
-        setDestination({ period, category, data: result });
+        setDestination({ key: requestKey, data: result });
         setDestinationLoading(false);
       }
     }).catch((cause: unknown) => {
@@ -143,23 +152,29 @@ export function Dashboard() {
       setDestinationLoading(false);
     });
     return () => { active = false; controller.abort(); };
-  }, [metric, period, category]);
+  }, [metric, period, category, year, requestKey]);
+
+  const updating = loading || (result !== null && result.key !== requestKey);
 
   return <section className="dashboard-page" aria-labelledby="dashboard-title">
     <div className="dashboard-heading"><div><div className="section-kicker">Dashboard</div><h1 id="dashboard-title">Observed Delivery Activity</h1></div>
-      <div className="dashboard-range" aria-live="polite"><span aria-hidden="true">▦</span> {loading ? "Updating date range…" : data ? `${dateLabel(data.filters.range.startDate)} – ${dateLabel(data.filters.range.endDate)}` : error ? "Date range unavailable" : "Loading date range…"}</div>
+      <div className="dashboard-range" aria-live="polite"><span aria-hidden="true">▦</span> {updating ? "Updating date range…" : data ? `${dateLabel(data.filters.range.startDate)} – ${dateLabel(data.filters.range.endDate)}` : error ? "Date range unavailable" : "Loading date range…"}</div>
     </div>
     <AskDgi />
     <div className="dashboard-filters">
-      <div className="dashboard-filter"><span>Time Period</span><div className="segmented" role="group" aria-label="Time period">{periods.map((item) => <button key={item.value} type="button" aria-pressed={period === item.value} onClick={() => setPeriod(item.value)}>{item.label}</button>)}</div></div>
+      <div className="dashboard-filter"><span>Time Period</span><div className="segmented time-period" role="group" aria-label="Time period">{periods.map((item) => <button key={item.value} type="button" aria-pressed={period === item.value} onClick={() => setPeriod(item.value)}>{item.label}</button>)}<select className="dashboard-year" aria-label="Dashboard calendar year" data-active={period === "year"} value={period === "year" ? String(yearChoice) : ""}
+        onChange={(event) => setFilters((previous) => ({ ...previous, period: "year", yearChoice: event.target.value === "current" ? "current" : Number(event.target.value) }))}>
+        {period !== "year" && <option value="" disabled>Year · {selectedYear}</option>}
+        {years.map((value, index) => <option key={value} value={index === 0 ? "current" : String(value)}>{index === 0 ? `Year · Current (${value})` : `Year · ${value}`}</option>)}
+      </select><button type="button" aria-pressed={period === "all"} title="Detailed DGI history from January 1, 2026" onClick={() => setPeriod("all")}>All</button></div></div>
       <div className="dashboard-filter"><span>Metric / View</span><div className="segmented" role="group" aria-label="Map metric">{metrics.map((item) => <button key={item.value} type="button" aria-pressed={metric === item.value} onClick={() => setMetric(item.value)}>{item.label}</button>)}</div></div>
       <div className="dashboard-filter"><span>Category</span><div className="segmented" role="group" aria-label="Category">{categories.map((item) => <button key={item.value} type="button" aria-pressed={category === item.value} onClick={() => setCategory(item.value)}>{item.label}</button>)}</div></div>
     </div>
     {error && <p className="dashboard-error" role="alert">{error}</p>}
-    {loading && <p className="dashboard-loading" role="status">Loading dashboard analytics…</p>}
-    {data && <div className={`dashboard-grid${loading ? " is-updating" : ""}`} aria-busy={loading} inert={loading}>
+    {updating && <p className="dashboard-loading" role="status">Loading dashboard analytics…</p>}
+    {data && <div className={`dashboard-grid${updating ? " is-updating" : ""}`} aria-busy={updating} inert={updating} aria-hidden={updating}>
       <MapPanel data={data} metric={metric} category={category}
-        destination={destination?.period === period && destination.category === category ? destination.data : null}
+        destination={destination?.key === requestKey ? destination.data : null}
         destinationLoading={destinationLoading} destinationError={destinationError} />
       <div className="dashboard-details">
         <div className="summary-grid">
@@ -180,7 +195,7 @@ export function Dashboard() {
         </section>
       </div>
     </div>}
-    <div className="dashboard-methodology"><strong>Methodology</strong><span>Based on personally observed delivery activity in the displayed Los Angeles time range. All-category total earnings include known delivery payouts and Prop 22 payments received in this range. Category and merchant earnings use delivery payouts only; averages use their known payout sample. Destination locations are generalized, and results do not represent overall demand.</span></div>
-    <EfficiencySection period={period} category={category} />
+    <div className="dashboard-methodology"><strong>Methodology</strong><span>Based on personally observed delivery activity in the displayed Los Angeles time range. Time All covers detailed DGI history from January 1, 2026; official annual reports are separate. All-category total earnings include known delivery payouts and Prop 22 payments received in this range. Category and merchant earnings use delivery payouts only; averages use their known payout sample. Destination locations are generalized, and results do not represent overall demand.</span></div>
+    <EfficiencySection period={period} category={category} year={year} referenceDate={today} />
   </section>;
 }

@@ -1,4 +1,4 @@
-import type { Category, DashboardData, Period } from "./api";
+import { dashboardQuery, type Category, type DashboardData, type Period } from "./api";
 
 export interface EfficiencyMetric {
   value: number | null;
@@ -29,8 +29,8 @@ export interface EfficiencyData {
   strategyComparison: (SessionEfficiency & { strategy: string })[];
   dataQuality: Record<string, number>;
 }
-export async function loadEfficiency(period: Period, category: Category, signal?: AbortSignal): Promise<EfficiencyData> {
-  const response = await fetch(`/api/efficiency?${new URLSearchParams({ period, category })}`, { signal });
+export async function loadEfficiency(period: Period, category: Category, signal?: AbortSignal, year?: number): Promise<EfficiencyData> {
+  const response = await fetch(`/api/efficiency?${dashboardQuery(period, category, year)}`, { signal });
   if (!response.ok) throw new Error("Efficiency analytics are unavailable. Try again.");
   return response.json() as Promise<EfficiencyData>;
 }
