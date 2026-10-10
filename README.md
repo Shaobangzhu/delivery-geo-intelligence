@@ -225,3 +225,20 @@ Repeat with another completed year's privately reviewed JSON. Run dry-run first.
 Ask DGI adds exactly `get_annual_uber_summary`; seven tools are registered while the six-execution budget stays unchanged. Selected aggregate annual results reach OpenAI only after an explicit Ask DGI submission. Backend-calculated changes carry year, source, definition, unit, denominator and reported/calculated provenance. The server permits a special comparison explanation only when all selected evidence is calculated annual-change evidence for the same year pair and execution. Arbitrary mixed-basis comparisons and model-supplied numeric claims remain restricted.
 
 **DEFERRED:** runtime PDF processing, Uber synchronization, detailed historical reconstruction, annual Prop 22 allocation, tax returns/liability, new vehicle cost formulas, additional GIS layers, cloud deployment and statement correction/overwrite workflow. Conflicting inputs require manual source review outside this insert-only importer.
+
+## Optional local Home reference
+
+The Dashboard can display a fixed-size blue/white house icon labelled **Home**. It is one Graphic in the existing MapView graphics overlay, visible in Pickup Volume, Merchant Diversity and Destination Heatmap across all time/category selections. It is not an observation, FeatureLayer, heatmap weight, distance calculation or routing feature. Filters do not recreate it or recenter the map.
+
+For a local/private instance, obtain a reliable WGS84 address-point coordinate once and set both values in Git-ignored `frontend/.env`:
+
+```env
+VITE_DGI_HOME_LONGITUDE=
+VITE_DGI_HOME_LATITUDE=
+```
+
+Use the existing backend `createArcGisStoredGeocoder()` with `ARCGIS_GEOCODING_API_KEY` for a one-time local lookup (`forStorage=true`), validating the match and point before copying longitude/latitude to the ignored frontend file. Such a lookup sends the supplied address to ArcGIS; do not print or save the address, raw response or private credential. It is not a new endpoint and is not performed when the map loads. Alternatively use an independently verified WGS84 point. Never guess coordinates. Restart Vite after changing local environment values; rebuild for a private production preview.
+
+The marker is disabled by default. Missing, partial, nonfinite or out-of-range coordinates silently omit it while the rest of the map works. Longitude precedes latitude and is bounded to ±180/±90 respectively. No location is guessed from the map center or a zero fallback.
+
+**Privacy:** Vite bundles `VITE_` values into browser-accessible assets. Git ignore prevents source-control disclosure, not disclosure to people who can access a configured deployment. Use this feature only in a local/private instance; leave both values empty before building a shared/public application. The exact point exists in the frontend configuration, built assets and map geometry, with only the generic Home attribute and no popup or address tooltip. It is never persisted to MongoDB, sent through Express, mixed with Delivery/Merchant data, or included in AI tools/evidence. Existing destination generalization remains unchanged.

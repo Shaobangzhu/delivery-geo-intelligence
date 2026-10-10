@@ -20,6 +20,7 @@ class FakeMapView {
   removeEvent = vi.fn();
   destroy = vi.fn();
   closePopup = vi.fn();
+  graphics = { items: [] as FakeGraphic[], add: vi.fn((graphic: FakeGraphic) => { this.graphics.items.push(graphic); }) };
   on = vi.fn(() => ({ remove: this.removeEvent }));
   when = vi.fn(() => FakeMapView.whenPromise ?? Promise.resolve());
   whenLayerView = vi.fn(async (layer: FakeFeatureLayer) => {
@@ -67,8 +68,8 @@ class FakeFeatureLayer {
     this.popupTemplate = options.popupTemplate;
   }
 }
-class FakeGraphic { constructor(public options: { geometry?: FakePoint; attributes: Record<string, unknown> }) {} }
-class FakePoint { constructor(public options: { longitude: number; latitude: number }) {} }
+class FakeGraphic { constructor(public options: { geometry?: FakePoint; attributes: Record<string, unknown>; symbol?: FakePictureMarkerSymbol; popupTemplate?: unknown }) {} }
+class FakePoint { constructor(public options: { longitude: number; latitude: number; spatialReference?: { wkid: number } }) {} }
 class FakeHeatmapRenderer { constructor(public options: Record<string, unknown>) {} }
 class FakeUniqueValueRenderer { constructor(public options: Record<string, unknown>) {} }
 class FakePictureMarkerSymbol { constructor(public options: Record<string, unknown>) {} }
@@ -108,6 +109,9 @@ beforeEach(() => {
   watch.mockClear();
   removeWatch.mockClear();
   vi.stubEnv("VITE_ARCGIS_API_KEY", "public-test-key");
+  // Never let a developer's local private reference enter tests or failure output.
+  vi.stubEnv("VITE_DGI_HOME_LONGITUDE", "");
+  vi.stubEnv("VITE_DGI_HOME_LATITUDE", "");
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -378,4 +382,64 @@ it("avoids construction after early unmount and skips late watchers after view d
   expect(FakeMapView.instances[0].destroy).toHaveBeenCalledTimes(1);
   expect(FakeFeatureLayer.instances[0].edits).toHaveLength(0);
   expect(watch).not.toHaveBeenCalled();
+});
+
+it("creates one WGS84 Home overlay with a fixed house symbol, independent of all mode/data updates", async () => {
+  vi.stubEnv("VITE_DGI_HOME_LONGITUDE", "-117.5");
+  vi.stubEnv("VITE_DGI_HOME_LATITUDE", "34.0");
+  const props = { pickupRows, diversityRows, destinationCells };
+  const { rerender, unmount } = render(<DashboardMap {...props} metric="pickupVolume" />);
+  await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
+  const view = FakeMapView.instances[0], [merchantLayer, destinationLayer] = FakeFeatureLayer.instances;
+  const graphic = view.graphics.items[0];
+  expect(view.graphics.add).toHaveBeenCalledTimes(1);
+  expect(graphic.options.geometry?.options).toEqual({ longitude: -117.5, latitude: 34, spatialReference: { wkid: 4326 } });
+  expect(graphic.options.symbol).toBeInstanceOf(FakePictureMarkerSymbol);
+  expect(graphic.options.symbol?.options).toMatchObject({ width: "30px", height: "30px" });
+  const url = String(graphic.options.symbol?.options.url);
+  expect(decodeURIComponent(url)).toContain('fill="white"');
+  expect(url).toMatch(/^data:image\/svg\+xml/);
+  expect(graphic.options.attributes).toEqual({ name: "Home" });
+  expect(graphic.options.popupTemplate).toBeNull();
+  expect(screen.getByText("🏠 Home")).toBeInTheDocument();
+  expect(merchantLayer.edits[0].addFeatures).toHaveLength(2);
+  await waitFor(() => expect(destinationLayer.edits).toHaveLength(1));
+  expect(destinationLayer.edits[0].addFeatures).toHaveLength(1);
+  for (const metric of ["merchantDiversity", "destinationHeatmap", "pickupVolume"] as const) {
+    rerender(<DashboardMap {...props} metric={metric} />);
+    expect(view.graphics.items).toEqual([graphic]);
+  }
+  // All time/category selections reach the map as filtered rows, not new views.
+  for (const rows of [[], [pickupRows[1]], pickupRows]) {
+    const before = merchantLayer.edits.length;
+    rerender(<DashboardMap pickupRows={rows} diversityRows={diversityRows.filter((row) => rows.some((pickup) => pickup.id === row.id))}
+      destinationCells={[]} metric="destinationHeatmap" />);
+    await waitFor(() => expect(merchantLayer.edits.length).toBeGreaterThan(before));
+    expect(view.graphics.items).toEqual([graphic]);
+  }
+  expect(view.graphics.add).toHaveBeenCalledTimes(1);
+  expect(FakeMapView.instances).toHaveLength(1);
+  expect(FakeMap.instances[0].layers).toEqual([merchantLayer, destinationLayer]);
+  expect(FakeFeatureLayer.instances).toHaveLength(2);
+  for (const layer of FakeFeatureLayer.instances) {
+    expect(layer.edits.flatMap((edit) => [...(edit.addFeatures ?? []), ...(edit.updateFeatures ?? [])]).some((feature) => feature === graphic)).toBe(false);
+  }
+  unmount();
+  expect(view.destroy).toHaveBeenCalledTimes(1);
+  expect(view.removeEvent).toHaveBeenCalledTimes(1);
+  expect(removeWatch).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ["", ""], ["-117.5", ""], ["", "34"], [" ", "34"], ["bad", "34"],
+  ["Infinity", "34"], ["-181", "34"], ["181", "34"], ["-117.5", "91"], ["-117.5", "-91"], ["NaN", "34"]
+])("safely omits Home with invalid or incomplete configuration (%s, %s)", async (longitude, latitude) => {
+  vi.stubEnv("VITE_DGI_HOME_LONGITUDE", longitude);
+  vi.stubEnv("VITE_DGI_HOME_LATITUDE", latitude);
+  render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows} destinationCells={[]} metric="pickupVolume" />);
+  await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
+  expect(FakeMapView.instances[0].graphics.add).not.toHaveBeenCalled();
+  expect(screen.queryByText("🏠 Home")).not.toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(FakeFeatureLayer.instances).toHaveLength(2);
 });

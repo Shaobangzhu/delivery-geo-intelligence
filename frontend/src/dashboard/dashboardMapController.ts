@@ -1,5 +1,6 @@
 import type { DashboardData, DestinationHeatmapData, Metric } from "./api";
 import type { ArcgisRuntime } from "./arcgisRuntime";
+import { HOME_REFERENCE_SVG, type HomeReference } from "./homeReference";
 
 export type PickupLocation = DashboardData["map"]["pickupVolume"][number];
 export type DiversityLocation = DashboardData["map"]["merchantDiversity"][number];
@@ -33,7 +34,8 @@ export class DashboardMapController {
     container: HTMLDivElement,
     private readonly arcgis: ArcgisRuntime,
     private readonly onError: (message: string) => void,
-    private readonly onUpdating: (value: boolean) => void
+    private readonly onUpdating: (value: boolean) => void,
+    home: HomeReference | null = null
   ) {
     const map = new arcgis.Map({ basemap: "arcgis/light-gray/base" });
     this.merchantLayer = new arcgis.FeatureLayer({
@@ -68,6 +70,16 @@ export class DashboardMapController {
     map.add(this.merchantLayer);
     map.add(this.destinationLayer);
     this.view = new arcgis.MapView({ container, map, center: [-117.58, 33.97], zoom: 11 });
+    // One local reference per view, outside data-driven FeatureLayers and renderers.
+    if (home) {
+      this.view.graphics.add(new arcgis.Graphic({
+        geometry: new arcgis.Point({ longitude: home.longitude, latitude: home.latitude, spatialReference: { wkid: 4326 } }),
+        symbol: new arcgis.PictureMarkerSymbol({
+          url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(HOME_REFERENCE_SVG)}`, width: "30px", height: "30px"
+        }),
+        attributes: { name: "Home" }, popupTemplate: null
+      }));
+    }
     this.handles.push(this.view.on("layerview-create-error", () => {
       if (!this.destroyed) this.onError("A map layer could not be displayed.");
     }));

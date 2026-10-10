@@ -79,3 +79,20 @@ Actionable reasons point to missing dates/payouts/miles/links, boundary crossing
 Core's Data completeness includes **Sessions requiring association review**. A pending Session cannot produce complete revenue/rates/profit; settlement efficiency also blocks complete period attribution. History identifies the Session as **Association review required**, and its existing centered edit modal warns the user to review selected Deliveries. Saving explicitly resubmits membership for these marked records; a notes-only API edit cannot silently clear the warning. Partial observed amounts can remain visible with their incomplete reasons.
 
 A failed Session/vehicle-settings reload clears prior records/settings instead of retaining an editable stale profile. Existing analytics request abort/active guards, filter transitions, pending submit prevention, error/empty displays, and centered-modal focus behavior remain covered by the frontend suite. No manual browser testing was performed for A.2.2. Analytics reads are coordinated with this Express process's writes; refresh remains necessary after edits or between separate requests. No new UI page, GIS mode, or feature was introduced.
+
+## Optional local Home reference
+
+The Dashboard can display a fixed-size blue/white house icon labelled **Home**. It is one Graphic in the existing MapView graphics overlay, visible in Pickup Volume, Merchant Diversity and Destination Heatmap across all time/category selections. It is not an observation, FeatureLayer, heatmap weight, distance calculation or routing feature. Filters do not recreate it or recenter the map.
+
+For a local/private instance, obtain a reliable WGS84 address-point coordinate once and set both values in Git-ignored `frontend/.env`:
+
+```env
+VITE_DGI_HOME_LONGITUDE=
+VITE_DGI_HOME_LATITUDE=
+```
+
+Use the existing backend `createArcGisStoredGeocoder()` with `ARCGIS_GEOCODING_API_KEY` for a one-time local lookup (`forStorage=true`), validating the match and point before copying longitude/latitude to the ignored frontend file. Such a lookup sends the supplied address to ArcGIS; do not print or save the address, raw response or private credential. It is not a new endpoint and is not performed when the map loads. Alternatively use an independently verified WGS84 point. Never guess coordinates. Restart Vite after changing local environment values; rebuild for a private production preview.
+
+The marker is disabled by default. Missing, partial, nonfinite or out-of-range coordinates silently omit it while the rest of the map works. Longitude precedes latitude and is bounded to ±180/±90 respectively. No location is guessed from the map center or a zero fallback.
+
+**Privacy:** Vite bundles `VITE_` values into browser-accessible assets. Git ignore prevents source-control disclosure, not disclosure to people who can access a configured deployment. Use this feature only in a local/private instance; leave both values empty before building a shared/public application. The exact point exists in the frontend configuration, built assets and map geometry, with only the generic Home attribute and no popup or address tooltip. It is never persisted to MongoDB, sent through Express, mixed with Delivery/Merchant data, or included in AI tools/evidence. Existing destination generalization remains unchanged.
