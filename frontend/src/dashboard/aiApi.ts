@@ -1,6 +1,6 @@
 export interface AnalystAnswer { requestId: string; answer: string; toolsUsed: string[]; warnings: string[] }
 const unavailable = "DGI analysis is unavailable. Try again or review the recorded analytics below.";
-const tools = new Set(["get_period_summary", "get_delivery_efficiency", "get_session_efficiency", "compare_strategies", "get_settlement_efficiency", "get_data_quality"]);
+const tools = new Set(["get_period_summary", "get_delivery_efficiency", "get_session_efficiency", "compare_strategies", "get_settlement_efficiency", "get_data_quality", "get_annual_uber_summary"]);
 function isAnswer(value: unknown): value is AnalystAnswer {
   if (!value || typeof value !== "object") return false;
   const row = value as Record<string, unknown>;

@@ -1,3 +1,4 @@
+import { getAnnualSummaries, completedYearSchema } from "../uberAnnualSummary.js";
 import type { Db } from "mongodb";
 import { z } from "zod";
 import { dashboardFilterSchema, getDashboardAnalytics } from "../dashboard.js";
@@ -12,16 +13,19 @@ const asOf = z.iso.date().nullable().describe("Use null for the current period. 
 const category = dashboardFilterSchema.shape.category.removeDefault();
 const periodArgs = z.strictObject({ period, asOf });
 const categoryArgs = periodArgs.extend({ category });
+const annualArgs = z.strictObject({ years: z.array(z.number().int().min(2000)).min(1).max(2).refine((years) => new Set(years).size === years.length), includeMonthly: z.boolean() });
 const settlementArgs = z.strictObject({ settlementId: objectIdSchema.nullable(), limit: z.number().int().min(1).max(5) });
 export interface DomainServices {
   dashboard: typeof getDashboardAnalytics;
   efficiency: typeof getEfficiencyAnalytics;
   settlements: typeof getSettlementEfficiency;
+  annual: typeof getAnnualSummaries;
 }
-const services: DomainServices = { dashboard: getDashboardAnalytics, efficiency: getEfficiencyAnalytics, settlements: getSettlementEfficiency };
+const services: DomainServices = { dashboard: getDashboardAnalytics, efficiency: getEfficiencyAnalytics, settlements: getSettlementEfficiency, annual: getAnnualSummaries };
 const limitations = ["Personally observed convenience sample, not market demand.", "Missing is unknown; recorded zero is valid.", "Separate tool reads are not one shared snapshot."];
 const sessionLimitations = ["All categories; whole sessions only. Boundary crossings are excluded.", "Partial known payout and partial costs are not complete revenue or full cost.", "Current vehicle assumptions; pre-tax profit excludes unallocated Prop 22. IRS deduction is separate."];
 const descriptions = {
+  get_annual_uber_summary: "Independent Uber annual statements for up to two completed years. Optional monthly gross 1099-K transactions, not monthly net income. Changes are calculated by the backend; never merge with DGI cash income or infer Prop 22 from 1099-NEC.",
   get_period_summary: "Cash-basis Dashboard summary. Actual received adjustments use payment dates; category earnings exclude them.",
   get_delivery_efficiency: "Gross recorded-delivery payout/hour and payout/mile, matched eligible cohorts, units and sample counts.",
   get_session_efficiency: "All-category whole-session linked payout, weighted rates, current modeled costs, pre-tax profit and completeness.",
@@ -30,7 +34,7 @@ const descriptions = {
   get_data_quality: "Existing missing-observation counts plus up to five recent settlement completeness summaries. Backfill only through History's existing forms."
 };
 export type ToolName = keyof typeof descriptions;
-const schemas = { get_period_summary: categoryArgs, get_delivery_efficiency: categoryArgs,
+const schemas = { get_annual_uber_summary: annualArgs, get_period_summary: categoryArgs, get_delivery_efficiency: categoryArgs,
   get_session_efficiency: periodArgs, compare_strategies: periodArgs, get_settlement_efficiency: settlementArgs, get_data_quality: periodArgs };
 // Responses strict mode requires every property to be required; optional inputs use null.
 export const toolDefinitions = (Object.keys(descriptions) as ToolName[]).map((name) => {
@@ -48,6 +52,17 @@ export function createToolRegistry(db: Db, coordinate: ReadCoordinator, domain: 
   const filters = (args: z.infer<typeof periodArgs>, selectedCategory: z.infer<typeof category> = "all") =>
     dashboardFilterSchema.parse({ period: args.period, category: selectedCategory, ...(args.asOf ? { asOf: args.asOf } : {}) });
   const handlers = {
+    async get_annual_uber_summary(args: z.infer<typeof annualArgs>) {
+      const data = await domain.annual(db, args.years, now);
+      return { scope: "uber_annual_reporting", basis: "uber_annual_reporting",
+        annualReports: data.data.map((row) => ({ ...row, monthlyActivity: args.includeMonthly ? row.monthlyActivity : [] })), annualComparisons: data.comparisons,
+        limitations: [...limitations, "Independent annual statements are not additional DGI cash income or detailed delivery/GIS coverage.",
+          "Uber Tax Summary is a platform report, not an official tax document; issued 1099-K/NEC are separate tax forms.",
+          "Monthly 1099-K values are gross reported transactions, not monthly Net Payout. Missing months/fields are unknown.",
+          "Net Payout is not full economic profit or after-tax income. Online Miles are not Session, Prop 22 engaged or verified tax miles.",
+          "1099-NEC/miscellaneous compensation does not establish Prop 22. Historical deliveries, sessions and hours cannot be reconstructed.",
+          "Only backend-derived changes compare the same annual metric definitions; differences do not establish causality or strategy superiority."] };
+    },
     async get_period_summary(args: z.infer<typeof categoryArgs>) {
       const data = await domain.dashboard(db, filters(args, args.category), now);
       return { scope: data.filters, basis: "cash_basis", summary: { totalDeliveries: data.summary.totalDeliveries,
@@ -92,6 +107,7 @@ export function createToolRegistry(db: Db, coordinate: ReadCoordinator, domain: 
     if (!Object.hasOwn(schemas, name)) throw new AnalystError("unknown_tool");
     const parsed = schemas[name].safeParse(args);
     if (!parsed.success) throw new AnalystError("invalid_tool_arguments");
+    if (name === "get_annual_uber_summary" && (parsed.data as z.infer<typeof annualArgs>).years.some((year) => !completedYearSchema(now).safeParse(year).success)) throw new AnalystError("invalid_tool_arguments");
     // Name/schema pairing is validated above; the allowlist never accepts query expressions.
     const handler = handlers[name] as (input: typeof parsed.data) => ReturnType<typeof handlers[K]>;
     return coordinate(async () => {

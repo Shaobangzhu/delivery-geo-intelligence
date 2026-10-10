@@ -68,3 +68,11 @@ it("keeps the newer result when an aborted request fails late", async () => {
   expect(screen.getByRole("region", { name: "DGI answer" })).toHaveTextContent("New recorded result"); expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Ask" })).toBeEnabled();
 });
+
+it("accepts the seventh read-only source and displays Uber Annual Statements", async () => {
+  const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...answer, toolsUsed: ["get_annual_uber_summary"], answer: "Synthetic annual reported summary." }) });
+  vi.stubGlobal("fetch", fetch); render(<AskDgi />); const user = await open();
+  expect(fetch).not.toHaveBeenCalled(); await user.type(screen.getByLabelText("Your question"), "Explain my annual summary");
+  await user.click(screen.getByRole("button", { name: "Ask" }));
+  expect(await screen.findByText("Sources: Uber Annual Statements")).toBeInTheDocument(); expect(fetch).toHaveBeenCalledTimes(1);
+});

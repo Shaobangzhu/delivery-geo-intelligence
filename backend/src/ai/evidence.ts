@@ -1,7 +1,8 @@
+import type { AnnualSummary, compareAnnualYears } from "../uberAnnualSummary.js";
 import { randomUUID } from "node:crypto";
 import { AnalystError } from "./types.js";
 
-export interface Provenance { execution: string; tool: string; scope: string; basis: string; cohort: string; eligibility?: string }
+export interface Provenance { execution: string; tool: string; scope: string; basis: string; cohort: string; eligibility?: string; year?: number; origin?: "reported" | "calculated"; sourceKind?: string; definition?: string; comparisonGroup?: string }
 export interface Fact { id: string; label: string; display: string; source: Provenance; unit?: string; value?: number | null }
 const labels: Record<string, string> = {
   totalEarnings: "Total earnings (cash basis)", knownPayoutTotal: "Known payout (may be partial)",
@@ -28,6 +29,7 @@ function scalarUnit(key: string) {
 export function createEvidenceCollector() {
   const prefix = randomUUID(), facts = new Map<string, Fact>();
   function collect(data: unknown, tool: string, execution: number): Fact[] {
+    if (tool === "get_annual_uber_summary") return collectAnnual(data, execution);
     const root = data as { scope?: { period: string; category: string; range: { startDate: string; endDate: string; timeZone: string } } | string; basis?: string };
     const scope = typeof root.scope === "object" && root.scope?.range
       ? `${root.scope.period} · ${root.scope.category} · ${root.scope.range.startDate}–${root.scope.range.endDate} (${root.scope.range.timeZone})`
@@ -75,6 +77,38 @@ export function createEvidenceCollector() {
     visit(data, [tool], source);
     return added;
   }
+  // Annual evidence has explicit year, definition, source and reported/calculated
+  // provenance. Monthly observations are grouped to keep the unchanged byte budget.
+  function collectAnnual(data: unknown, execution: number): Fact[] {
+    const result = data as { annualReports: AnnualSummary[]; annualComparisons: ReturnType<typeof compareAnnualYears>[] };
+    const added: Fact[] = [];
+    const titles: Record<string, string> = { completedTrips: "Completed Trips", onlineMiles: "Online Miles (annual reported)", onlineMilesPerTrip: "Online Miles / Completed Trip", grossPayment: "Gross Payment", expensesFeesTax: "Reported Expenses, Fees and Tax", netPayout: "Net Payout (not economic profit)", netPayoutPerTrip: "Net Payout / Completed Trip", netPayoutPerOnlineMile: "Net Payout / annual Online Mile" };
+    const add = (label: string, display: string, source: Provenance, unit: string, value?: number | null) => {
+      const fact: Fact = { id: `${prefix}:e${facts.size + 1}`, label, display, source, unit, ...(value !== undefined ? { value } : {}) };
+      facts.set(fact.id, fact); added.push(fact);
+    };
+    for (const row of result.annualReports) {
+      const base: Provenance = { execution: `t${execution}`, tool: "get_annual_uber_summary", scope: `Uber annual reporting ${row.year}`, basis: "uber_annual_reporting", cohort: "annual_statement_aggregates", year: row.year, origin: "reported", sourceKind: "uber_tax_summary" };
+      for (const [definition, metric] of Object.entries(row.metrics)) add(`${row.year} · ${titles[definition]}`, `${metric.value ?? "unavailable"} ${metric.unit}; denominator: ${metric.denominator ?? "not applicable"}; denominator complete: ${metric.denominatorComplete}; sample: ${metric.sampleCount}`, { ...base, definition, origin: metric.origin }, metric.unit, metric.value);
+      for (const definition of ["grossTripEarnings", "tips", "grossTripTotal", "additionalEarnings", "uberServiceFeeOtherAdjustments", "driverOccAccInsuranceExpense"] as const) {
+        const value = row.annual[definition];
+        if (value !== undefined) add(`${row.year} · Reported ${definition}`, `${value} USD`, { ...base, definition }, "USD", value);
+      }
+      if (row.annual.additionalBreakdown) add(`${row.year} · Reported additional earnings breakdown`, `incentives: ${row.annual.additionalBreakdown.incentives ?? "unavailable"}; miscellaneous payment: ${row.annual.additionalBreakdown.otherMiscellaneousPayment ?? "unavailable"}; OccAcc insurance: ${row.annual.additionalBreakdown.driverOccAccInsurance ?? "unavailable"} USD; source-reviewed complete: ${row.annual.additionalBreakdownComplete ?? "unknown"}`, { ...base, definition: "additional_earnings_breakdown" }, "USD");
+      add(`${row.year} · Source availability`, `Uber Tax Summary: ${row.sources.uberTaxSummary}; 1099-K: ${row.sources.form1099K}; 1099-NEC: ${row.sources.form1099NEC}`, { ...base, definition: "source_availability" }, "metadata");
+      for (const [form, values] of Object.entries(row.taxForms)) for (const [definition, value] of Object.entries(values)) add(`${row.year} · ${form} · ${definition}`, `${value} ${definition === "paymentTransactionCount" ? "transactions" : "USD"}`, { ...base, definition, sourceKind: form === "form1099K" ? "form_1099_k" : "form_1099_nec" }, definition === "paymentTransactionCount" ? "transactions" : "USD", value);
+      for (const check of row.reconciliation.checks) add(`${row.year} · Reconciliation · ${check.check}`, `${check.status}; reported: ${check.reported ?? "unavailable"}; expected: ${check.expected ?? "unavailable"}; difference: ${check.difference ?? "unavailable"} ${check.unit}; ${check.severity}`, { ...base, definition: check.check, origin: "calculated" }, check.unit);
+      const peak = row.monthlyGrossTransactionsPeak;
+      add(`${row.year} · Backend-calculated highest observed monthly 1099-K gross transactions`, `${peak.value ?? "unavailable"} USD; months: ${peak.months.join(", ") || "unavailable"}; observed months: ${peak.observedMonths}; complete annual monthly coverage: ${peak.complete}; gross transactions, not Net Payout`, { ...base, definition: "highest_observed_monthly_1099_k_gross", origin: "calculated", sourceKind: "form_1099_k" }, "USD", peak.value);
+      for (const month of row.monthlyActivity) add(`${row.year} · Month ${month.month} · Reported monthly observations`, `Completed Trips: ${month.completedTrips ?? "unavailable"}; Online Miles: ${month.onlineMiles ?? "unavailable"}; 1099-K gross transactions: ${month.form1099KGrossTransactions ?? "unavailable"} USD (not monthly Net Payout)`, { ...base, scope: `${row.year} month ${month.month}`, basis: "uber_monthly_reporting", cohort: "monthly_statement_aggregates", sourceKind: "uber_tax_summary_and_form_1099_k", definition: "monthly_trips_online_miles_gross_transactions" }, "trips; miles; USD");
+    }
+    for (const comparison of result.annualComparisons) for (const change of comparison.changes) {
+      const group = `${comparison.fromYear}→${comparison.toYear}`;
+      add(`${group} · ${titles[change.metric]} · Backend-calculated change`, `from: ${change.previousValue ?? "unavailable"}; to: ${change.currentValue ?? "unavailable"}; absolute change: ${change.absoluteChange ?? "unavailable"} ${change.unit}; percentage change: ${change.percentageChange ?? "unavailable"}%; denominator complete: ${change.denominatorComplete}; from denominator: ${change.previousDenominator ?? "not applicable"}; to denominator: ${change.currentDenominator ?? "not applicable"}; consecutive years: ${comparison.consecutiveYears}`, { execution: `t${execution}`, tool: "get_annual_uber_summary", scope: `Uber annual comparison ${group}`, basis: "uber_annual_comparison", cohort: "same_annual_metric_definition", year: comparison.toYear, origin: "calculated", sourceKind: change.sourceKind, definition: change.metric, comparisonGroup: group }, change.unit, change.absoluteChange);
+    }
+    if (!added.length) add("Uber annual statements", "No selected completed-year statements available.", { execution: `t${execution}`, tool: "get_annual_uber_summary", scope: "selected_completed_years", basis: "uber_annual_reporting", cohort: "annual_statement_aggregates", origin: "reported", definition: "availability" }, "metadata");
+    return added;
+  }
   return { facts, collect };
 }
 
@@ -82,6 +116,13 @@ export function requiresComparisonBoundary(selected: Fact[]) {
   const values = selected.filter((fact) => fact.unit);
   return selected.some((fact) => fact.source.tool === "compare_strategies") || new Set(selected.map((fact) =>
     JSON.stringify([fact.source.scope, fact.source.basis, fact.source.cohort]))).size > 1 || new Set(values.map((fact) => fact.unit)).size > 1;
+}
+
+// This exception changes only the server-authored explanation. It never permits
+// model arithmetic, mixed DGI bases, other tools or arbitrary annual comparisons.
+export function isDeterministicAnnualComparison(selected: Fact[]) {
+  return selected.length > 0 && selected.every((fact) => fact.source.tool === "get_annual_uber_summary" && fact.source.basis === "uber_annual_comparison" && fact.source.origin === "calculated" && fact.source.comparisonGroup)
+    && new Set(selected.map((fact) => `${fact.source.execution}:${fact.source.comparisonGroup}`)).size === 1;
 }
 
 // Amounts, signs, percentages and dates belong in server evidence, not model

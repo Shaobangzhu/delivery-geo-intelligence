@@ -7,7 +7,7 @@ Delivery Geo Intelligence is a local Web GIS proof of concept for exploring **pe
 React, TypeScript, Vite, and React Router provide three primary pages:
 
 - **Dashboard** (/dashboard): period/category filters, summary cards, charts, merchant rankings, and an ArcGIS map.
-- **History** (/history): paginated Delivery CRUD, Prop 22 payments, Uber Eats sessions, and vehicle/annual-mileage settings in centered modals. Delivery addresses are cleared after save.
+- **History** (/history): paginated Delivery CRUD, Prop 22 payments, Uber Eats sessions, vehicle/annual-mileage settings in centered modals, and read-only Uber Annual Statements. Delivery addresses are cleared after save.
 - **Merchants** (/merchants): management of verified public physical pickup locations. Two stores of the same brand are separate Merchant records.
 
 Express and Zod validate requests. The native MongoDB Node.js driver stores Merchants and Deliveries in the DGI MongoDB container. React calls Express; Express calls MongoDB and, for address geocoding, ArcGIS. Frontend and backend run on the host; Docker Compose runs MongoDB only. / redirects to /dashboard; GET /api/health checks the API.
@@ -131,7 +131,7 @@ Unsafe monetary inputs are rejected; unsafe Dashboard monetary aggregates return
 - **A.2 CORE — IMPLEMENTED:** Deterministic delivery/session rates, modeled pre-tax session profit, descriptive strategy comparison, and data completeness.
 - **A.2.1 — IMPLEMENTED:** Settlement-period gross revenue, explicitly confirmed complete-session denominators, adjusted rates, and modeled work-period profit with consistency safeguards.
 - **A.2.2 — COMPLETE · A.2 CORE FROZEN:** Final audit, integration hardening, and regression verification for the existing local PoC. Merchant profitability and individual/session/strategy adjustment allocation remain outside the implemented scope.
-- **PROMPT B — IMPLEMENTED:** On-demand Ask DGI, OpenAI Responses function calling, six read-only aggregate tools, and evidence-backed metric display.
+- **PROMPT B — IMPLEMENTED:** On-demand Ask DGI, OpenAI Responses function calling, seven read-only aggregate tools (the original six plus annual statements), and evidence-backed metric display.
 - **PROMPT C — IMPLEMENTED:** Deterministic AI evaluation, request-bound evidence/scope guards, aggregate privacy projection, failure diagnostics and frontend reliability tests. Mock validation does not establish real model accuracy.
 - **FUTURE — DEFERRED:** Advanced Agent evaluation, deployment, and autonomous optimization.
 - **DEFERRED:** Rate-based statutory verification and historical legal rates. A multi-city settlement cannot use one Eastvale wage without evidence of applicable jurisdictions and rates. No such assumptions are made here.
@@ -159,12 +159,13 @@ The key already supplied remains untouched. Model omission uses the documented `
 | `compare_strategies` | same | Core explicit strategy groups, including Unclassified |
 | `get_settlement_efficiency` | nullable `settlementId`, `limit` 1–5 | Existing bounded settlement service; latest by default, ID only within its 20 recent results |
 | `get_data_quality` | `period`, nullable `asOf` | Core quality plus up to five recent settlement completeness summaries |
+| `get_annual_uber_summary` | `years` (1–2 distinct completed years), `includeMonthly` boolean | Independent annual statements, source reconciliation, calculated annual rates and same-definition changes |
 
-Period is week/month/year; category is all/restaurant/grocery/retail/other. JSON schemas require every property; optional dates/IDs use null. Zod validates before database access. Tools call the frozen services directly through the existing process read/write queue; they cannot mutate records, generate query expressions, browse, or run code. Different tool reads are not one shared snapshot.
+Period is week/month/year; category is all/restaurant/grocery/retail/other. JSON schemas require every property; optional dates/IDs use null. Zod validates before database access. The original tools call the frozen services directly; the annual tool calls its separate deterministic annual service through the existing process read/write queue; they cannot mutate records, generate query expressions, browse, or run code. Different tool reads are not one shared snapshot.
 
 Final responses require successful tool evidence. The model returns a qualitative `explanation`, selected `factIds`, and `comparison` (`none` or `limited`). Request-specific evidence IDs resolve only to successfully executed tools in that request. Each fact retains its tool execution, actual scope, accounting basis, cohort and units. The server renders exact deterministic amounts, metric sample/excluded counts and missing reasons; settlement scalars carry coverage/completeness counts. Null remains unavailable and recorded zero remains known.
 
-Selected strategy evidence or facts spanning different periods/bases/cohorts/units require `comparison=limited`; otherwise the answer fails with `scope_conflict`. Limited comparisons use a server-written English/Chinese explanation and separate scoped facts, replacing untrusted comparative prose. No before/after difference, causal inference or new financial formula is computed. Ordinary model prose cannot supply digits, dates, percentages or written-out numbers; use evidence for these. Conceptual phrases such as “unknown, not zero” and “two accounting views” remain accepted. This conservative check and the structured scope guard do not prove all qualitative statements correct or the model's selected period relevant to the question.
+Selected strategy evidence or facts spanning different periods/bases/cohorts/units require `comparison=limited`; otherwise the answer fails with `scope_conflict`. Limited comparisons use a server-written English/Chinese explanation and separate scoped facts, replacing untrusted comparative prose. Delivery/Session cross-scope comparisons compute no before/after difference or causal inference. A narrow annual-only exception renders already-calculated changes for the same year pair and metric definitions; mixed annual/DGI facts retain the original restriction. Ordinary model prose cannot supply digits, dates, percentages or written-out numbers; use evidence for these. Conceptual phrases such as “unknown, not zero” and “two accounting views” remain accepted. This conservative check and the structured scope guard do not prove all qualitative statements correct or the model's selected period relevant to the question.
 
 Limits: three tool-calling rounds, six total executions, at most four Responses requests, 1,000 output tokens per request, 60 seconds total, 48,000 bytes per tool result and 128,000 total result bytes. SDK retries are disabled; limits return a controlled failure without a fabricated partial analysis. Cancellation stops further work where possible; an already-running read or provider operation may finish. Repeated explicit submissions can incur additional charges; no budget ledger is implemented.
 
@@ -173,7 +174,7 @@ With `NODE_ENV=development`, the backend prints only request ID, model, allowlis
 OpenAI receives the submitted question and compact aggregate results, not stored notes, public/residential addresses, destination points, raw map data, credentials, or unnecessary record IDs. Tool-result text is restricted to domain enums, validated dates and server-authored limitations/backfill instructions; unknown fields are stripped recursively. Evidence and shared scope metadata replace duplicate aggregate trees in provider continuations. No cross-request financial cache is used. An ID explicitly typed into a question/tool argument is still part of that interaction. Requests use `store: false`; this does not assert zero provider retention. Do not paste private addresses or secrets into questions. Answers render as escaped plain text. No RAG, embeddings, persistent memory, writes, scheduling, streaming, new page, or deployment was added.
 
 
-### AI evaluation (Prompt C)
+### AI evaluation (Prompt C plus annual extension)
 
 ```bash
 npm run eval:ai
@@ -183,6 +184,36 @@ npm run build
 git diff --check
 ```
 
-The default evaluator uses 32 synthetic, scripted-provider scenarios across eight categories. It needs no `.env`, production database or OpenAI credentials and makes zero real OpenAI calls. Assertions determine category results and failures return a nonzero exit status. The report measures mock request/tool counts, token fields, payload size and local duration; these are not real billing or provider latency. Existing integration tests require the local DGI MongoDB and create only isolated synthetic databases. Details and blind spots: [AI evaluation](docs/ai-evaluation.md).
+The default evaluator uses 35 synthetic, scripted-provider scenarios (the original 32 plus three annual scenarios) across eight categories. It needs no `.env`, production database or OpenAI credentials and makes zero real OpenAI calls. Assertions determine category results and failures return a nonzero exit status. The report measures mock request/tool counts, token fields, payload size and local duration; these are not real billing or provider latency. Existing integration tests require the local DGI MongoDB and create only isolated synthetic databases. Details and blind spots: [AI evaluation](docs/ai-evaluation.md).
 
 **DEFERRED:** Explicitly authorized live model evaluation, real tool-selection/language accuracy measurement and published-rate billing estimates. No live OpenAI request was made in Prompt C; mock tool plans and Chinese text do not prove model behavior. No optional live command was added.
+
+## Uber Annual Statements — implemented
+
+History displays source-reported annual figures, calculated Net Payout per annual Online Mile/Completed Trip, expandable monthly activity, missing values and reconciliation warnings. The initial private local inputs cover 2024 and 2025; the public checkout contains no personal statements or import JSON. The collection/API start empty on a new installation. Further completed years use the same schema and CLI, including partial source availability. No new navigation page or map layer is added.
+
+`uberAnnualSummaries` stores one aggregate-only document per year. Uber Tax Summary is a platform report that says it is **not an official tax document**; separately issued 1099-K and 1099-NEC are distinct sources. Box amounts cross-check Gross Payment, not additional income. Monthly 1099-K amounts are **gross transactions**, never monthly Net Payout. NEC/miscellaneous earnings do not establish Prop 22 or get allocated to Deliveries/Sessions/strategies.
+
+The source pipeline is implementation-time manual PDF review → aggregate-only private JSON → Zod/cents reconciliation → explicit local CLI insert → read-only API/History. There is no runtime PDF parser/upload. Financial equations use integer cents. Monthly trip, mile and gross-transaction totals are independently checked; discrepancies preserve both reported values. Monthly mismatches and transaction-count differences are warnings. Financial equation mismatches block import for review. Missing fields/months are insufficient data, not fabricated zeros; partial records may be imported. Breakdown checks require an explicit source-review completeness flag, so missing optional categories are not assumed zero.
+
+### Private local import
+
+Keep source files outside the repository and put reviewed JSON in Git-ignored `private-exports/uber-annual/`. Do not copy taxpayer names, addresses, TINs, account numbers or original file paths into JSON. The CLI requires exactly one explicit mode and the existing **local** DGI `MONGODB_URI` from `backend/.env`. It never calls ArcGIS/OpenAI or initializes other records.
+
+```bash
+npm run db:status
+npm run data:import-uber-annual -- --file private-exports/uber-annual/2024.json --dry-run
+npm run data:import-uber-annual -- --file private-exports/uber-annual/2024.json --apply
+```
+
+Repeat with another completed year's privately reviewed JSON. Run dry-run first. Identical year data (regardless of JSON key/month order or import timestamp) returns `already_imported`; changed observations return `annual_conflict`, with no overwrite. Apply is insert-only, protected by MongoDB's unique numeric `_id`. There is no automatic startup import or public annual write endpoint. Invalid input/connection failures return a safe code without echoing private values or credentials. CLI reconciliation summaries contain financial discrepancies: keep captured output private too.
+
+`GET /api/uber-annual-summaries` returns `{ data, comparisons, limit, hasMore }`, newest year first, at most 20 years, with a valid empty result and no private document metadata. Each year includes source availability, annual observations, tax-form amounts, monthly observations, derived metrics, a highest-observed-month gross-transactions check (coverage explicit), and reconciliation. API and AI facts distinguish reported values from calculated values; import timestamps/IDs/file paths never leave the annual API.
+
+**Boundaries:** Net Payout is not full economic vehicle profit or after-tax income. Annual Uber Online Miles differ from Session, official Prop 22 engaged and tax-eligible mileage. Per-mile rates use the reported annual value, preserving any monthly discrepancy. Hours are absent, so no annual hourly rate is calculated. Adjacent available-year changes compare identical definitions; gaps are labeled nonconsecutive, zero baseline percentages are unavailable, and missing/zero denominators produce unavailable rates. `vehicleTaxYears`, IRS calculations and frozen A.0–A.2.2 Dashboard accounting remain independent and unchanged.
+
+**Recording workflow:** 2024–2025 are platform-reported aggregate history. January 1–September 23, 2026 detailed History backfill is in progress; September 24 onward uses maintained DGI detailed records. This is the user's recording workflow, not verified complete coverage. Aggregates never generate historical Deliveries, Sessions, merchants or GIS observations.
+
+Ask DGI adds exactly `get_annual_uber_summary`; seven tools are registered while the six-execution budget stays unchanged. Selected aggregate annual results reach OpenAI only after an explicit Ask DGI submission. Backend-calculated changes carry year, source, definition, unit, denominator and reported/calculated provenance. The server permits a special comparison explanation only when all selected evidence is calculated annual-change evidence for the same year pair and execution. Arbitrary mixed-basis comparisons and model-supplied numeric claims remain restricted.
+
+**DEFERRED:** runtime PDF processing, Uber synchronization, detailed historical reconstruction, annual Prop 22 allocation, tax returns/liability, new vehicle cost formulas, additional GIS layers, cloud deployment and statement correction/overwrite workflow. Conflicting inputs require manual source review outside this insert-only importer.

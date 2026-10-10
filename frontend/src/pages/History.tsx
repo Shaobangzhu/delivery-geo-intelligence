@@ -4,6 +4,7 @@ import { ConfirmDelete } from "../history/ConfirmDelete";
 import { DeliveryModal } from "../history/DeliveryModal";
 import { formatDuration } from "../history/duration";
 import { Prop22Payments } from "../history/Prop22Payments";
+import { UberAnnualStatements } from "../history/UberAnnualStatements";
 import { UberSessions } from "../history/UberSessions";
 import "../history/history.css";
 
@@ -173,6 +174,7 @@ export function History() {
 
       <Prop22Payments adding={addingPayment} onCloseAdd={() => setAddingPayment(false)} />
       <UberSessions merchants={merchants} deliveryRevision={reload} />
+      <UberAnnualStatements />
       {editor !== undefined && <DeliveryModal key={editor?.id ?? "new"} delivery={editor} merchants={merchants} onClose={() => setEditor(undefined)} onSaved={refreshAfterSave} />}
       {deleteTarget && <ConfirmDelete delivery={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={refreshAfterDelete} />}
     </section>

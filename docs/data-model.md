@@ -11,6 +11,7 @@ The application uses the native MongoDB Node.js driver. The application database
 | `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `sessionId`, `payout`, `distanceMiles`, `deliveryDurationSeconds`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt`; sparse `sessionId` |
 | `deliverySessions` | `_id`, `startedAt`, `endedAt`, optional `strategy`, `totalDrivenMiles`, `taxEligibleBusinessMiles`, `notes`, server-owned `associationIntegrity` | `startedAt` descending plus `_id` |
 | `vehicleEconomics` | `_id: "primary"`, vehicle name, energy/tire costs, optional tire life and marginal depreciation | built-in unique `_id` only |
+| `uberAnnualSummaries` | `_id: year`, `year`, `sources`, `annual`, `taxForms`, `monthlyActivity`, `importedAt` | built-in unique numeric `_id` only |
 | `vehicleTaxYears` | `_id: taxYear`, `taxYear`, annual vehicle miles and miles by purpose, `taxMethod` | built-in unique `_id` only |
 
 A Merchant is one **physical pickup location**, not a brand. Two branches of one brand use separate IDs, even when they share a name. `category` is `restaurant`, `grocery`, `retail`, or `other`. `publicAddress` is a verified public business address; `location` is its exact stored-geocode GeoJSON Point in `[longitude, latitude]` order. New Merchant writes require an address and reject client-supplied coordinates. Earlier records can lack `publicAddress`; they retain their existing location until a verified address correction is supplied. No merchant or delivery records are seeded.
@@ -159,3 +160,25 @@ POST accepts optional `settlementDetails`; its fields cannot be null. PATCH omis
 GET list retains `{ data: [...] }`. GET detail, POST, and PATCH return `{ data, reconciliation }`. The derived result includes `method: "reported_guarantee"`, `status`, `receivedAdjustment`, nullable `expectedAdjustment`/`difference`, and `tolerance: 0.01`. Missing or unusable comparison inputs produce `insufficient_data`. A documented method identifies this calculation independently of any future sourced rate-based verification.
 
 Uber statements supply the manually entered observations and receipts. No real statement is part of the repository or test fixtures.
+
+## Historical Uber annual aggregates
+
+`backend/src/uberAnnualSummary.ts` defines the strict Zod input and BSON document. Years are integers from 2000 through the most recently completed Los Angeles calendar year; current/future years fail. One collection stores annual/monthly observations together. `sources` has boolean `uberTaxSummary`, `form1099K`, `form1099NEC`; at least one source is required, and flags must agree with supplied source fields. A missing form remains absent. Optional annual trip/mile/financial fields support partial reports. No confidential metadata or arbitrary text is accepted at any nesting level.
+
+`annual` supports completed trips, Online Miles, trip earnings before separately reported tips, tips, trip total, additional earnings, Gross Payment, Expenses/Fees/Tax and Net Payout. Optional service-fee/adjustment and OccAcc expense fields plus the optional incentives/miscellaneous/OccAcc additional breakdown preserve available categories. `expensesBreakdownComplete` and `additionalBreakdownComplete` are source-review assertions: only explicitly complete supplied components are subtotal-checked. Their omission means unknown breakdown coverage, not zero missing components. If a future report uses unsupported categories, retain its reported total, omit the incomplete breakdown/completeness assertion, and mark the subtotal check insufficient; do not reinterpret categories.
+
+`taxForms` independently stores optional K Box 1a/payment transaction count and NEC Box 1. `monthlyActivity` contains at most 12 distinct month numbers (1–12), with independently optional completed trips, Online Miles and K gross transactions. Missing months are allowed and flagged insufficient for annual monthly-total reconciliation. Counts are nonnegative safe integers; miles are nonnegative finite safe-range values; monetary input must have at most two decimal places and safe integer cents. Source zeros survive. `importedAt` is a BSON Date, managed by the CLI, not a source field. Rates, checks and changes are never persisted.
+
+Synthetic partial input (not personal financial history):
+
+```json
+{
+  "year": 2022,
+  "sources": { "uberTaxSummary": true, "form1099K": false, "form1099NEC": false },
+  "annual": { "completedTrips": 12, "onlineMiles": 120, "grossPayment": 150, "expensesFeesTax": 24, "netPayout": 126 },
+  "taxForms": {},
+  "monthlyActivity": [{ "month": 1, "completedTrips": 0, "onlineMiles": 3 }]
+}
+```
+
+`GET /api/uber-annual-summaries` exposes up to 20 completed years sorted descending, `hasMore`, and comparison records for adjacent available years. DTOs include `year`, `sources`, `annual`, `taxForms`, `monthlyActivity`, `metrics`, `monthlyGrossTransactionsPeak`, `reconciliation`; comparisons carry `fromYear`, `toYear`, `consecutiveYears` and metric changes. No document `_id`, `importedAt`, PDF paths or personal identifiers are returned. Empty data is valid; invalid stored records/DB failures yield a safe 503. POST/PATCH/DELETE are absent. Imports access only this collection, with insert-only year conflict protection and no migration of existing collections.

@@ -91,7 +91,7 @@ The existing process queue now coordinates domain writes with Dashboard, destina
 ```text
 Dashboard Ask DGI → POST /api/ai/ask → Express orchestrator
   ↔ OpenAI Responses API (official Node SDK, function calling)
-  → fixed six-tool registry → existing process read/write queue
+  → fixed seven-tool registry (original six + independent annual statements) → existing process read/write queue
   → Dashboard / Core / settlement domain services → MongoDB
   → aggregate-only projection → evidence + shared scope metadata → model qualitative explanation
   → server resolves evidence IDs to deterministic metric displays → React plain text
@@ -108,7 +108,7 @@ Only explicit Ask submissions contact OpenAI. The panel is independent of Dashbo
 
 ## Prompt C: grounding and reliability boundary
 
-The frozen financial services and six-tool registry remain unchanged in purpose. Runtime Zod schemas now require every declared argument; nullable `asOf`/`settlementId` must be explicitly present. Validation precedes the coordinated read. Settlement IDs are used for internal selection but removed from tool results. Only allowlisted aggregate keys, finite numbers, booleans, nulls, domain enums and validated ISO dates cross the projection boundary. Server-authored limitations and supported backfill workflows are included separately.
+The frozen financial services and original six tools remain unchanged in purpose; a separate annual read tool is described below. Runtime Zod schemas now require every declared argument; nullable `asOf`/`settlementId` must be explicitly present. Validation precedes the coordinated read. Settlement IDs are used for internal selection but removed from tool results. Only allowlisted aggregate keys, finite numbers, booleans, nulls, domain enums and validated ISO dates cross the projection boundary. Server-authored limitations and supported backfill workflows are included separately.
 
 Evidence has a random request prefix and per-execution provenance. Repeating one tool with different scopes cannot overwrite earlier scopes. Currency/rate facts retain units; metric objects retain sample/excluded counts and reasons, while settlement facts carry supplied coverage, payout and complete-cost counts/status. Provider continuations carry evidence with shared source descriptors rather than another copy of the full aggregate tree. No new financial calculation or financial-data cache was introduced.
 
@@ -119,3 +119,21 @@ Responses/tool call IDs and arguments are validated before execution, including 
 Diagnostics add actual provider-call/error counts, cumulative serialized tool bytes and supplied per-exchange token detail fields. Invalid usage shapes fail safely; omitted usage/details remain absent rather than estimated. There is no prompt/answer/tool-payload log. The frontend validates successful API envelopes, renders escaped text, focuses the question input, permits explicit retry and ignores late success/failure from cancelled requests. The existing Dashboard/GIS lifecycle is unchanged.
 
 `backend/evals/` runs typed synthetic fixtures against scripted Responses mocks without environment loading, MongoDB connections or live SDK calls. See [ai-evaluation.md](ai-evaluation.md) for categories, failure probes, measurement limits and the separation between deterministic finance, orchestration, grounding and real model quality.
+
+## Historical annual statements boundary
+
+```text
+Private source PDFs (implementation-time review only)
+  → aggregate-only JSON in Git-ignored private-exports/uber-annual
+  → explicit CLI validation / dry-run / insert-only apply
+  → uberAnnualSummaries in the existing local DGI MongoDB
+  → pure reconciliation / annual metrics / same-definition comparisons
+  → GET /api/uber-annual-summaries → History annual/monthly tables
+  → selected completed years via seventh read-only Ask DGI tool (explicit submission only)
+```
+
+There is no runtime PDF processing, startup import, public annual write API, additional database/service/page or GIS reconstruction. The CLI accepts only localhost MongoDB and uses the fixed `delivery_geo_intelligence` database. Input validation and financial review precede connection/application; unique year `_id` plus a second read on duplicate-key races makes identical imports idempotent and conflicting imports fail without overwriting. Import timestamps are internal; all aggregate APIs exclude document identities/private metadata. Existing collections and A.0–A.2.2 financial services remain untouched.
+
+History places a compact independent annual section after Sessions/its existing vehicle-mileage panel. It fetches only the annual GET endpoint, aborts/ignores stale completion on unmount, handles loading/empty/failure/malformed responses, and offers explicit retry. Native details/summary controls expand monthly tables; scroll regions are labeled/focusable. Reported zero differs from missing. This display does not invoke OpenAI.
+
+The annual tool reuses the same service through the existing coordination queue, strict bounded arguments, recursive aggregate projection and evidence renderer. Annual evidence has year, metric definition/unit, source kind and reported/calculated provenance. Only precomputed same-pair change evidence receives a specialized comparison explanation. All other scope guards, private credential handling, no-persistent-chat policy, provider controls and six-execution limit remain intact.

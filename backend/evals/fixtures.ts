@@ -1,3 +1,4 @@
+import { annualSummary, compareAnnualYears, type AnnualInput } from "../src/uberAnnualSummary.js";
 import { ObjectId, type Db } from "mongodb";
 import { aggregateSessionEfficiency, calculateDeliveryEfficiency, calculateSessionEfficiency } from "../src/efficiency.js";
 import { calculateSettlementEfficiency } from "../src/settlementEfficiency.js";
@@ -7,7 +8,7 @@ import type { ResponsesClient } from "../src/ai/types.js";
 
 export const now = new Date("2026-03-08T20:00:00Z");
 export const periodArgs = { period: "month", asOf: "2026-03-08" };
-export const argsFor = (name: ToolName) => name === "get_settlement_efficiency" ? { settlementId: null, limit: 1 }
+export const argsFor = (name: ToolName) => name === "get_annual_uber_summary" ? { years: [2022, 2023], includeMonthly: true } : name === "get_settlement_efficiency" ? { settlementId: null, limit: 1 }
   : { ...periodArgs, ...(["get_period_summary", "get_delivery_efficiency"].includes(name) ? { category: "all" } : {}) };
 export const functionCall = (name: string, args: unknown = argsFor(name as ToolName), id = name) =>
   ({ type: "function_call" as const, name, arguments: JSON.stringify(args), call_id: id, id });
@@ -35,7 +36,12 @@ export function syntheticRegistry(completeCosts = false) {
   const deliveries = [delivery, unknown];
   const settlement = { ...calculateSettlementEfficiency(payment, [payment], [delivery], [session], profile), ...sentinel };
   const calls: { service: string; filters?: unknown }[] = [];
+  const annualRows = [2022, 2023].map((year) => annualSummary({ year, sources: { uberTaxSummary: true, form1099K: true, form1099NEC: true },
+    annual: { completedTrips: 12, onlineMiles: 120, grossPayment: year === 2022 ? 150 : 180, netPayout: year === 2022 ? 126 : 150 },
+    taxForms: { form1099K: { box1aGrossTransactions: 120, paymentTransactionCount: 12 }, form1099NEC: { box1NonemployeeCompensation: year === 2022 ? 30 : 60 } },
+    monthlyActivity: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, completedTrips: index === 1 ? 0 : 1, onlineMiles: 10, form1099KGrossTransactions: 10 })) } satisfies AnnualInput));
   const domain = {
+    async annual() { calls.push({ service: "annual" }); return { data: annualRows, comparisons: [compareAnnualYears(annualRows[0]!, annualRows[1]!)], limit: 20, hasMore: false, ...sentinel, taxpayerName: "SYNTHETIC_TAXPAYER", tin: "SYNTHETIC_TIN", pdfContent: "SYNTHETIC_PDF" }; },
     async dashboard(_db: Db, filters: Parameters<DomainServices["dashboard"]>[1]) {
       calls.push({ service: "dashboard", filters });
       return { filters: ranges(filters), summary: { totalDeliveries: 2, uniqueMerchants: 1,

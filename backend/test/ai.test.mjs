@@ -20,7 +20,7 @@ const delivery = { _id: new ObjectId(), merchantId, pickedUpAt: session.startedA
 const payment = { _id: new ObjectId(), type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 20,
   coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: false };
 const args = { period: "month", asOf: "2026-03-08" };
-const defaultArgs = (name) => name === "get_settlement_efficiency" ? { settlementId: null, limit: 1 }
+const defaultArgs = (name) => name === "get_annual_uber_summary" ? { years: [2022], includeMonthly: false } : name === "get_settlement_efficiency" ? { settlementId: null, limit: 1 }
   : { ...args, ...(["get_period_summary", "get_delivery_efficiency"].includes(name) ? { category: "all" } : {}) };
 function fixture() {
   const range = resolveDashboardFilters({ ...args, category: "all" }, now);
@@ -31,11 +31,11 @@ function fixture() {
   const settlement = calculateSettlementEfficiency(payment, [payment], [delivery], [session], null);
   return { dashboard: { filters, summary: { totalDeliveries: 1, uniqueMerchants: 1, totalEarnings: { value: 0, deliveryEarnings: 0, prop22Earnings: 0, sampleCount: 1, prop22PaymentCount: 0 } },
     map: { location: { coordinates: [0.123456, 0.654321] } }, notes: "SYNTHETIC_PRIVATE_NOTE", publicAddress: "SYNTHETIC_PUBLIC_ADDRESS" },
-    efficiency, settlements: { data: [settlement], limit: 20, totalSettlements: 1, hasMore: false } };
+    efficiency, annual: { data: [], comparisons: [], limit: 20, hasMore: false }, settlements: { data: [settlement], limit: 20, totalSettlements: 1, hasMore: false } };
 }
 function registry() {
   const data = fixture(), calls = []; let coordinated = 0;
-  const domain = Object.fromEntries(["dashboard", "efficiency", "settlements"].map((name) => [name, async (...inputs) => { calls.push({ name, inputs }); return data[name]; }]));
+  const domain = Object.fromEntries(["dashboard", "efficiency", "settlements", "annual"].map((name) => [name, async (...inputs) => { calls.push({ name, inputs }); return data[name]; }]));
   return { ...createToolRegistry({ collection() { throw new Error("No direct query expressions allowed"); } }, async (read) => { coordinated++; return read(); }, domain, now), calls, data, coordinated: () => coordinated };
 }
 const call = (name, input = defaultArgs(name), id = name) => ({ type: "function_call", name, arguments: JSON.stringify(input), call_id: id, id });
@@ -52,7 +52,7 @@ function final(input, select = (evidence) => evidence.filter((fact) => /Known pa
 test("AI request and strict tool schemas reject invalid questions, names, fields and dates before reads", async () => {
   for (const body of [{ question: "" }, { question: "  " }, { question: "x".repeat(1001) }, { question: "valid", command: "delete" }]) assert.equal(askSchema.safeParse(body).success, false);
   assert.equal(askSchema.parse({ question: " valid " }).question, "valid");
-  assert.equal(toolDefinitions.length, 6);
+  assert.equal(toolDefinitions.length, 7);
   for (const tool of toolDefinitions) {
     assert.equal(tool.strict, true); assert.equal(tool.parameters.additionalProperties, false);
     assert.deepEqual(tool.parameters.required.sort(), Object.keys(tool.parameters.properties).sort());
@@ -66,14 +66,14 @@ test("AI request and strict tool schemas reject invalid questions, names, fields
   }
   assert.equal(tools.calls.length, 0); assert.equal(tools.coordinated(), 0);
 });
-test("all six typed tools reuse existing analytics, preserve unknown/zero/cohorts and exclude private/map fields", async () => {
+test("all seven typed tools reuse existing analytics, preserve unknown/zero/cohorts and exclude private/map fields", async () => {
   const tools = registry();
   for (const tool of toolDefinitions) {
     const data = await tools.execute(tool.name, defaultArgs(tool.name));
     const json = JSON.stringify(data);
     for (const privateToken of ["coordinates", "publicAddress", "SYNTHETIC_PRIVATE_NOTE", "SYNTHETIC_PUBLIC_ADDRESS", "deliveryIds"]) assert.equal(json.includes(privateToken), false);
   }
-  assert.equal(tools.coordinated(), 6);
+  assert.equal(tools.coordinated(), 7);
   assert.equal(tools.calls.filter((call) => call.name === "dashboard").length, 1);
   const core = await tools.execute("get_session_efficiency", args);
   assert.equal(core.metrics.knownPayoutTotal.value, 0); assert.equal(core.metrics.estimatedEconomicProfit.value, null);
@@ -151,7 +151,7 @@ test("AI endpoint uses isolated MongoDB analytics, preserves every collection an
     const sdk = { async create(input) {
       requests++;
       if (mode === "error") throw new Error("SYNTHETIC_SECRET SDK detail");
-      if (mode === "valid") { mode = "final"; return response(toolDefinitions.map((tool) => call(tool.name))); }
+      if (mode === "valid") { mode = "final"; return response(toolDefinitions.filter((tool) => tool.name !== "get_annual_uber_summary").map((tool) => call(tool.name))); }
       const outgoing = JSON.stringify(input);
       for (const token of ["coordinates", "SYNTHETIC_PRIVATE_NOTE", "SYNTHETIC_PUBLIC_ADDRESS"]) assert.equal(outgoing.includes(token), false);
       return final(input.input);

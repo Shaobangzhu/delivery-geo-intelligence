@@ -1,3 +1,4 @@
+import { getAnnualSummaries } from "./uberAnnualSummary.js";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ObjectId, type Db, type Filter, type Sort } from "mongodb";
 import { ZodError } from "zod";
@@ -73,6 +74,12 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     const parsed = dashboardFilterSchema.safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
     return response.json(await withReferenceWrite(() => getEfficiencyAnalytics(db, parsed.data)));
+  });
+
+  app.get("/api/uber-annual-summaries", async (_request, response) => {
+    response.setHeader("Cache-Control", "no-store");
+    try { return response.json(await withReferenceWrite(() => getAnnualSummaries(db))); }
+    catch { return response.status(503).json({ error: "Annual statements are unavailable" }); }
   });
 
   app.get("/api/health", async (_request, response) => {

@@ -13,6 +13,7 @@
     "db:down": "docker compose down",
     "db:status": "docker compose ps",
     "db:logs": "docker compose logs -f mongodb",
-    "eval:ai": "npm run eval:ai -w backend"
+    "eval:ai": "npm run eval:ai -w backend",
+    "data:import-uber-annual": "node --import tsx backend/src/importUberAnnual.ts"
   }
 }

@@ -3,7 +3,7 @@ import { askDgi, type AnalystAnswer } from "./aiApi";
 
 const suggestions = ["How efficient were my delivery sessions?", "What does my latest Prop 22 settlement show?",
   "Compare my operating strategies.", "What data should I backfill?"];
-const sources: Record<string, string> = { get_period_summary: "Period summary", get_delivery_efficiency: "Delivery efficiency",
+const sources: Record<string, string> = { get_annual_uber_summary: "Uber Annual Statements", get_period_summary: "Period summary", get_delivery_efficiency: "Delivery efficiency",
   get_session_efficiency: "Session efficiency", compare_strategies: "Strategy comparison",
   get_settlement_efficiency: "Settlement efficiency", get_data_quality: "Data completeness" };
 

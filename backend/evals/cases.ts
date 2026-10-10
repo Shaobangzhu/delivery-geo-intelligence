@@ -198,6 +198,18 @@ export const cases: AgentEvalCase[] = [
     await reject(createAnalyst({ create: async () => mockResponse(Array.from({ length: 7 }, (_, index) => functionCall("get_data_quality", argsFor("get_data_quality"), String(index)))) }, "mock", context.observe)("Income", excessive.registry, "eval"), "tool_limit"); assert.equal(excessive.coordinated(), 0);
     await reject(createAnalyst({ create: async () => mockResponse([functionCall("get_data_quality"), functionCall("get_data_quality")]) }, "mock", context.observe)("Income", syntheticRegistry().registry, "eval"), "invalid_tool_call");
   }),
+  success("annual-derived-comparison", "Basic Analytics", "Compare my annual Net Payout across completed years.", { tools: ["get_annual_uber_summary"], explanation: "Invented improvement is discarded.", select: /Backend-calculated change/, comparison: "limited" }, ({ result }) => {
+    assert.match(result.answer, /same annual metric definitions/); assert.match(result.answer, /absolute change: 24 USD/); assert.match(result.answer, /percentage change:/); assert.match(result.answer, /origin: calculated/); assert.doesNotMatch(result.answer, /Invented improvement/);
+  }),
+  success("annual-monthly-boundaries", "Financial Semantics", "Why can online miles exist with no completed trips? Is annual compensation Prop 22?", { tools: ["get_annual_uber_summary"], explanation: "Annual statements cannot reconstruct historical deliveries. Online miles and completed trips are different reported observations.", select: /Month 2|form1099NEC/, comparison: "limited" }, ({ result }) => {
+    assert.match(result.answer, /Completed Trips: 0; Online Miles: 10/); assert.match(result.answer, /not monthly Net Payout/); assert.ok(result.warnings.some((w) => w.includes("does not establish Prop 22")));
+    assert.ok(result.warnings.some((w) => w.includes("cannot be reconstructed"))); assert.doesNotMatch(JSON.stringify(result), /SYNTHETIC_TAXPAYER|SYNTHETIC_TIN|SYNTHETIC_PDF|coordinates|pdfContent/);
+  }),
+  failure("annual-cash-scope-isolation", "Period/Cohort Safety", "Can I add annual Net Payout to Dashboard earnings?", async (context) => {
+    await reject(runPlan(context, "Combine annual and cash", { tools: ["get_annual_uber_summary", "get_period_summary"], explanation: "Recorded results.", select: /Net Payout|Total earnings/, comparison: "none" }), "scope_conflict");
+    const { result: answer } = await runPlan(context, "Combine annual and cash", { tools: ["get_annual_uber_summary", "get_period_summary"], explanation: "These are additional earnings.", select: /Net Payout|Total earnings/, comparison: "limited" });
+    assert.match(answer.answer, /Do not add income views/); assert.doesNotMatch(answer.answer, /These are additional earnings/);
+  }),
   failure("payload-usage-limits", "Cost Limits", "Enforce result budgets and preserve provider usage.", async (context) => {
     const excessive = syntheticRegistry(); excessive.registry.execute = async () => ({ synthetic: "x".repeat(50_000) } as never);
     await reject(createAnalyst({ create: async () => mockResponse([functionCall("get_data_quality")]) }, "mock", context.observe)("Income", excessive.registry, "eval"), "tool_payload_limit", 503);

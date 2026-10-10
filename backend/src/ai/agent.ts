@@ -3,7 +3,7 @@ import type { ResponseInput, ResponseInputItem } from "openai/resources/response
 import { analystInstructions } from "./prompts.js";
 import { AnalystError, type AiAnswer, type AiDiagnostics, type ResponsesClient } from "./types.js";
 import type { ToolName, ToolRegistry } from "./tools.js";
-import { createEvidenceCollector, requiresComparisonBoundary, validateNarrative } from "./evidence.js";
+import { createEvidenceCollector, requiresComparisonBoundary, isDeterministicAnnualComparison, validateNarrative } from "./evidence.js";
 
 export const askSchema = z.strictObject({ question: z.string().trim().min(1).max(1000) });
 export const AI_LIMITS = { rounds: 3, tools: 6, outputTokens: 1000, timeoutMs: 60_000, toolBytes: 48_000, totalToolBytes: 128_000 } as const;
@@ -92,9 +92,12 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
             // entire aggregate tree in every continuation's input.
             const sources = new Map<string, { id: string; source: (typeof evidence)[number]["source"] }>();
             const compact = evidence.map(({ source, ...fact }) => {
-              const key = JSON.stringify(source);
-              if (!sources.has(key)) sources.set(key, { id: `${source.execution}s${sources.size + 1}`, source });
-              return { ...fact, sourceId: sources.get(key)!.id };
+              // Annual metric definitions belong to each fact; shared year/basis/
+              // origin metadata need not be repeated for every metric in a year.
+              const { definition, ...sharedSource } = source;
+              const key = JSON.stringify(sharedSource);
+              if (!sources.has(key)) sources.set(key, { id: `${source.execution}s${sources.size + 1}`, source: sharedSource });
+              return { ...fact, ...(definition ? { definition } : {}), sourceId: sources.get(key)!.id };
             });
             const payload = JSON.stringify({ evidence: compact, sources: [...sources.values()], limitations: result.limitations ?? [], backfillWorkflows: result.backfillWorkflows ?? [] });
             const size = Buffer.byteLength(payload); metadata.toolPayloadBytes += size;
@@ -117,10 +120,12 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
         // server renders a qualitative boundary and independent facts instead.
         const chinese = /\p{Script=Han}/u.test(question);
         const explanation = parsed.comparison === "limited"
-          ? chinese ? "这些是不同范围或观察群体的独立结果，不能直接相加，也不能据此判断策略优劣、因果关系或前后改善。请分别查看期间、分母、样本数和完整性。"
+          ? isDeterministicAnnualComparison(trusted)
+            ? chinese ? "以下差值由后端按相同年度指标定义计算。年度报表与 DGI 现金收入相互独立；差值不证明因果关系或策略优劣。净到账不是完整经济利润。" : "These changes were calculated by the backend using the same annual metric definitions. Annual statements are independent of DGI cash income. Changes do not establish causality or strategy superiority; Net Payout is not full economic profit."
+            : chinese ? "这些是不同范围或观察群体的独立结果，不能直接相加，也不能据此判断策略优劣、因果关系或前后改善。请分别查看期间、分母、样本数和完整性。"
             : "These are separate observations. Different periods, accounting bases or cohorts do not establish strategy superiority, causality or before/after improvement. Do not add income views; review each scope, denominator, sample size and completeness separately."
           : parsed.explanation;
-        const scopes = [...new Set(trusted.map((fact) => `${fact.source.tool} [${fact.source.execution}]: ${fact.source.scope}; basis: ${fact.source.basis}; cohort: ${fact.source.cohort}${fact.source.eligibility ? `; ${fact.source.eligibility}` : ""}`))];
+        const scopes = [...new Set(trusted.map((fact) => `${fact.source.tool} [${fact.source.execution}]: ${fact.source.scope}; basis: ${fact.source.basis}; cohort: ${fact.source.cohort}${fact.source.year ? `; year: ${fact.source.year}; origin: ${fact.source.origin}; source: ${fact.source.sourceKind}; definition: ${fact.source.definition}` : ""}${fact.source.eligibility ? `; ${fact.source.eligibility}` : ""}`))];
         const answer = `${explanation}\n\n${scopes.join("\n")}\n\n${trusted.map((fact) => `${fact.label}: ${fact.display}`).join("\n")}`;
         metadata.outcome = "success";
         return { requestId, answer, toolsUsed: [...new Set(metadata.tools)],

@@ -30,6 +30,7 @@ function installApi(options: {
     if (url.pathname === "/api/delivery-sessions") return reply({ data: [] });
     if (url.pathname === "/api/vehicle-economics") return reply({ data: null, historicalMileage: [] });
     if (url.pathname === "/api/earnings-adjustments") return reply({ data: [] });
+    if (url.pathname === "/api/uber-annual-summaries") return reply({ data: [], limit: 20, hasMore: false });
     if (url.pathname === "/api/merchants") return reply({ data: merchants });
     if (url.pathname === "/api/deliveries" && method === "GET") {
       if (options.get) return options.get(url);

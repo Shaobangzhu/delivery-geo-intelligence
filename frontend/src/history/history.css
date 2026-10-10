@@ -142,3 +142,10 @@
 .session-candidate-pages { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0; font-size: 11px; }
 .session-candidate-pages .button { padding: 6px; font-size: 11px; }
 @media (max-width: 600px) { .session-section-heading { align-items: flex-start; flex-wrap: wrap; } }
+
+.annual-statements-table { min-width: 1030px; }
+.annual-monthly-table { min-width: 560px; }
+.annual-description { color: #516889; font-size: 12px; line-height: 1.6; }
+.annual-warning { padding: 10px 12px; border-left: 3px solid #b77900; background: #fff8e7; color: #684500; font-size: 12px; line-height: 1.5; }
+.annual-statements .table-scroll:focus-visible { outline: 2px solid #0875ff; outline-offset: 3px; }
+.annual-caption { text-align: left; padding: 10px 12px; color: #516889; font-size: 12px; }
