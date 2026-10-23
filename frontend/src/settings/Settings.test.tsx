@@ -1,0 +1,98 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Settings } from "../pages/Settings";
+import { categories, parseSnapshot } from "./api";
+import { observeBrowserMap } from "./browserStatus";
+const timestamp = "2026-10-23T10:00:00.000Z";
+function fixture(window = "24h", samples = 2) {
+  return { schemaVersion: 1, window, generatedAt: timestamp, startedAt: timestamp, incomplete: false,
+    providers: (["mongodb", "arcgis_geocoding", "openai"] as const).map((provider) => ({ provider, configured: true, status: samples ? "operational" : "not_yet_verified",
+      lastSuccessAt: samples ? timestamp : null, lastUpdatedAt: samples ? timestamp : null, lastErrorCategory: null as string | null,
+      sampleCount: samples, requestCount: samples, successCount: samples, failureCount: 0, noMatchCount: 0, lowConfidenceCount: 0,
+      latency: { sampleCount: samples, meanMs: samples ? 10 : null, p50Ms: samples ? 10 : null, p95Ms: samples ? 20 : null },
+      operations: { database_read: samples, database_write: 0, database_other: 0, health_ping: 0, geocode: 0, analyst_request: 0 },
+      errorCounts: Object.fromEntries(categories.map((c) => [c, 0])), model: provider === "openai" ? "synthetic-model" : null,
+      healthCheck: provider === "mongodb" && samples ? { timestamp, durationMs: 3, outcome: "success" } : null,
+      ai: provider === "openai" ? { analystRequests: samples, providerCalls: samples, providerErrors: 0, usageSamples: samples, inputTokens: samples ? 123 : null, outputTokens: samples ? 45 : null } : null })) };
+}
+const reply = (body: unknown) => ({ ok: true, json: async () => body });
+function install(samples = 2) {
+  const fetcher = vi.fn(async (url: string) => reply(fixture(url.includes("window=1h") ? "1h" : "24h", samples)));
+  vi.stubGlobal("fetch", fetcher); return fetcher;
+}
+afterEach(() => vi.unstubAllGlobals());
+it("renders actual backend and unverified browser observations without paid calls", async () => {
+  const fetcher = install(); render(<Settings />);
+  expect(await screen.findByText("synthetic-model")).toBeInTheDocument();
+  expect(screen.getByText("123")).toBeInTheDocument(); expect(screen.getByText("3.0 ms")).toBeInTheDocument();
+  expect(screen.getByText("Not Yet Verified")).toBeInTheDocument();
+  expect(fetcher.mock.calls.map(([url]) => url)).toEqual(["/api/system/status", "/api/system/metrics?window=1h"]);
+  expect(screen.getByRole("region", { name: "Provider request metrics" })).toHaveAttribute("tabindex", "0");
+});
+it("renders empty metrics with unavailable latency and missing tokens", async () => {
+  install(0); render(<Settings />);
+  expect(await screen.findByText("No operations observed in this window.")).toBeInTheDocument();
+  expect(screen.queryByText("0.0%")).not.toBeInTheDocument(); expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
+});
+it("handles unavailable API without displaying raw error details", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("SECRET private error"); })); render(<Settings />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Backend data is unavailable or partial");
+  expect(screen.queryByText(/SECRET/)).not.toBeInTheDocument(); expect(screen.queryByText(/3 \/ 3 operational/)).not.toBeInTheDocument();
+});
+it("shows partial data and independent provider failure classifications", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (url.includes("metrics")) throw new Error("offline");
+    const data = fixture(); data.providers[1].status = "unavailable"; return reply(data);
+  })); render(<Settings />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Request metrics unavailable");
+  expect(screen.getByText("synthetic-model")).toBeInTheDocument(); expect(screen.queryByRole("table")).not.toBeInTheDocument();
+});
+it("refreshes both endpoints and switches metric windows", async () => {
+  const fetcher = install(), user = userEvent.setup(); render(<Settings />);
+  await screen.findByText("synthetic-model"); await user.click(screen.getByRole("button", { name: "Refresh status" }));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(4));
+  await user.selectOptions(screen.getByLabelText("Observation window"), "24h");
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(6));
+  expect(fetcher.mock.calls.at(-1)?.[0]).toBe("/api/system/metrics?window=24h");
+});
+it("cancels old requests on window change and ignores late completions", async () => {
+  let resolveOld!: (value: unknown) => void;
+  const fetcher = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+    .mockImplementationOnce(() => new Promise(() => {}))
+    .mockResolvedValueOnce(reply(fixture())).mockResolvedValueOnce(reply(fixture("24h", 0)));
+  vi.stubGlobal("fetch", fetcher); const user = userEvent.setup(); const view = render(<Settings />);
+  const signal = fetcher.mock.calls[0][1].signal as AbortSignal;
+  await user.selectOptions(screen.getByLabelText("Observation window"), "24h");
+  expect(signal.aborted).toBe(true); expect(await screen.findByText("No operations observed in this window.")).toBeInTheDocument();
+  resolveOld(reply(fixture())); view.unmount(); expect(fetcher.mock.calls[2][1].signal.aborted).toBe(true);
+});
+it("rejects malformed contracts and projects unknown fields without exposing them", () => {
+  const data = fixture();
+  expect(() => parseSnapshot({ ...data, schemaVersion: 2 }, "24h")).toThrow();
+  expect(() => parseSnapshot(data, "1h")).toThrow();
+  const bad = structuredClone(data); bad.providers[0].lastErrorCategory = "SECRET";
+  expect(() => parseSnapshot(bad, "24h")).toThrow();
+  expect(() => parseSnapshot({ ...data, providers: [data.providers[0], data.providers[0], data.providers[0]] }, "24h")).toThrow();
+  expect(JSON.stringify(parseSnapshot({ ...data, secret: "SECRET" }, "24h"))).not.toContain("SECRET");
+});
+it("shows sanitized categories and capacity warnings", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => { const data = fixture(url.includes("window=1h") ? "1h" : "24h"); data.incomplete = true; data.providers[0].lastErrorCategory = "rate_limit"; return reply(data); }));
+  render(<Settings />); expect(await screen.findByText("Rate Limit")).toBeInTheDocument(); expect(screen.getByText(/collector capacity/)).toBeInTheDocument();
+});
+it("shares only safe browser lifecycle events across component remounts", async () => {
+  install(); const view = render(<Settings />); await screen.findByText("synthetic-model");
+  view.unmount(); observeBrowserMap("layer_initialization_failure"); render(<Settings />);
+  expect(screen.getByText("Layer Initialization Failure")).toBeInTheDocument();
+});
+
+it("marks retained status stale after refresh failure and clears current metrics", async () => {
+  const fetcher = install(), user = userEvent.setup(); render(<Settings />);
+  await screen.findByText("synthetic-model");
+  fetcher.mockRejectedValue(new Error("PRIVATE_FAILURE"));
+  await user.click(screen.getByRole("button", { name: "Refresh status" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("retained status is stale");
+  expect(screen.getByText("Unavailable · stale snapshot")).toBeInTheDocument();
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  expect(screen.queryByText(/PRIVATE_FAILURE/)).not.toBeInTheDocument();
+});

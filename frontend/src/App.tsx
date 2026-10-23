@@ -1,3 +1,4 @@
+import { Settings } from "./pages/Settings";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { Dashboard } from "./pages/Dashboard";
 import { History } from "./pages/History";
@@ -19,12 +20,14 @@ export function App() {
         <NavLink to="/dashboard" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>Dashboard</NavLink>
         <NavLink to="/history" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>History</NavLink>
         <NavLink to="/merchants" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>Merchants</NavLink>
+        <NavLink to="/settings" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>Data &amp; Settings</NavLink>
       </nav>
     </header>
     <main className="page-content"><Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/history" element={<History />} />
+      <Route path="/settings" element={<Settings />} />
       <Route path="/merchants" element={<Merchants />} />
     </Routes></main>
     <footer className="site-footer"><span>Delivery Geo Intelligence</span>

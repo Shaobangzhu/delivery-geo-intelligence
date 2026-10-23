@@ -182,3 +182,13 @@ test("unavailable database status is an explicit observation in a valid status c
     assert.doesNotMatch(JSON.stringify(body), /PRIVATE_URI/);
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });
+
+test("system metadata exposes configured model and a separate last ping measurement", () => {
+  const o = new ProviderObservability(configured, () => 100, 100, "synthetic-model");
+  o.record(entry({ durationMs: 500 }));
+  o.record(entry({ operation: "health_ping", durationMs: 3 }));
+  assert.deepEqual(provider(o).healthCheck, { timestamp: new Date(100).toISOString(), durationMs: 3, outcome: "success" });
+  assert.equal(provider(o, "openai").model, "synthetic-model");
+  assert.equal(provider(o).model, null);
+  assert.equal(provider(new ProviderObservability(configured)).healthCheck, null);
+});

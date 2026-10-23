@@ -24,7 +24,7 @@ export class ProviderObservability {
   private samples: Sample[] = [];
   private lastEvictedAt: number | null = null;
   readonly startedAt: number;
-  constructor(readonly configuration: Configuration, private readonly now: () => number = Date.now, readonly capacity = 10_000) {
+  constructor(readonly configuration: Configuration, private readonly now: () => number = Date.now, readonly capacity = 10_000, private readonly model: string | null = null) {
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100_000) throw new Error("Invalid telemetry capacity");
     this.startedAt = now();
   }
@@ -73,7 +73,10 @@ export class ProviderObservability {
         const sum = (field: "providerCalls" | "providerErrors" | "usageSamples") => samples.reduce((n, row) => n + row[field], 0);
         const usage = samples.filter((row) => row.inputTokens !== null && row.outputTokens !== null);
         const iso = (sample: Sample | undefined) => sample ? new Date(sample.timestamp).toISOString() : null;
-        return { provider, configured: this.configuration[provider], status, lastSuccessAt: iso(successful.at(-1)),
+        const ping = samples.filter((row) => row.operation === "health_ping").at(-1);
+        return { model: provider === "openai" && this.model && /^[a-zA-Z0-9_.:-]{1,100}$/.test(this.model) ? this.model : null,
+          healthCheck: provider === "mongodb" && ping ? { timestamp: new Date(ping.timestamp).toISOString(), durationMs: ping.durationMs, outcome: ping.outcome } : null,
+          provider, configured: this.configuration[provider], status, lastSuccessAt: iso(successful.at(-1)),
           lastErrorCategory: errors.at(-1)?.errorCategory ?? null, lastUpdatedAt: iso(last), sampleCount: samples.length,
           requestCount: samples.length, successCount: samples.filter((row) => row.outcome === "success").length,
           failureCount: samples.filter((row) => row.outcome === "failure").length,

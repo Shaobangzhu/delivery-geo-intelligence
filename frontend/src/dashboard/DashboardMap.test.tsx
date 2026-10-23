@@ -1,3 +1,4 @@
+import { getBrowserMapStatus } from "../settings/browserStatus";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { DashboardMap } from "./DashboardMap";
@@ -120,6 +121,7 @@ it("weights pickup activity and distinct merchant variety differently in one per
     destinationCells={[]} metric="pickupVolume" />);
   await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
   const [merchantLayer, destinationLayer] = FakeFeatureLayer.instances;
+  expect(getBrowserMapStatus().event).toBe("map_initialized");
   expect(FakeMap.instances).toHaveLength(1);
   expect(FakeMapView.instances).toHaveLength(1);
   expect(FakeMap.instances[0].layers).toEqual([merchantLayer, destinationLayer]);

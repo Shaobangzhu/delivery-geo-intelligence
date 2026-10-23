@@ -1,3 +1,4 @@
+import { observeBrowserMap } from "../settings/browserStatus";
 import { useEffect, useRef, useState } from "react";
 import { loadArcgis } from "./arcgisRuntime";
 import { DashboardMapController, type DestinationCell, type DiversityLocation, type PickupLocation } from "./dashboardMapController";
@@ -25,19 +26,23 @@ export function DashboardMap({ pickupRows, diversityRows, destinationCells, metr
     let cancelled = false;
     const key = import.meta.env.VITE_ARCGIS_API_KEY?.trim();
     if (!key) {
+      observeBrowserMap("not_configured");
       setError("Map configuration is missing.");
       return;
     }
     void loadArcgis().then((arcgis) => {
       if (cancelled || !containerRef.current) return;
       arcgis.config.apiKey = key;
-      const controller = new DashboardMapController(containerRef.current, arcgis, setError, setUpdating, home);
+      const controller = new DashboardMapController(containerRef.current, arcgis, (message) => {
+        setError(message);
+        observeBrowserMap(message === "The map could not be initialized." ? "map_initialization_failure" : message.includes("updated") ? "layer_update_failure" : "layer_initialization_failure");
+      }, setUpdating, home, () => observeBrowserMap("map_initialized"));
       controllerRef.current = controller;
       const current = latest.current;
       controller.setMerchantFeatures(current.pickupRows, current.diversityRows);
       controller.setDestinationCells(current.destinationCells);
       controller.setMetric(current.metric);
-    }).catch(() => { if (!cancelled) setError("The map could not be loaded."); });
+    }).catch(() => { if (!cancelled) { observeBrowserMap("map_initialization_failure"); setError("The map could not be loaded."); } });
     return () => {
       cancelled = true;
       controllerRef.current?.destroy();

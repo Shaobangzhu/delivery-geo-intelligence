@@ -14,7 +14,7 @@ const client = new MongoClient(env.MONGODB_URI, { monitorCommands: true });
 try {
   await client.connect();
   const responses = createResponsesClient(env.OPENAI_API_KEY, model);
-  const observer = new ProviderObservability({ mongodb: true, arcgis_geocoding: Boolean(env.ARCGIS_GEOCODING_API_KEY), openai: responses !== null });
+  const observer = new ProviderObservability({ mongodb: true, arcgis_geocoding: Boolean(env.ARCGIS_GEOCODING_API_KEY), openai: responses !== null }, Date.now, 10_000, responses ? model : null);
   monitorMongo(client, observer);
   const db = client.db(DATABASE_NAME);
   await ensureIndexes(db);

@@ -35,7 +35,8 @@ export class DashboardMapController {
     private readonly arcgis: ArcgisRuntime,
     private readonly onError: (message: string) => void,
     private readonly onUpdating: (value: boolean) => void,
-    home: HomeReference | null = null
+    home: HomeReference | null = null,
+    onInitialized: () => void = () => {}
   ) {
     const map = new arcgis.Map({ basemap: "arcgis/light-gray/base" });
     this.merchantLayer = new arcgis.FeatureLayer({
@@ -85,6 +86,7 @@ export class DashboardMapController {
     }));
     this.ready = Promise.all([this.view.when(), this.merchantLayer.when(), this.destinationLayer.when()]).then(() => {
       if (this.destroyed) return;
+      onInitialized();
       void this.view.whenLayerView(this.merchantLayer).then((layerView) => {
         if (this.destroyed) return;
         this.handles.push(this.arcgis.reactiveUtils.watch(() => layerView.updating, (value) => {

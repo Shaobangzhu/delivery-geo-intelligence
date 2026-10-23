@@ -6,19 +6,23 @@ import { App } from "./App";
 
 vi.mock("./pages/Dashboard", () => ({ Dashboard: () => <h1>Dashboard page</h1> }));
 vi.mock("./pages/History", () => ({ History: () => <h1>History page</h1> }));
+vi.mock("./pages/Settings", () => ({ Settings: () => <h1>Settings page</h1> }));
 vi.mock("./pages/Merchants", () => ({ Merchants: () => <h1>Merchants page</h1> }));
 
-it("provides exactly three primary navigation routes with active state", async () => {
+it("provides exactly four primary navigation routes with active state", async () => {
   const user = userEvent.setup();
   render(<MemoryRouter initialEntries={["/merchants"]}><App /></MemoryRouter>);
   const nav = screen.getByRole("navigation", { name: "Primary navigation" });
   const links = [...nav.querySelectorAll("a")];
-  expect(links.map((link) => link.textContent)).toEqual(["Dashboard", "History", "Merchants"]);
+  expect(links.map((link) => link.textContent)).toEqual(["Dashboard", "History", "Merchants", "Data & Settings"]);
   expect(screen.getByRole("heading", { name: "Merchants page" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Merchants" })).toHaveClass("active");
   await user.click(screen.getByRole("link", { name: "History" }));
   expect(screen.getByRole("heading", { name: "History page" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "History" })).toHaveClass("active");
+  await user.click(screen.getByRole("link", { name: "Data & Settings" }));
+  expect(screen.getByRole("heading", { name: "Settings page" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Data & Settings" })).toHaveClass("active");
   await user.click(screen.getByRole("link", { name: "Dashboard" }));
   expect(screen.getByRole("heading", { name: "Dashboard page" })).toBeInTheDocument();
 });

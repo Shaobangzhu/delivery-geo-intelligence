@@ -9,7 +9,7 @@ Browser
   → MongoDB in DGI Docker Compose (127.0.0.1:27017)
 ```
 
-The frontend and backend run directly on the host. Docker Compose runs only MongoDB, with DGI-specific credentials, container, and persistent named volume. The backend connects to MongoDB on startup, creates spatial and History query indexes, and exposes Merchant, Delivery, and Dashboard APIs. React has three primary routes: Dashboard, History, and Merchants.
+The frontend and backend run directly on the host. Docker Compose runs only MongoDB, with DGI-specific credentials, container, and persistent named volume. The backend connects to MongoDB on startup, creates spatial and History query indexes, and exposes Merchant, Delivery, and Dashboard APIs. React has four primary routes: Dashboard, History, Merchants, and Data & Settings (`/settings`).
 
 The Compose image uses MongoDB 7.0 because MongoDB 8.0 failed to start under this Docker Desktop environment's Linux kernel. The DGI volume is separate from other projects.
 
@@ -66,7 +66,7 @@ Dashboard queries still project only received amounts and payment dates. A.0 int
 
 ## A.1 operating sessions and vehicle assumptions
 
-History retains its existing Delivery and Prop 22 sections and adds Uber Eats Sessions plus a collapsed vehicle/annual-mileage panel. Three primary navigation pages remain. Centered Session, Vehicle, and Annual Mileage modals use the existing dialog/focus pattern. React requests Express session/settings APIs; native MongoDB stores `deliverySessions`, the singleton `vehicleEconomics`, and year-keyed `vehicleTaxYears` in the same DGI database/container/volume.
+History retains its existing Delivery and Prop 22 sections and adds Uber Eats Sessions plus a collapsed vehicle/annual-mileage panel. The original three operational pages remain; Data & Settings is now a fourth read-only operations route. Centered Session, Vehicle, and Annual Mileage modals use the existing dialog/focus pattern. React requests Express session/settings APIs; native MongoDB stores `deliverySessions`, the singleton `vehicleEconomics`, and year-keyed `vehicleTaxYears` in the same DGI database/container/volume.
 
 Session timestamps are UTC BSON Dates; React converts explicitly to/from America/Los_Angeles, independent of the browser's own timezone. For supported modern dates (2000–2100), skipped DST wall times are rejected and repeated times offer the two actual instants. Elapsed duration is derived rather than persisted.
 

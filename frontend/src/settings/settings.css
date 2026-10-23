@@ -1,0 +1,32 @@
+.settings-page { max-width: 1220px; margin: auto; color: #17345e; }
+.settings-heading { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+.settings-page p { color:#587092; font-size:13px; line-height:1.6; }
+.settings-page h2 { font-size:19px; margin:0 0 20px; }
+.settings-page h3 { font-size:13px; margin:0 0 14px; }
+.settings-button, .settings-toolbar select { border:1px solid #bad0ec; border-radius:7px; padding:10px 16px; background:white; color:#17477e; font:inherit; }
+.settings-button { background:#1262df; color:white; cursor:pointer; white-space:nowrap; }
+.settings-button:disabled { opacity:.65; cursor:wait; }
+.settings-page :focus-visible { outline:3px solid #79aafa; outline-offset:3px; }
+.settings-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin:24px 0; font-size:12px; color:#587092; }
+.settings-toolbar select { margin-left:8px; }
+.settings-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:24px; }
+.settings-card,.settings-panel { border:1px solid #d8e5f5; border-radius:10px; padding:22px; background:white; box-shadow:0 4px 12px #517cb00a; min-width:0; }
+.settings-card strong { font-size:22px; font-weight:650; }
+.settings-panel { margin-bottom:20px; }
+.settings-providers { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:20px; }
+.settings-badge { display:inline-block; background:#edf2f8; color:#49617f; border-radius:99px; padding:5px 10px; font-size:12px; font-weight:650; }
+.settings-badge.operational { background:#e4f5ee; color:#226249; }
+.settings-badge.degraded { background:#fff1d8; color:#805711; }
+.settings-badge.unavailable { background:#fbe9eb; color:#a02e3e; }
+.settings-alert { padding:16px; border:1px solid #eac8ae; border-radius:8px; background:#fff7ee; margin-bottom:20px; }
+.settings-table-scroll { overflow-x:auto; max-width:100%; }
+.settings-page table { width:100%; border-collapse:collapse; font-size:12px; min-width:760px; }
+.settings-page caption { text-align:left; padding:0 0 12px; color:#587092; }
+.settings-page th,.settings-page td { text-align:left; padding:14px 10px; border-bottom:1px solid #e5edf7; vertical-align:top; }
+.settings-page small { display:block; color:#587092; margin-top:5px; }
+.settings-details { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.settings-page dl { margin:0; }
+.settings-page dt { color:#587092; font-size:12px; margin-top:14px; }
+.settings-page dd { margin:4px 0 0; overflow-wrap:anywhere; }
+@media(max-width:1000px) { .settings-summary,.settings-providers { grid-template-columns:repeat(2,minmax(0,1fr)); } .primary-nav { flex-wrap:wrap; } }
+@media(max-width:600px) { .settings-heading { align-items:flex-start; flex-direction:column; } .settings-summary,.settings-providers,.settings-details { grid-template-columns:1fr; } .settings-panel,.settings-card { padding:18px; } }

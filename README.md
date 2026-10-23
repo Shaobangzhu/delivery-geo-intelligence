@@ -249,3 +249,7 @@ The marker is disabled by default. Missing, partial, nonfinite or out-of-range c
 ## Backend provider observations
 
 `GET /api/system/status` returns a versioned provider snapshot after a bounded, cached MongoDB ping. `GET /api/system/metrics?window=1h` (or `24h`) reads retained metrics without calling providers. Configuration alone never establishes connectivity. In-memory observations reset on restart; the APIs do not monitor browser ArcGIS Maps SDK health. Contracts, retention, safe error categories and limitations: [Observability](docs/observability.md).
+
+## Data & Settings
+
+The fourth navigation page, `/settings`, displays actual backend provider status, 1h/24h request metrics, MongoDB ping observations and reported AI token usage. Refresh reads the system APIs without paid provider probes. Browser ArcGIS Maps SDK lifecycle status is separate, retained only across navigation in the current tab; a fresh session shows Not Yet Verified. Unknown or partial observations are labeled explicitly. See [Data & Settings](docs/data-settings.md) for sources, privacy and responsive behavior.
