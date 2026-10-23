@@ -33,7 +33,8 @@
     "test:e2e": "playwright test",
     "test:e2e:repeat": "playwright test --repeat-each=3 --retries=0",
     "test:e2e:debug": "playwright test --debug",
-    "test:e2e:report": "playwright show-report reports/e2e/html"
+    "test:e2e:report": "playwright show-report reports/e2e/html",
+    "test:mongo:ready": "node scripts/wait-for-test-mongo.mjs"
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0",

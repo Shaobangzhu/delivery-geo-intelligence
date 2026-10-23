@@ -48,6 +48,7 @@ jobs:
           CHECK_COMMAND: ${{ matrix.command }}
         run: |
           mkdir -p reports
+          set -o pipefail
           npm run "$CHECK_COMMAND" 2>&1 | tee reports/check.log
       - name: Upload synthetic diagnostics
         if: always()
@@ -73,11 +74,6 @@ jobs:
           MONGO_INITDB_DATABASE: dgi_ci_test
         ports:
           - 27017/tcp
-        options: >-
-          --health-cmd 'mongosh --quiet --username dgi_ci --password synthetic_ci_only --authenticationDatabase admin --eval "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"'
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
     env:
       DGI_TEST_MONGO_MODE: service
     steps:
@@ -90,6 +86,13 @@ jobs:
           cache: npm
       - run: npm install --global npm@10.9.0
       - run: npm ci
+      - name: Wait for authenticated synthetic MongoDB
+        env:
+          DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          npm run test:mongo:ready 2>&1 | tee reports/mongodb-readiness.log
       - name: Run blocking integration checks
         env:
           DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
@@ -121,11 +124,6 @@ jobs:
           MONGO_INITDB_DATABASE: dgi_ci_test
         ports:
           - 27017/tcp
-        options: >-
-          --health-cmd 'mongosh --quiet --username dgi_ci --password synthetic_ci_only --authenticationDatabase admin --eval "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"'
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
     env:
       DGI_TEST_MONGO_MODE: service
     steps:
@@ -138,6 +136,13 @@ jobs:
           cache: npm
       - run: npm install --global npm@10.9.0
       - run: npm ci
+      - name: Wait for authenticated synthetic MongoDB
+        env:
+          DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          npm run test:mongo:ready 2>&1 | tee reports/mongodb-readiness.log
       - name: Run blocking coverage checks
         env:
           DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
@@ -173,6 +178,7 @@ jobs:
       - name: Audit production and full dependency trees
         run: |
           mkdir -p reports
+          set -o pipefail
           npm run security:check 2>&1 | tee reports/security.log
       - name: Upload synthetic diagnostics
         if: always()
@@ -199,11 +205,6 @@ jobs:
           MONGO_INITDB_DATABASE: dgi_ci_test
         ports:
           - 27017/tcp
-        options: >-
-          --health-cmd 'mongosh --quiet --username dgi_ci --password synthetic_ci_only --authenticationDatabase admin --eval "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"'
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
     env:
       DGI_TEST_MONGO_MODE: service
     steps:
@@ -216,6 +217,13 @@ jobs:
           cache: npm
       - run: npm install --global npm@10.9.0
       - run: npm ci
+      - name: Wait for authenticated synthetic MongoDB
+        env:
+          DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          npm run test:mongo:ready 2>&1 | tee reports/mongodb-readiness.log
       - name: Install Chromium headless shell and OS dependencies only
         run: npx playwright install --with-deps --only-shell chromium
       - name: Run blocking E2E smoke tests
@@ -223,6 +231,7 @@ jobs:
           DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
         run: |
           mkdir -p reports/e2e
+          set -o pipefail
           npm run test:e2e 2>&1 | tee reports/e2e/execution.log
       - name: Upload synthetic E2E diagnostics
         if: always()
@@ -231,7 +240,9 @@ jobs:
           name: e2e-chromium
           retention-days: 7
           if-no-files-found: warn
-          path: reports/e2e/
+          path: |
+            reports/e2e/
+            reports/mongodb-readiness.log
   gate:
     name: Quality gate
     if: always()
