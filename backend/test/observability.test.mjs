@@ -1,8 +1,7 @@
-import test from "node:test";
+import test from "./support/scoped-test.mjs";
 import assert from "node:assert/strict";
 import { once, EventEmitter } from "node:events";
-import { MongoClient } from "mongodb";
-import { testMongoUri } from "./support/environment.mjs";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
 import { ProviderObservability } from "../dist/observability/collector.js";
 import { createHealthProbe } from "../dist/observability/routes.js";
 import { monitorMongo } from "../dist/observability/mongodb.js";
@@ -135,7 +134,7 @@ test("system APIs have versioned contracts, reject malformed queries and never p
     assert.equal((await get("/api/system/status?key=SECRET")).status, 400);
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });
-test("real disposable MongoDB command monitoring measures queries without telemetry reads adding operations", async () => {
+test.integration("real disposable MongoDB command monitoring measures queries without telemetry reads adding operations", async () => {
   const client = new MongoClient(testMongoUri, { monitorCommands: true }), o = new ProviderObservability(configured);
   const stop = monitorMongo(client, o);
   try {

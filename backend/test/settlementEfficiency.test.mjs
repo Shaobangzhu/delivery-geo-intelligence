@@ -1,9 +1,9 @@
-import { testMongoUri } from "./support/environment.mjs";
-import test from "node:test";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
+import test from "./support/scoped-test.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
-import { MongoClient, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { calculateSettlementEfficiency } from "../dist/settlementEfficiency.js";
 import { resolveCoverageDates } from "../dist/dashboard.js";
 import { earningsAdjustmentInputSchema, earningsAdjustmentPatchSchema } from "../dist/model.js";
@@ -134,7 +134,7 @@ test("confirmation is optional boolean metadata and does not alter A.0 reconcili
   assert.deepEqual(reconcileSettlement(payment), reconcileSettlement({ ...payment, sessionCoverageConfirmed: false }));
 });
 
-test("isolated API reads complete periods and safely extends Payment metadata without accounting regressions", async (t) => {
+test.integration("isolated API reads complete periods and safely extends Payment metadata without accounting regressions", async (t) => {
   const client = new MongoClient(testMongoUri), db = client.db(`dgi_settlement_efficiency_test_${randomBytes(6).toString("hex")}`);
   let server, connected = false;
   try {

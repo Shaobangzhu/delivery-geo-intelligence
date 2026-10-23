@@ -11,6 +11,7 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     clearMocks: true,
     maxWorkers: 2,
+    reporters: ["default", ["junit", { outputFile: "../reports/frontend.xml" }]],
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],

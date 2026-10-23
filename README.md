@@ -255,3 +255,7 @@ The marker is disabled by default. Missing, partial, nonfinite or out-of-range c
 The fourth navigation page, `/settings`, displays actual backend provider status, 1h/24h request metrics, MongoDB ping observations and reported AI token usage. Refresh reads the system APIs without paid provider probes. Browser ArcGIS Maps SDK lifecycle status is separate, retained only across navigation in the current tab; a fresh session shows Not Yet Verified. Unknown or partial observations are labeled explicitly. See [Data & Settings](docs/data-settings.md) for sources, privacy and responsive behavior.
 
 Provider fault injection, availability classification, telemetry privacy regressions, and Settings response-integrity checks are documented in [Reliability testing](docs/reliability-testing.md). Tests use injected providers, fake deadlines and disposable MongoDB without live credentials.
+
+## Continuous integration
+
+[CI implementation](docs/ci.md) defines blocking PR/main checks for lint, types, production build, unit/integration tests, coverage non-regression, offline AI evaluation and dependency security. Use `npm ci`, `npm run quality:check`, and `npm run security:check` locally. CI MongoDB is a dedicated disposable service; no developer database or live provider credential is required. GitHub branch protection must be configured separately as documented.

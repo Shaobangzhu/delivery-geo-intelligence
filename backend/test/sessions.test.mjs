@@ -1,9 +1,9 @@
-import { testMongoUri } from "./support/environment.mjs";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
-import test from "node:test";
-import { MongoClient, ObjectId } from "mongodb";
+import test from "./support/scoped-test.mjs";
+import { ObjectId } from "mongodb";
 import { createApp } from "../dist/app.js";
 import { ensureIndexes } from "../dist/db.js";
 import { sessionCreateSchema, sessionPatchSchema, vehicleProfileSchema, annualMileageSchema } from "../dist/sessionModel.js";
@@ -64,7 +64,7 @@ test("annual accounting derives one business total, preserves missing categories
   assert.equal(annualMileageSchema.safeParse({ ...base, taxMethod: "actual_expenses" }).success, false);
 });
 
-test("sessions, associations, vehicle settings, and annual mileage against isolated MongoDB", async (t) => {
+test.integration("sessions, associations, vehicle settings, and annual mileage against isolated MongoDB", async (t) => {
   const client = new MongoClient(testMongoUri);
   const name = `delivery_geo_intelligence_sessions_test_${process.pid}_${randomBytes(5).toString("hex")}`;
   let server; let connected = false;

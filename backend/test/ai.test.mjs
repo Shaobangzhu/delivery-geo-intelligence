@@ -1,9 +1,9 @@
-import { testMongoUri } from "./support/environment.mjs";
-import test from "node:test";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
+import test from "./support/scoped-test.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { MongoClient, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { createToolRegistry, toolDefinitions } from "../dist/ai/tools.js";
 import { createAnalyst, askSchema } from "../dist/ai/agent.js";
 import { requiresComparisonBoundary } from "../dist/ai/evidence.js";
@@ -137,7 +137,7 @@ test("missing config, timeout and cancellation do not call live providers or blo
   await assert.rejects(() => tools.execute("get_data_quality", args, cancelled.signal), { code: "timeout_or_cancelled" }); assert.equal(tools.calls.length, 0);
 });
 
-test("AI endpoint uses isolated MongoDB analytics, preserves every collection and safe error contracts", async () => {
+test.integration("AI endpoint uses isolated MongoDB analytics, preserves every collection and safe error contracts", async () => {
   const client = new MongoClient(testMongoUri), db = client.db(`dgi_ai_test_${randomUUID().replaceAll("-", "")}`);
   let server, connected = false;
   try {

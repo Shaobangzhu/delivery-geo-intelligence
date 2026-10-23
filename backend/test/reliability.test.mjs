@@ -1,4 +1,4 @@
-import test from "node:test";
+import test from "./support/scoped-test.mjs";
 import assert from "node:assert/strict";
 import { once, EventEmitter } from "node:events";
 import "./support/environment.mjs";

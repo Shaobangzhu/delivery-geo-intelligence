@@ -12,7 +12,9 @@
     "build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\" && tsc",
     "eval:ai": "tsc -p tsconfig.evals.json && node --import tsx evals/runner.ts",
     "lint": "eslint src evals test --max-warnings=0",
-    "test:coverage": "npm run build && c8 node test/run.mjs"
+    "test:coverage": "npm run build && c8 node test/run.mjs",
+    "test:unit": "npm run build && node test/run.mjs unit",
+    "test:integration": "npm run build && node test/run.mjs integration"
   },
   "dependencies": {
     "dotenv": "^18.0.3",

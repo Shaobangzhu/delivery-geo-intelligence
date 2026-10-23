@@ -157,3 +157,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Synthetic CI diagnostics
+reports/

@@ -1,9 +1,9 @@
-import { testMongoUri } from "./support/environment.mjs";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
-import { MongoClient, ObjectId } from "mongodb";
+import test from "./support/scoped-test.mjs";
+import { ObjectId } from "mongodb";
 import { createApp } from "../dist/app.js";
 import { createDashboardFilterSchema, resolveDashboardFilters } from "../dist/dashboard.js";
 
@@ -54,7 +54,7 @@ test("shared schema rejects conflicting/malformed/future filters without ambiguo
   assert.equal(schema.safeParse({ period: "year", asOf: "2026-06-01" }).success, true);
 });
 
-test("three endpoints share historical/All cohorts, financial boundaries and synthetic GIS observations", async () => {
+test.integration("three endpoints share historical/All cohorts, financial boundaries and synthetic GIS observations", async () => {
   const client = new MongoClient(testMongoUri);
   const db = client.db(`dgi_time_test_${randomUUID().replaceAll("-", "")}`);
   let server, connected = false;

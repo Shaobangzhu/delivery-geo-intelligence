@@ -21,7 +21,12 @@
     "lint": "eslint . --max-warnings=0",
     "test:coverage": "npm run test:coverage -w backend && npm run test:coverage -w frontend",
     "build:quality": "npm run build -w frontend -- --mode quality && npm run build -w backend",
-    "quality:check": "npm run lint && npm run typecheck && npm run build:quality && npm run test:coverage && npm run eval:ai"
+    "quality:check": "npm run lint && npm run typecheck && npm run build:quality && npm run test:coverage && npm run eval:ai && npm run coverage:check",
+    "test:backend:unit": "npm run test:unit -w backend",
+    "test:backend:integration": "npm run test:integration -w backend",
+    "test:frontend": "npm test -w frontend",
+    "coverage:check": "node scripts/check-coverage.mjs",
+    "security:check": "npm audit --omit=dev --audit-level=high && npm audit --audit-level=high"
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0",

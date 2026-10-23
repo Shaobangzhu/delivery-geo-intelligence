@@ -1,9 +1,9 @@
-import { testMongoUri } from "./support/environment.mjs";
-import test from "node:test";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
+import test from "./support/scoped-test.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
-import { MongoClient, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { createApp } from "../dist/app.js";
 import { resolveCoverageDates, resolveDashboardFilters, getDashboardAnalytics } from "../dist/dashboard.js";
 import { calculateSettlementEfficiency } from "../dist/settlementEfficiency.js";
@@ -22,7 +22,7 @@ test("unsafe payouts are rejected while zero and optional clearing remain valid"
   assert.equal(deliveryInputSchema.parse({ ...base, payout: 0 }).payout, 0);
   assert.equal(deliveryPatchSchema.parse({ payout: null }).payout, null);
 });
-test("injected write failures, read isolation and concurrent PATCH integrity", async (t) => {
+test.integration("injected write failures, read isolation and concurrent PATCH integrity", async (t) => {
   const client = new MongoClient(testMongoUri), db = client.db(`dgi_core_audit_test_${randomBytes(6).toString("hex")}`);
   let connected = false, server, inject = null;
   const proxy = new Proxy(db, { get(target, key) {

@@ -1,9 +1,9 @@
-import { testMongoUri } from "./support/environment.mjs";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
-import test from "node:test";
-import { MongoClient, ObjectId } from "mongodb";
+import test from "./support/scoped-test.mjs";
+import { ObjectId } from "mongodb";
 import { createApp } from "../dist/app.js";
 import { deliveryInputSchema, deliveryPatchSchema } from "../dist/model.js";
 import { ensureIndexes } from "../dist/db.js";
@@ -19,7 +19,7 @@ test("duration schemas reject nonpositive, fractional, malformed, and nonfinite 
   assert.equal(deliveryPatchSchema.safeParse({ deliveryDurationSeconds: null }).success, true);
 });
 
-test("Merchant and Delivery API against an isolated DGI MongoDB test database", async (t) => {
+test.integration("Merchant and Delivery API against an isolated DGI MongoDB test database", async (t) => {
   const client = new MongoClient(testMongoUri);
   const databaseName = `delivery_geo_intelligence_test_${process.pid}_${randomBytes(4).toString("hex")}`;
   let server;

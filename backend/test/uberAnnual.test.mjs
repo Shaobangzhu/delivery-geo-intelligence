@@ -1,9 +1,8 @@
-import { testMongoUri } from "./support/environment.mjs";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test from "./support/scoped-test.mjs";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
-import { MongoClient } from "mongodb";
 import { annualFixture } from "./annualFixture.mjs";
 import { annualInputSchema, annualSummary, annualMetrics, reconcileAnnual, compareAnnualYears, importAnnualSummary, getAnnualSummaries, moneyCents, lastCompletedYear } from "../dist/uberAnnualSummary.js";
 import { createApp } from "../dist/app.js";
@@ -85,7 +84,7 @@ test("annual comparisons use same definitions and handle zeros, unknowns and mis
   after.monthlyActivity.pop(); assert.equal(annualSummary(after).monthlyGrossTransactionsPeak.complete, false);
 });
 
-test("annual import/API uses an isolated MongoDB, preserves all existing collections and is idempotent", async (t) => {
+test.integration("annual import/API uses an isolated MongoDB, preserves all existing collections and is idempotent", async (t) => {
   const client = new MongoClient(testMongoUri), databaseName = `delivery_geo_intelligence_test_annual_${process.pid}_${randomBytes(4).toString("hex")}`;
   let server, connected = false;
   try {

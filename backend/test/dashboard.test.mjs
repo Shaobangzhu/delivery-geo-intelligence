@@ -1,9 +1,9 @@
-import { testMongoUri } from "./support/environment.mjs";
+import { testMongoUri, TestMongoClient as MongoClient } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
-import test from "node:test";
-import { MongoClient, ObjectId } from "mongodb";
+import test from "./support/scoped-test.mjs";
+import { ObjectId } from "mongodb";
 import { createApp } from "../dist/app.js";
 import { dashboardFilterSchema, resolveDashboardFilters } from "../dist/dashboard.js";
 
@@ -26,7 +26,7 @@ test("dashboard periods use Los Angeles calendar boundaries", () => {
   assert.equal(dashboardFilterSchema.safeParse({ asOf: "April 20" }).success, false);
 });
 
-test("dashboard API applies one filter to every dataset and preserves payout samples", async () => {
+test.integration("dashboard API applies one filter to every dataset and preserves payout samples", async () => {
   const client = new MongoClient(testMongoUri);
   const databaseName = `delivery_geo_intelligence_dashboard_test_${process.pid}_${randomBytes(4).toString("hex")}`;
   let server;

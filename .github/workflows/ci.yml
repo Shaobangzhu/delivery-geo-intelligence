@@ -1,0 +1,202 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+env:
+  TZ: UTC
+  OPENAI_API_KEY: ''
+  ARCGIS_GEOCODING_API_KEY: ''
+  VITE_ARCGIS_API_KEY: ''
+jobs:
+  checks:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: ESLint, command: lint}
+          - {name: TypeScript, command: typecheck}
+          - {name: Production build, command: 'build:quality'}
+          - {name: Backend unit tests, command: 'test:backend:unit'}
+          - {name: Frontend unit tests, command: 'test:frontend'}
+          - {name: Offline AI evaluation, command: 'eval:ai'}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@10.9.0
+      - run: npm ci
+      - name: Run blocking check
+        env:
+          CHECK_COMMAND: ${{ matrix.command }}
+        run: |
+          mkdir -p reports
+          npm run "$CHECK_COMMAND" 2>&1 | tee reports/check.log
+      - name: Upload synthetic diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: check-${{ matrix.name }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            reports/
+            backend/coverage/
+            frontend/coverage/
+  integration:
+    name: MongoDB integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mongodb:
+        image: mongo:7.0.24@sha256:4c65244b50910461b9641a76131f84a2dcfd4da487f928298cea626b3842842c
+        env:
+          MONGO_INITDB_ROOT_USERNAME: dgi_ci
+          MONGO_INITDB_ROOT_PASSWORD: synthetic_ci_only
+          MONGO_INITDB_DATABASE: dgi_ci_test
+        ports:
+          - 27017/tcp
+        options: >-
+          --health-cmd 'mongosh --quiet --username dgi_ci --password synthetic_ci_only --authenticationDatabase admin --eval "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"'
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DGI_TEST_MONGO_MODE: service
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@10.9.0
+      - run: npm ci
+      - name: Run blocking integration checks
+        env:
+          DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          ( npm run test:backend:integration ) 2>&1 | tee reports/integration.log
+      - name: Upload synthetic diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: integration
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            reports/
+            backend/coverage/
+            frontend/coverage/
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mongodb:
+        image: mongo:7.0.24@sha256:4c65244b50910461b9641a76131f84a2dcfd4da487f928298cea626b3842842c
+        env:
+          MONGO_INITDB_ROOT_USERNAME: dgi_ci
+          MONGO_INITDB_ROOT_PASSWORD: synthetic_ci_only
+          MONGO_INITDB_DATABASE: dgi_ci_test
+        ports:
+          - 27017/tcp
+        options: >-
+          --health-cmd 'mongosh --quiet --username dgi_ci --password synthetic_ci_only --authenticationDatabase admin --eval "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"'
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DGI_TEST_MONGO_MODE: service
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@10.9.0
+      - run: npm ci
+      - name: Run blocking coverage checks
+        env:
+          DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          ( npm run test:coverage && npm run coverage:check ) 2>&1 | tee reports/coverage.log
+      - name: Upload synthetic diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            reports/
+            backend/coverage/
+            frontend/coverage/
+  security:
+    name: Dependency security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@10.9.0
+      - run: npm ci
+      - name: Audit production and full dependency trees
+        run: |
+          mkdir -p reports
+          npm run security:check 2>&1 | tee reports/security.log
+      - name: Upload synthetic diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: security
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            reports/
+            backend/coverage/
+            frontend/coverage/
+  gate:
+    name: Quality gate
+    if: always()
+    needs: [checks, integration, coverage, security]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every blocking stage
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          INTEGRATION: ${{ needs.integration.result }}
+          COVERAGE: ${{ needs.coverage.result }}
+          SECURITY: ${{ needs.security.result }}
+        run: |
+          [[ "$CHECKS" == success && "$INTEGRATION" == success && "$COVERAGE" == success && "$SECURITY" == success ]]

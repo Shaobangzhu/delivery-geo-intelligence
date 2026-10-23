@@ -1,6 +1,9 @@
 import { cases } from "./cases.js";
 import type { AiDiagnostics } from "../src/ai/types.js";
 
+// Offline evaluation must fail if a fixture accidentally attempts a network request.
+globalThis.fetch = async () => { throw new Error("Live requests are forbidden in offline AI evaluation"); };
+
 const categories = new Map<string, { passed: number; total: number }>();
 const diagnostics: AiDiagnostics[] = [];
 let passed = 0;
