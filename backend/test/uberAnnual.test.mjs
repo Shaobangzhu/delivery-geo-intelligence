@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { testMongoUri } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { once } from "node:events";
@@ -86,8 +86,7 @@ test("annual comparisons use same definitions and handle zeros, unknowns and mis
 });
 
 test("annual import/API uses an isolated MongoDB, preserves all existing collections and is idempotent", async (t) => {
-  assert.ok(process.env.MONGODB_URI);
-  const client = new MongoClient(process.env.MONGODB_URI), databaseName = `delivery_geo_intelligence_test_annual_${process.pid}_${randomBytes(4).toString("hex")}`;
+  const client = new MongoClient(testMongoUri), databaseName = `delivery_geo_intelligence_test_annual_${process.pid}_${randomBytes(4).toString("hex")}`;
   let server, connected = false;
   try {
     await client.connect(); connected = true; const db = client.db(databaseName);

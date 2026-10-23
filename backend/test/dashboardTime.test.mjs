@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { testMongoUri } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
@@ -55,7 +55,7 @@ test("shared schema rejects conflicting/malformed/future filters without ambiguo
 });
 
 test("three endpoints share historical/All cohorts, financial boundaries and synthetic GIS observations", async () => {
-  const client = new MongoClient(process.env.MONGODB_URI);
+  const client = new MongoClient(testMongoUri);
   const db = client.db(`dgi_time_test_${randomUUID().replaceAll("-", "")}`);
   let server, connected = false;
   try {

@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { testMongoUri } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
@@ -20,8 +20,7 @@ test("duration schemas reject nonpositive, fractional, malformed, and nonfinite 
 });
 
 test("Merchant and Delivery API against an isolated DGI MongoDB test database", async (t) => {
-  assert.ok(process.env.MONGODB_URI, "Set MONGODB_URI in backend/.env before running tests");
-  const client = new MongoClient(process.env.MONGODB_URI);
+  const client = new MongoClient(testMongoUri);
   const databaseName = `delivery_geo_intelligence_test_${process.pid}_${randomBytes(4).toString("hex")}`;
   let server;
   let connected = false;

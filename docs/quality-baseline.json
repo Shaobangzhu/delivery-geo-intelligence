@@ -1,0 +1,74 @@
+{
+  "measuredOn": "2026-10-22",
+  "node": "22.12.0",
+  "npm": "10.9.0",
+  "mongodb": "7.0.24",
+  "frontend": {
+    "testFiles": 17,
+    "testsPassed": 120,
+    "provider": "@vitest/coverage-v8@5.0.1",
+    "productionFiles": 36,
+    "coverage": {
+      "statements": {
+        "total": 1429,
+        "covered": 1273,
+        "skipped": 0,
+        "pct": 89.08
+      },
+      "branches": {
+        "total": 1277,
+        "covered": 1077,
+        "skipped": 0,
+        "pct": 84.33
+      },
+      "functions": {
+        "total": 436,
+        "covered": 381,
+        "skipped": 0,
+        "pct": 87.38
+      },
+      "lines": {
+        "total": 1051,
+        "covered": 967,
+        "skipped": 0,
+        "pct": 92
+      }
+    }
+  },
+  "backend": {
+    "testFiles": 12,
+    "testsPassed": 96,
+    "provider": "c8@12.0.0",
+    "productionFiles": 24,
+    "coverage": {
+      "statements": {
+        "total": 2371,
+        "covered": 2222,
+        "skipped": 0,
+        "pct": 93.71
+      },
+      "branches": {
+        "total": 1434,
+        "covered": 1303,
+        "skipped": 0,
+        "pct": 90.86
+      },
+      "functions": {
+        "total": 145,
+        "covered": 139,
+        "skipped": 0,
+        "pct": 95.86
+      },
+      "lines": {
+        "total": 2371,
+        "covered": 2222,
+        "skipped": 0,
+        "pct": 93.71
+      }
+    }
+  },
+  "aiEvaluation": {
+    "scenariosPassed": 39,
+    "realProviderCalls": 0
+  }
+}

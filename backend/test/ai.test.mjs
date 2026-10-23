@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { testMongoUri } from "./support/environment.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -138,7 +138,7 @@ test("missing config, timeout and cancellation do not call live providers or blo
 });
 
 test("AI endpoint uses isolated MongoDB analytics, preserves every collection and safe error contracts", async () => {
-  const client = new MongoClient(process.env.MONGODB_URI), db = client.db(`dgi_ai_test_${randomUUID().replaceAll("-", "")}`);
+  const client = new MongoClient(testMongoUri), db = client.db(`dgi_ai_test_${randomUUID().replaceAll("-", "")}`);
   let server, connected = false;
   try {
     await client.connect(); connected = true; await ensureIndexes(db);

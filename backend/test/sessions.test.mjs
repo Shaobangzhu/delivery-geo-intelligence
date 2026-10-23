@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { testMongoUri } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
@@ -65,7 +65,7 @@ test("annual accounting derives one business total, preserves missing categories
 });
 
 test("sessions, associations, vehicle settings, and annual mileage against isolated MongoDB", async (t) => {
-  const client = new MongoClient(process.env.MONGODB_URI);
+  const client = new MongoClient(testMongoUri);
   const name = `delivery_geo_intelligence_sessions_test_${process.pid}_${randomBytes(5).toString("hex")}`;
   let server; let connected = false;
   try {

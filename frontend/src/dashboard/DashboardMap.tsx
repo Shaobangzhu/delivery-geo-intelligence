@@ -43,7 +43,7 @@ export function DashboardMap({ pickupRows, diversityRows, destinationCells, metr
       controllerRef.current?.destroy();
       controllerRef.current = null;
     };
-  }, []);
+  }, [home]);
 
   useEffect(() => { controllerRef.current?.setMerchantFeatures(pickupRows, diversityRows); }, [pickupRows, diversityRows]);
   useEffect(() => { controllerRef.current?.setDestinationCells(destinationCells); }, [destinationCells]);

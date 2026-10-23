@@ -1,7 +1,10 @@
 {
   "name": "delivery-geo-intelligence",
   "private": true,
-  "workspaces": ["frontend", "backend"],
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
     "dev:frontend": "npm run dev -w frontend",
     "dev:backend": "npm run dev -w backend",
@@ -14,6 +17,23 @@
     "db:status": "docker compose ps",
     "db:logs": "docker compose logs -f mongodb",
     "eval:ai": "npm run eval:ai -w backend",
-    "data:import-uber-annual": "node --import tsx backend/src/importUberAnnual.ts"
+    "data:import-uber-annual": "node --import tsx backend/src/importUberAnnual.ts",
+    "lint": "eslint . --max-warnings=0",
+    "test:coverage": "npm run test:coverage -w backend && npm run test:coverage -w frontend",
+    "build:quality": "npm run build -w frontend -- --mode quality && npm run build -w backend",
+    "quality:check": "npm run lint && npm run typecheck && npm run build:quality && npm run test:coverage && npm run eval:ai"
+  },
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0",
+    "npm": ">=10.9.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "jsdom": "26.1.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.55.0"
   }
 }

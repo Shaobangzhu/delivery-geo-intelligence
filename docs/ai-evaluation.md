@@ -14,7 +14,7 @@ npm run build
 git diff --check
 ```
 
-`eval:ai` typechecks `backend/src` plus `backend/evals`, then runs the existing `tsx` loader through Node. It does not load `.env`, connect MongoDB, read private records or instantiate a live OpenAI client. It needs no credentials. Category pass/fail results come from executed assertions; an assertion failure sets a nonzero exit status. No generated report files are written. `npm test` additionally needs the DGI Docker MongoDB for existing isolated integration tests, which remove only their synthetic test databases.
+`eval:ai` typechecks `backend/src` plus `backend/evals`, then runs the existing `tsx` loader through Node. It does not load `.env`, connect MongoDB, read private records or instantiate a live OpenAI client. It needs no credentials. Category pass/fail results come from executed assertions; an assertion failure sets a nonzero exit status. No generated report files are written. `npm test` now provisions a disposable MongoDB process for isolated integration tests, without the application Docker database or credentials. See [Quality engineering](quality-engineering.md) for binary download requirements, commands, and the current measured baseline.
 
 ## Synthetic scenarios
 

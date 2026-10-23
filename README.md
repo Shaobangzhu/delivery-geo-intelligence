@@ -90,7 +90,10 @@ Add verified public business locations in Merchants, then select them when recor
 | npm run db:status / npm run db:logs | Inspect service state / logs |
 | npm run dev:frontend / npm run dev:backend | Start Vite / Express |
 | npm run typecheck / npm run build | Verify types / build both workspaces |
-| npm test | Run backend integration and frontend interaction tests |
+| npm run lint | Check backend/frontend source, tests, and configs with ESLint |
+| npm test | Run backend tests on disposable MongoDB and frontend interaction tests |
+| npm run test:coverage | Run all tests and generate coverage reports in both workspaces |
+| npm run quality:check | Run lint, types, an environment-free build, coverage tests, and mock AI evaluation |
 | npm run data:init-a1 | Insert missing confirmed vehicle/2024–2025 mileage records without overwriting edits |
 
 Compose uses official mongo:7.0, the dgi-mongodb container, a dedicated persistent dgi_mongodb_data volume, and a healthcheck. Port 27017 is published on 127.0.0.1 only. This stack is independent of other projects' databases.
@@ -124,7 +127,7 @@ Profit subtracts complete current A.1 modeled costs only when full period covera
 
 ## A.2.2 audit and core freeze
 
-A.0–A.2.1 are implemented and audited. Synthetic failure-injection regressions cover partial Session association writes, compensation failures, concurrent payment PATCHes, analytics read coordination, numeric overflow, and date boundaries. All 71 backend and 80 frontend tests, typecheck, build, and whitespace checks pass. No manual browser testing was performed for this audit. ArcGIS's existing large build chunks remain a warning, not a failed build.
+A.0–A.2.1 are implemented and audited. Synthetic failure-injection regressions cover partial Session association writes, compensation failures, concurrent payment PATCHes, analytics read coordination, numeric overflow, and date boundaries. The current measured test counts, coverage, reproducible commands, and known gaps are documented in [Quality engineering](docs/quality-engineering.md). ArcGIS's existing large build chunks remain a warning, not a failed build.
 
 Session mutations mark `associationIntegrity: "pending"` before changing fields or links. Recoverable write failures restore the previous Session and associations without rewriting Delivery facts. If recovery fails or execution stops midway, the persisted marker blocks complete Session revenue/rates/profit and settlement efficiency. History shows **Association review required**; review and explicitly resubmit Delivery selections in the Session modal, or delete the Session to unlink them. This is compensation and a completeness guard, not a multi-document transaction or an automatic reconstruction of prior membership.
 
@@ -192,7 +195,7 @@ npm run build
 git diff --check
 ```
 
-The default evaluator uses 39 synthetic, scripted-provider scenarios (the original 32 plus three annual and four calendar scenarios) across nine categories. It needs no `.env`, production database or OpenAI credentials and makes zero real OpenAI calls. Assertions determine category results and failures return a nonzero exit status. The report measures mock request/tool counts, token fields, payload size and local duration; these are not real billing or provider latency. Existing integration tests require the local DGI MongoDB and create only isolated synthetic databases. Details and blind spots: [AI evaluation](docs/ai-evaluation.md).
+The default evaluator uses 39 synthetic, scripted-provider scenarios (the original 32 plus three annual and four calendar scenarios) across nine categories. It needs no `.env`, production database or OpenAI credentials and makes zero real OpenAI calls. Assertions determine category results and failures return a nonzero exit status. The report measures mock request/tool counts, token fields, payload size and local duration; these are not real billing or provider latency. Integration tests now provision a disposable MongoDB process and require no application database or credentials; the first run downloads its pinned binary. Use `npm ci` then `npm run quality:check` for credential-free verification; normal `npm run build` retains application `.env` loading. Details and blind spots: [AI evaluation](docs/ai-evaluation.md) and [Quality engineering](docs/quality-engineering.md).
 
 **DEFERRED:** Explicitly authorized live model evaluation, real tool-selection/language accuracy measurement and published-rate billing estimates. No live OpenAI request was made in Prompt C; mock tool plans and Chinese text do not prove model behavior. No optional live command was added.
 

@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { testMongoUri } from "./support/environment.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
@@ -23,7 +23,7 @@ test("unsafe payouts are rejected while zero and optional clearing remain valid"
   assert.equal(deliveryPatchSchema.parse({ payout: null }).payout, null);
 });
 test("injected write failures, read isolation and concurrent PATCH integrity", async (t) => {
-  const client = new MongoClient(process.env.MONGODB_URI), db = client.db(`dgi_core_audit_test_${randomBytes(6).toString("hex")}`);
+  const client = new MongoClient(testMongoUri), db = client.db(`dgi_core_audit_test_${randomBytes(6).toString("hex")}`);
   let connected = false, server, inject = null;
   const proxy = new Proxy(db, { get(target, key) {
     if (key !== "collection") return typeof target[key] === "function" ? target[key].bind(target) : target[key];

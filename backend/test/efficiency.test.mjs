@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { testMongoUri } from "./support/environment.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomBytes } from "node:crypto";
@@ -105,7 +105,7 @@ test("numeric overflow and invalid inputs never produce NaN or Infinity", () => 
 });
 
 test("read-only API is category-safe, bounded, private, and leaves Dashboard/Prop 22 unchanged", async (t) => {
-  const client = new MongoClient(process.env.MONGODB_URI);
+  const client = new MongoClient(testMongoUri);
   const db = client.db(`delivery_geo_intelligence_efficiency_test_${randomBytes(6).toString("hex")}`);
   let server; let connected = false;
   try {

@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { testMongoUri } from "./support/environment.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
@@ -135,7 +135,7 @@ test("confirmation is optional boolean metadata and does not alter A.0 reconcili
 });
 
 test("isolated API reads complete periods and safely extends Payment metadata without accounting regressions", async (t) => {
-  const client = new MongoClient(process.env.MONGODB_URI), db = client.db(`dgi_settlement_efficiency_test_${randomBytes(6).toString("hex")}`);
+  const client = new MongoClient(testMongoUri), db = client.db(`dgi_settlement_efficiency_test_${randomBytes(6).toString("hex")}`);
   let server, connected = false;
   try {
     await client.connect(); connected = true;
