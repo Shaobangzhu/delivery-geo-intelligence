@@ -1,9 +1,9 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Settings } from "../pages/Settings";
 import { categories, parseSnapshot } from "./api";
-import { observeBrowserMap } from "./browserStatus";
+import { observeBrowserMap, resetBrowserMapStatus } from "./browserStatus";
 const timestamp = "2026-10-23T10:00:00.000Z";
 function fixture(window = "24h", samples = 2) {
   return { schemaVersion: 1, window, generatedAt: timestamp, startedAt: timestamp, incomplete: false,
@@ -21,7 +21,8 @@ function install(samples = 2) {
   const fetcher = vi.fn(async (url: string) => reply(fixture(url.includes("window=1h") ? "1h" : "24h", samples)));
   vi.stubGlobal("fetch", fetcher); return fetcher;
 }
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(resetBrowserMapStatus);
+afterEach(() => { vi.unstubAllGlobals(); resetBrowserMapStatus(); });
 it("renders actual backend and unverified browser observations without paid calls", async () => {
   const fetcher = install(); render(<Settings />);
   expect(await screen.findByText("synthetic-model")).toBeInTheDocument();
@@ -95,4 +96,36 @@ it("marks retained status stale after refresh failure and clears current metrics
   expect(screen.getByText("Unavailable · stale snapshot")).toBeInTheDocument();
   expect(screen.queryByRole("table")).not.toBeInTheDocument();
   expect(screen.queryByText(/PRIVATE_FAILURE/)).not.toBeInTheDocument();
+});
+
+
+it("handles HTTP 503 without reading or rendering its private response body", async () => {
+  const json = vi.fn(async () => ({ error: "PRIVATE_503_PAYLOAD" }));
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503, json })));
+  render(<Settings />); expect(await screen.findByRole("alert")).toHaveTextContent("Backend data is unavailable");
+  expect(json).not.toHaveBeenCalled(); expect(screen.queryByText(/PRIVATE_503/)).not.toBeInTheDocument();
+});
+it("rejects forged healthy state and inconsistent success denominators", () => {
+  const unknown = fixture("24h", 0); unknown.providers[0].status = "operational";
+  expect(() => parseSnapshot(unknown, "24h")).toThrow();
+  const inconsistent = fixture(); inconsistent.providers[0].successCount = 100;
+  expect(() => parseSnapshot(inconsistent, "24h")).toThrow();
+});
+it("malformed payloads produce an error, never an invented 100 percent success rate", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => reply({ schemaVersion: 1, providers: "PRIVATE_PAYLOAD" })));
+  render(<Settings />); expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.queryByText("100.0%")).not.toBeInTheDocument(); expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  expect(screen.queryByText(/PRIVATE_PAYLOAD/)).not.toBeInTheDocument();
+});
+it("distinguishes unavailable provider from no observations while preserving partial endpoint success", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const data = fixture(url.includes("window=1h") ? "1h" : "24h", 0);
+    data.providers[0].status = "unavailable"; data.providers[0].lastErrorCategory = "connectivity";
+    data.providers[0].sampleCount = 1; data.providers[0].requestCount = 1; data.providers[0].failureCount = 1;
+    data.providers[0].latency = { sampleCount: 1, meanMs: 10, p50Ms: 10, p95Ms: 10 };
+    return reply(data);
+  }));
+  render(<Settings />); expect(await screen.findByText("Connectivity")).toBeInTheDocument();
+  expect(screen.getAllByText("Not Yet Verified").length).toBeGreaterThan(1);
+  expect(screen.getByText("0.0%")).toBeInTheDocument(); expect(screen.queryByText("100.0%")).not.toBeInTheDocument();
 });

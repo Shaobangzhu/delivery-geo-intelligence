@@ -1,3 +1,4 @@
+import { mongoFailure } from "./failures.js";
 import type { Express } from "express";
 import type { Db } from "mongodb";
 import { z } from "zod";
@@ -10,15 +11,19 @@ export function createHealthProbe(ping: () => Promise<unknown>, observer: Provid
     if (checkedAt !== null && now() - checkedAt < cacheMs) return Promise.resolve();
     pending = (async () => {
       const start = now(); let timer: ReturnType<typeof setTimeout> | undefined; let timedOut = false;
+      let errorCategory: ReturnType<typeof mongoFailure> | null = null;
       try {
         await Promise.race([Promise.resolve().then(ping), new Promise<never>((_, reject) => {
           timer = setTimeout(() => { timedOut = true; reject(new Error("Health timeout")); }, timeoutMs);
         })]);
-        observer.record({ provider: "mongodb", operation: "health_ping", outcome: "success", evidence: "success", durationMs: Math.max(0, now() - start) });
+
       } catch (error) {
-        timedOut ||= error instanceof Error && ["MongoOperationTimeoutError", "MongoNetworkTimeoutError"].includes(error.name);
-        observer.record({ provider: "mongodb", operation: "health_ping", outcome: "failure", evidence: "failure", durationMs: Math.max(0, now() - start), errorCategory: timedOut ? "timeout" : "provider" });
+        errorCategory = timedOut ? "timeout" : mongoFailure(error);
       } finally { clearTimeout(timer); checkedAt = now(); pending = null; }
+      try {
+        observer.record({ provider: "mongodb", operation: "health_ping", outcome: errorCategory ? "failure" : "success",
+          evidence: errorCategory ? "failure" : "success", durationMs: Math.max(0, now() - start), errorCategory });
+      } catch { /* Only the optional telemetry sink is isolated, not the database probe. */ }
     })();
     return pending;
   };

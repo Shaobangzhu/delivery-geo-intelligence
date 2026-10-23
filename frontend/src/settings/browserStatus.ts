@@ -10,3 +10,9 @@ export const getBrowserMapStatus = () => snapshot;
 export function useBrowserMapStatus() {
   return useSyncExternalStore((notify) => { listeners.add(notify); return () => { listeners.delete(notify); }; }, getBrowserMapStatus);
 }
+
+// Clear session observations for isolated hosts/tests without retaining previous lifecycle state.
+export function resetBrowserMapStatus() {
+  snapshot = { event: null, timestamp: null };
+  listeners.forEach((notify) => notify());
+}

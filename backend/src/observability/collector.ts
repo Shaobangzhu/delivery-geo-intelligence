@@ -5,7 +5,7 @@ export const providers = ["mongodb", "arcgis_geocoding", "openai"] as const;
 export type Provider = typeof providers[number];
 export type OperationalState = "not_configured" | "not_yet_verified" | "operational" | "degraded" | "unavailable";
 export type Configuration = Record<Provider, boolean | null>;
-export const errorCategories = ["network", "timeout", "rate_limit", "authentication", "configuration", "provider", "invalid_response", "no_match", "low_confidence", "request_rejected", "internal"] as const;
+export const errorCategories = ["provider_5xx", "connectivity", "network", "timeout", "rate_limit", "authentication", "configuration", "provider", "invalid_response", "no_match", "low_confidence", "request_rejected", "internal"] as const;
 export type ErrorCategory = typeof errorCategories[number];
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const observationSchema = z.object({
@@ -47,9 +47,11 @@ export class ProviderObservability {
         : data.outcome === "timeout_or_cancelled" ? "timeout"
         : data.outcome === "provider_authentication" ? "authentication"
         : ["configuration_missing", "provider_configuration"].includes(data.outcome) ? "configuration"
+        : ["invalid_provider_response", "incomplete_provider_response", "invalid_final_response"].includes(data.outcome) ? "invalid_response"
+        : data.outcome === "internal_failure" ? "internal"
         : data.providerErrorCount > 0 ? "provider" : "request_rejected");
       this.record({ provider: "openai", operation: "analyst_request", outcome: data.outcome === "success" ? "success" : "failure",
-        evidence: data.providerErrorCount > 0 ? "failure" : data.providerCallCount > 0 ? "success" : "none",
+        evidence: data.providerErrorCount > 0 || category === "invalid_response" ? "failure" : category === "internal" ? "none" : data.providerCallCount > 0 ? "success" : "none",
         durationMs: data.latencyMs, errorCategory: category, providerCalls: data.providerCallCount, providerErrors: data.providerErrorCount,
         usageSamples: data.providerUsage.length, inputTokens: data.usageAvailable ? data.inputTokens : null, outputTokens: data.usageAvailable ? data.outputTokens : null });
     } catch { /* Never retain the diagnostic object or arbitrary strings. */ }

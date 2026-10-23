@@ -1,7 +1,7 @@
 export type Window = "1h" | "24h";
 export const ids = ["mongodb", "arcgis_geocoding", "openai"] as const;
 export const states = ["not_configured", "not_yet_verified", "operational", "degraded", "unavailable"] as const;
-export const categories = ["network", "timeout", "rate_limit", "authentication", "configuration", "provider", "invalid_response", "no_match", "low_confidence", "request_rejected", "internal"] as const;
+export const categories = ["provider_5xx", "connectivity", "network", "timeout", "rate_limit", "authentication", "configuration", "provider", "invalid_response", "no_match", "low_confidence", "request_rejected", "internal"] as const;
 export interface Provider {
   provider: typeof ids[number]; configured: boolean | null; status: typeof states[number];
   lastSuccessAt: string | null; lastUpdatedAt: string | null; lastErrorCategory: string | null;
@@ -33,6 +33,11 @@ export function parseSnapshot(input: unknown, window: Window): Snapshot {
     if ((provider === "openai") !== (a !== null)) return bad();
     const health = p.healthCheck == null ? null : object(p.healthCheck);
     const model = p.model == null ? null : typeof p.model === "string" && /^[a-zA-Z0-9_.:-]{1,100}$/.test(p.model) ? p.model : bad();
+    if (p.requestCount !== p.sampleCount || latency.sampleCount !== p.sampleCount ||
+      count(p.successCount) + count(p.failureCount) + count(p.noMatchCount) + count(p.lowConfidenceCount) !== p.requestCount ||
+      (p.status === "operational" && p.lastSuccessAt === null) ||
+      (p.configured === false && p.status !== "not_configured") ||
+      (latency.sampleCount === 0 && (latency.p50Ms !== null || latency.p95Ms !== null))) return bad();
     return { provider, configured: p.configured as boolean | null, status: enumValue(p.status, states),
       lastSuccessAt: optionalDate(p.lastSuccessAt), lastUpdatedAt: optionalDate(p.lastUpdatedAt), lastErrorCategory: p.lastErrorCategory === null ? null : enumValue(p.lastErrorCategory, categories),
       sampleCount: count(p.sampleCount), requestCount: count(p.requestCount), successCount: count(p.successCount), failureCount: count(p.failureCount), noMatchCount: count(p.noMatchCount), lowConfidenceCount: count(p.lowConfidenceCount),

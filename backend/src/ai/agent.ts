@@ -1,3 +1,4 @@
+import { httpFailure } from "../observability/failures.js";
 import { z } from "zod";
 import type { ResponseInput, ResponseInputItem } from "openai/resources/responses/responses.js";
 import { analystInstructions } from "./prompts.js";
@@ -46,12 +47,13 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
       while (true) {
         if (controller.signal.aborted) throw new AnalystError("timeout_or_cancelled", 503);
         let response: Awaited<ReturnType<ResponsesClient["create"]>>;
-        try {
-          metadata.providerCallCount++;
-          response = await bounded(client.create({ model, instructions: `${analystInstructions}\nTrusted request date (America/Los_Angeles): ${registry.currentDate}. Use asOf=null for current calendar periods.`, input, tools: registry.definitions,
+        const request: Parameters<ResponsesClient["create"]>[0] = { model, instructions: `${analystInstructions}\nTrusted request date (America/Los_Angeles): ${registry.currentDate}. Use asOf=null for current calendar periods.`, input, tools: registry.definitions,
             tool_choice: facts.size ? (rounds === AI_LIMITS.rounds || metadata.toolCallCount === AI_LIMITS.tools ? "none" : "auto") : "required",
             parallel_tool_calls: false, max_output_tokens: AI_LIMITS.outputTokens, store: false,
-            text: { format: finalFormat } }, controller.signal), controller.signal);
+            text: { format: finalFormat } };
+        try {
+          metadata.providerCallCount++;
+          response = await bounded(client.create(request, controller.signal), controller.signal);
         } catch (error) {
           metadata.providerErrorCount++;
           metadata.providerFailureCategory = controller.signal.aborted || (error instanceof Error && error.name === "APIConnectionTimeoutError") ? "timeout" : undefined;
@@ -60,9 +62,10 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
           const code = controller.signal.aborted ? "timeout_or_cancelled" : status === 429 ? "provider_rate_limited"
             : status === 401 || status === 403 ? "provider_authentication" : status === 404 ? "provider_configuration" : "provider_failure";
           metadata.providerFailureCategory ??= status === 429 ? "rate_limit" : status === 401 || status === 403 ? "authentication"
-            : status === 404 ? "configuration" : "provider";
+            : status === 404 ? "configuration" : error instanceof Error && error.name === "APIConnectionError" ? "network" : httpFailure(status);
           throw new AnalystError(code, controller.signal.aborted || status === 429 ? 503 : 502);
         }
+        if (!response || typeof response !== "object") throw new AnalystError("invalid_provider_response");
         if (response.usage) {
           const usage = usageSchema.safeParse(response.usage);
           if (!usage.success) throw new AnalystError("invalid_provider_response");
@@ -112,7 +115,7 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
         // Never accept provider-only prose as a successful operational analysis.
         if (!metadata.toolCallCount || !facts.size) throw new AnalystError("no_tool_evidence");
         let parsed: z.infer<typeof finalSchema>;
-        try { parsed = finalSchema.parse(JSON.parse(response.output_text)); } catch { throw new AnalystError("ungrounded_answer"); }
+        try { parsed = finalSchema.parse(JSON.parse(response.output_text)); } catch { metadata.providerFailureCategory = "invalid_response"; throw new AnalystError("ungrounded_answer"); }
         const selected = [...new Set(parsed.factIds)].map((id) => facts.get(id));
         if (selected.some((fact) => !fact) || !selected.length) throw new AnalystError("ungrounded_answer");
         const trusted = selected.filter((fact) => fact !== undefined);

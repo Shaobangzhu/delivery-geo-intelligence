@@ -13,7 +13,7 @@ export interface AiDiagnostics {
   requestId: string; model: string; tools: string[]; toolCallCount: number;
   latencyMs: number; inputTokens: number; outputTokens: number; usageAvailable: boolean; outcome: string;
   providerCallCount: number; providerErrorCount: number; toolPayloadBytes: number;
-  providerFailureCategory?: "timeout" | "rate_limit" | "authentication" | "configuration" | "provider";
+  providerFailureCategory?: "timeout" | "rate_limit" | "authentication" | "configuration" | "provider" | "network" | "provider_5xx" | "invalid_response";
   // Exact usage records, including cached/reasoning details when supplied. No prompts or tool data.
   providerUsage: ProviderUsage[];
 }

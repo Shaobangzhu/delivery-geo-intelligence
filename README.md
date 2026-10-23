@@ -253,3 +253,5 @@ The marker is disabled by default. Missing, partial, nonfinite or out-of-range c
 ## Data & Settings
 
 The fourth navigation page, `/settings`, displays actual backend provider status, 1h/24h request metrics, MongoDB ping observations and reported AI token usage. Refresh reads the system APIs without paid provider probes. Browser ArcGIS Maps SDK lifecycle status is separate, retained only across navigation in the current tab; a fresh session shows Not Yet Verified. Unknown or partial observations are labeled explicitly. See [Data & Settings](docs/data-settings.md) for sources, privacy and responsive behavior.
+
+Provider fault injection, availability classification, telemetry privacy regressions, and Settings response-integrity checks are documented in [Reliability testing](docs/reliability-testing.md). Tests use injected providers, fake deadlines and disposable MongoDB without live credentials.

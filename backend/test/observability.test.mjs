@@ -78,7 +78,7 @@ test("ArcGIS observations preserve generalization and expected no-match semantic
   const payload = { spatialReference: { wkid: 4326 }, candidates: [{ score: 99, location: { x: 0.123456, y: 0.654321 }, attributes: { Addr_type: "PointAddress" } }] };
   for (const [body, status, expected, category] of [[payload, 200, null, null], [{ ...payload, candidates: [] }, 200, "no_match", "no_match"],
     [{ ...payload, candidates: [{ ...payload.candidates[0], score: 20 }] }, 200, "low_confidence", "low_confidence"],
-    [{ error: { code: 429, message: "PRIVATE" } }, 200, "provider_error", "rate_limit"], [{}, 429, "provider_error", "rate_limit"], [{}, 503, "provider_error", "provider"], [{}, 200, "unusable_result", "invalid_response"]]) {
+    [{ error: { code: 429, message: "PRIVATE" } }, 200, "provider_error", "rate_limit"], [{}, 429, "provider_error", "rate_limit"], [{}, 503, "provider_error", "provider_5xx"], [{}, 200, "unusable_result", "invalid_response"]]) {
     const o = new ProviderObservability(configured); const fetcher = async () => new Response(JSON.stringify(body), { status });
     const geocode = createArcGisGeocoder("SECRET", 2, fetcher, o);
     if (expected) await assert.rejects(geocode("PRIVATE_ADDRESS"), (e) => e instanceof GeocodingError && e.code === expected);
