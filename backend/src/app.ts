@@ -1,3 +1,5 @@
+import { ProviderObservability } from "./observability/collector.js";
+import { registerSystemRoutes } from "./observability/routes.js";
 import { getAnnualSummaries } from "./uberAnnualSummary.js";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ObjectId, type Db, type Filter, type Sort } from "mongodb";
@@ -44,7 +46,7 @@ const sorts: Record<string, Sort> = {
   distanceAsc: { distanceMiles: 1, _id: 1 }
 };
 
-export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geocodeMerchant: MerchantGeocoder, analyst?: Analyst, clock: () => Date = () => new Date()) {
+export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geocodeMerchant: MerchantGeocoder, analyst?: Analyst, clock: () => Date = () => new Date(), observer = new ProviderObservability({ mongodb: true, arcgis_geocoding: null, openai: null })) {
   const app = express();
   const merchants = db.collection<MerchantDocument>("merchants");
   const deliveries = db.collection<DeliveryDocument>("deliveries");
@@ -59,6 +61,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     finally { release(); }
   }
   app.use(express.json({ limit: "32kb" }));
+  registerSystemRoutes(app, db, observer);
   registerSessionRoutes(app, db, withReferenceWrite, invalid);
   registerAiRoutes(app, db, withReferenceWrite, analyst);
 

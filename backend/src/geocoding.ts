@@ -1,3 +1,4 @@
+import type { ProviderObservability, ErrorCategory } from "./observability/collector.js";
 import { z } from "zod";
 import { pointSchema, type GeoJsonPoint } from "./model.js";
 
@@ -18,7 +19,7 @@ const resultSchema = z.object({
 export type GeocodingFailure = "no_match" | "low_confidence" | "unusable_result" | "provider_error" | "network_error";
 
 export class GeocodingError extends Error {
-  constructor(public readonly code: GeocodingFailure) {
+  constructor(public readonly code: GeocodingFailure, public readonly telemetryCategory?: ErrorCategory) {
     super("Address geocoding failed");
     this.name = "GeocodingError";
   }
@@ -45,11 +46,13 @@ export function generalizeCoordinates(longitude: number, latitude: number, decim
 
 export function createArcGisStoredGeocoder(
   apiKey: string,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  observer?: ProviderObservability,
+  now: () => number = Date.now
 ): StoredGeocoder {
   if (!apiKey) throw new Error("ArcGIS geocoding credential is missing");
 
-  return async (address: string) => {
+  const lookup: StoredGeocoder = async (address: string) => {
     const body = new URLSearchParams({
       f: "json",
       SingleLine: address,
@@ -73,17 +76,17 @@ export function createArcGisStoredGeocoder(
         signal
       });
     } catch {
-      throw new GeocodingError("network_error");
+      throw new GeocodingError("network_error", signal.aborted ? "timeout" : "network");
     }
 
     let payload: unknown;
     try {
       payload = await response.json();
     } catch {
-      throw new GeocodingError(signal.aborted ? "network_error" : "provider_error");
+      throw new GeocodingError(signal.aborted ? "network_error" : "provider_error", signal.aborted ? "timeout" : response.status === 429 ? "rate_limit" : "provider");
     }
     if (!response.ok || (typeof payload === "object" && payload !== null && "error" in payload)) {
-      throw new GeocodingError("provider_error");
+      throw new GeocodingError("provider_error", response.status === 429 || (payload as { error?: { code?: number } })?.error?.code === 429 ? "rate_limit" : "provider");
     }
 
     const parsed = resultSchema.safeParse(payload);
@@ -103,14 +106,31 @@ export function createArcGisStoredGeocoder(
     if (!exact.success) throw new GeocodingError("unusable_result");
     return exact.data;
   };
+  return async (address) => {
+    const start = now();
+    let error: unknown;
+    try { return await lookup(address); }
+    catch (cause) { error = cause; throw cause; }
+    finally {
+      try {
+        const code = error instanceof GeocodingError ? error.code : null;
+        const expected = code === "no_match" || code === "low_confidence";
+        observer?.record({ provider: "arcgis_geocoding", operation: "geocode", durationMs: Math.max(0, now() - start),
+          outcome: expected ? code : error ? "failure" : "success", evidence: error && !expected ? "failure" : "success",
+          errorCategory: error instanceof GeocodingError ? error.telemetryCategory ?? (expected ? code : code === "unusable_result" ? "invalid_response" : "provider") : error ? "internal" : null });
+      } catch { /* Metrics must not change geocoding results. */ }
+    }
+  };
 }
 
 export function createArcGisGeocoder(
   apiKey: string,
   decimals: number,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  observer?: ProviderObservability,
+  now: () => number = Date.now
 ): DestinationGeocoder {
-  const exactGeocode = createArcGisStoredGeocoder(apiKey, fetcher);
+  const exactGeocode = createArcGisStoredGeocoder(apiKey, fetcher, observer, now);
   return async (address: string) => {
     const exact = await exactGeocode(address);
     return generalizeCoordinates(exact.coordinates[0], exact.coordinates[1], decimals);

@@ -1,3 +1,5 @@
+import { ProviderObservability } from "./observability/collector.js";
+import { monitorMongo } from "./observability/mongodb.js";
 import { MongoClient } from "mongodb";
 import { createApp } from "./app.js";
 import { DATABASE_NAME, ensureIndexes } from "./db.js";
@@ -6,20 +8,24 @@ import { createArcGisGeocoder, createArcGisStoredGeocoder } from "./geocoding.js
 import { createAnalyst } from "./ai/agent.js";
 import { createResponsesClient, DEFAULT_OPENAI_MODEL } from "./ai/provider.js";
 
-const client = new MongoClient(env.MONGODB_URI);
+const model = env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
+const client = new MongoClient(env.MONGODB_URI, { monitorCommands: true });
 
 try {
   await client.connect();
+  const responses = createResponsesClient(env.OPENAI_API_KEY, model);
+  const observer = new ProviderObservability({ mongodb: true, arcgis_geocoding: Boolean(env.ARCGIS_GEOCODING_API_KEY), openai: responses !== null });
+  monitorMongo(client, observer);
   const db = client.db(DATABASE_NAME);
   await ensureIndexes(db);
 
-  const geocodeDestination = createArcGisGeocoder(env.ARCGIS_GEOCODING_API_KEY, env.DESTINATION_COORDINATE_DECIMALS);
-  const geocodeMerchant = createArcGisStoredGeocoder(env.ARCGIS_GEOCODING_API_KEY);
-  const model = env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
-  const analyst = createAnalyst(createResponsesClient(env.OPENAI_API_KEY, model), model, (metadata) => {
+  const geocodeDestination = createArcGisGeocoder(env.ARCGIS_GEOCODING_API_KEY, env.DESTINATION_COORDINATE_DECIMALS, fetch, observer);
+  const geocodeMerchant = createArcGisStoredGeocoder(env.ARCGIS_GEOCODING_API_KEY, fetch, observer);
+  const analyst = createAnalyst(responses, model, (metadata) => {
+    observer.observeAi(metadata);
     if (process.env.NODE_ENV === "development") console.info(JSON.stringify({ event: "dgi_ai_request", ...metadata }));
   });
-  const server = createApp(db, geocodeDestination, geocodeMerchant, analyst).listen(env.PORT, "127.0.0.1", () => {
+  const server = createApp(db, geocodeDestination, geocodeMerchant, analyst, undefined, observer).listen(env.PORT, "127.0.0.1", () => {
     console.info(`DGI API listening on http://127.0.0.1:${env.PORT}`);
   });
 

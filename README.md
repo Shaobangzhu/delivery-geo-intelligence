@@ -245,3 +245,7 @@ Use the existing backend `createArcGisStoredGeocoder()` with `ARCGIS_GEOCODING_A
 The marker is disabled by default. Missing, partial, nonfinite or out-of-range coordinates silently omit it while the rest of the map works. Longitude precedes latitude and is bounded to ±180/±90 respectively. No location is guessed from the map center or a zero fallback.
 
 **Privacy:** Vite bundles `VITE_` values into browser-accessible assets. Git ignore prevents source-control disclosure, not disclosure to people who can access a configured deployment. Use this feature only in a local/private instance; leave both values empty before building a shared/public application. The exact point exists in the frontend configuration, built assets and map geometry, with only the generic Home attribute and no popup or address tooltip. It is never persisted to MongoDB, sent through Express, mixed with Delivery/Merchant data, or included in AI tools/evidence. Existing destination generalization remains unchanged.
+
+## Backend provider observations
+
+`GET /api/system/status` returns a versioned provider snapshot after a bounded, cached MongoDB ping. `GET /api/system/metrics?window=1h` (or `24h`) reads retained metrics without calling providers. Configuration alone never establishes connectivity. In-memory observations reset on restart; the APIs do not monitor browser ArcGIS Maps SDK health. Contracts, retention, safe error categories and limitations: [Observability](docs/observability.md).

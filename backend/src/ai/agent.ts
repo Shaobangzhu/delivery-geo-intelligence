@@ -54,10 +54,13 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
             text: { format: finalFormat } }, controller.signal), controller.signal);
         } catch (error) {
           metadata.providerErrorCount++;
+          metadata.providerFailureCategory = controller.signal.aborted || (error instanceof Error && error.name === "APIConnectionTimeoutError") ? "timeout" : undefined;
           if (error instanceof AnalystError) throw error;
           const status = (error as { status?: unknown })?.status;
           const code = controller.signal.aborted ? "timeout_or_cancelled" : status === 429 ? "provider_rate_limited"
             : status === 401 || status === 403 ? "provider_authentication" : status === 404 ? "provider_configuration" : "provider_failure";
+          metadata.providerFailureCategory ??= status === 429 ? "rate_limit" : status === 401 || status === 403 ? "authentication"
+            : status === 404 ? "configuration" : "provider";
           throw new AnalystError(code, controller.signal.aborted || status === 429 ? 503 : 502);
         }
         if (response.usage) {
