@@ -17,22 +17,23 @@ These are the exact job/check display names (not workflow file paths):
 | MongoDB integration tests | `npm run test:backend:integration` | 20 min |
 | Coverage | `npm run test:coverage && npm run coverage:check` | 20 min |
 | Dependency security | `npm run security:check` | 10 min |
+| E2E smoke (Chromium) | `npm run test:e2e` | 15 min |
 | Quality gate | Aggregate requiring every preceding job to succeed | 2 min |
 
-The six independent fast checks are matrix jobs with fail-fast disabled. Integration, coverage and security run independently. `Quality gate` runs with `always()` and explicitly requires `success` for every dependency; failed, skipped or cancelled stages cannot turn it green. No `continue-on-error` is used. Bash pipeline failure propagation is retained when tee writes diagnostic logs. Workflow concurrency cancels superseded work for the same PR/ref; cancelled work cannot satisfy the required latest checks.
+The six independent fast checks are matrix jobs with fail-fast disabled. Integration, coverage and security run independently. E2E waits for the fast checks, including the production build, then provisions its own service and offline application build. `Quality gate` runs with `always()` and explicitly requires `success` for every dependency; failed, skipped or cancelled stages cannot turn it green. No `continue-on-error` is used. Bash pipeline failure propagation is retained when tee writes diagnostic logs. Workflow concurrency cancels superseded work for the same PR/ref; cancelled work cannot satisfy the required latest checks.
 
-`npm run quality:check` remains the credential-free local suite (lint, types, production-mode build, full coverage tests, offline AI evaluation) and now also enforces coverage floors. `npm run security:check` is separate because it requires current registry audit data; run it before opening a PR. Independent unit/integration commands match the CI stages. `npm test` still runs all tests. Normal `npm run build` retains application environment loading; CI's `build:quality` uses the same production bundling with environment files disabled. No global NODE_ENV=test overrides production compilation.
+`npm run quality:check` remains the credential-free local suite (lint, types, production-mode build, full coverage tests, offline AI evaluation) and now also enforces coverage floors. `npm run security:check` is separate because it requires current registry audit data; run it before opening a PR. Chromium E2E is also separate: install the browser with `npx playwright install --only-shell chromium`, then `npm run test:e2e`; see [E2E isolation and diagnostics](e2e-testing.md). Independent unit/integration commands match the CI stages. `npm test` still runs all tests. Normal `npm run build` retains application environment loading; CI's `build:quality` uses the same production bundling with environment files disabled. No global NODE_ENV=test overrides production compilation.
 
 ## Isolation and environment
 
-CI does **not** run the application's `docker-compose.yml`: that stack requires local credentials and uses a persistent application volume. Each integration/coverage job instead creates a fresh service container with no persistent application volume, a healthcheck, and a random mapped port. Both test jobs have their own container. The only service credentials are deliberately public, synthetic workflow literals:
+CI does **not** run the application's `docker-compose.yml`: that stack requires local credentials and uses a persistent application volume. Each integration/coverage/E2E job instead creates a fresh service container with no persistent application volume, a healthcheck, and a random mapped port. All three database jobs have their own container. The only service credentials are deliberately public, synthetic workflow literals:
 
 | Variable | Source / value |
 | --- | --- |
 | `MONGO_INITDB_ROOT_USERNAME` | Service only: `dgi_ci` |
 | `MONGO_INITDB_ROOT_PASSWORD` | Service only: `synthetic_ci_only` |
 | `MONGO_INITDB_DATABASE` | Service only: `dgi_ci_test` |
-| `DGI_TEST_MONGO_MODE` | Integration/coverage jobs: `service` |
+| `DGI_TEST_MONGO_MODE` | Integration/coverage/E2E jobs: `service` |
 | `DGI_CI_MONGO_URI` | Test step only: `mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:<assigned-port>/dgi_ci_test?authSource=admin` |
 | `OPENAI_API_KEY`, `ARCGIS_GEOCODING_API_KEY`, `VITE_ARCGIS_API_KEY` | Explicitly empty: clients are injected/mocked, not authenticated |
 | `TZ` | `UTC` |
@@ -66,14 +67,14 @@ Any future waiver must be explicitly approved by a repository maintainer/securit
 
 All check/test/security jobs upload **available** reports with `if: always()`, including on command failure. Names are unique per matrix check or job, retention is seven days, and absent early-failure artifacts cause a warning rather than hiding the original failure. JUnit lives in `reports/backend-{unit,integration,all}.xml` and `reports/frontend.xml`; workflow tee logs live under reports. Coverage HTML/LCOV/JSON is uploaded separately for backend/frontend. Full reports are not expected when install/startup fails; the gate still fails.
 
-Only known synthetic test diagnostics and source-code coverage are uploaded. The workflow supplies no production secrets, never uploads `.env`, MongoDB data, dumps, home references, browser assets or arbitrary workspace files. Review new assertions/fixtures for privacy before adding them; coverage HTML contains repository source. Workspaces from malicious PRs can emit arbitrary artifacts, so treat downloaded diagnostics as untrusted data. PR code runs with `contents: read`, no write token scopes, checkout credential persistence disabled, and no `pull_request_target` or secret-bearing deployment job. Artifact upload uses the job's built-in artifact runtime authorization.
+Only known synthetic test diagnostics and source-code coverage are uploaded. E2E additionally uploads only `reports/e2e/` (synthetic screenshots, retained failure traces, HTML/JSON/JUnit, execution metadata and logs), with seven-day retention. No real browser profile or application dataset is involved. E2E retries are limited to one in CI; a recovered retry still fails via `failOnFlakyTests`. The workflow supplies no production secrets, never uploads `.env`, MongoDB data, dumps, home references, browser assets or arbitrary workspace files. Review new assertions/fixtures for privacy before adding them; coverage HTML contains repository source. Workspaces from malicious PRs can emit arbitrary artifacts, so treat downloaded diagnostics as untrusted data. PR code runs with `contents: read`, no write token scopes, checkout credential persistence disabled, and no `pull_request_target` or secret-bearing deployment job. Artifact upload uses the job's built-in artifact runtime authorization.
 
 ## Required GitHub-side setup (not applied)
 
 Workflow files alone do not enable branch protection. After pushing this change and observing actual check names, an administrator should create an **active** branch ruleset (or equivalent branch protection) targeting exactly `main`:
 
 1. Require a pull request before merging; require at least one approval, dismiss stale approvals after new commits, require approval of the most recent reviewable push, and require all conversations resolved. Configure code owners if the repository has an actual ownership file; do not claim a nonexistent ownership policy is enforced.
-2. Require the ten exact checks listed above, including `Quality gate`. Bind them to the GitHub Actions source when the settings offer that choice. Require branches to be up to date before merging; avoid duplicate check names from unrelated workflows.
+2. Require the eleven exact checks listed above, including `Quality gate`. Bind them to the GitHub Actions source when the settings offer that choice. Require branches to be up to date before merging; avoid duplicate check names from unrelated workflows.
 3. Block force pushes and deletion of main. Apply the rules to administrators; keep the bypass list empty and do not grant routine bot/app bypasses. Review organization/other overlapping rules for unintended bypass rights.
 4. Verify with a deliberately failing PR that merge is blocked, then repair it. Do not merge that failure. Workflow existence/local validation does not prove GitHub enforcement. Fork PRs may require a maintainer's initial workflow approval under repository Actions policy.
 5. Keep merge queue disabled until adding/testing a `merge_group` trigger; this workflow currently implements only the requested PR/push/manual events. Private-repository plan limitations may affect ruleset/protection availability.

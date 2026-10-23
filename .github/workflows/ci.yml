@@ -185,10 +185,57 @@ jobs:
             reports/
             backend/coverage/
             frontend/coverage/
+  e2e:
+    name: E2E smoke (Chromium)
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      mongodb:
+        image: mongo:7.0.24@sha256:4c65244b50910461b9641a76131f84a2dcfd4da487f928298cea626b3842842c
+        env:
+          MONGO_INITDB_ROOT_USERNAME: dgi_ci
+          MONGO_INITDB_ROOT_PASSWORD: synthetic_ci_only
+          MONGO_INITDB_DATABASE: dgi_ci_test
+        ports:
+          - 27017/tcp
+        options: >-
+          --health-cmd 'mongosh --quiet --username dgi_ci --password synthetic_ci_only --authenticationDatabase admin --eval "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"'
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DGI_TEST_MONGO_MODE: service
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@10.9.0
+      - run: npm ci
+      - name: Install Chromium headless shell and OS dependencies only
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: Run blocking E2E smoke tests
+        env:
+          DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
+        run: |
+          mkdir -p reports/e2e
+          npm run test:e2e 2>&1 | tee reports/e2e/execution.log
+      - name: Upload synthetic E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-chromium
+          retention-days: 7
+          if-no-files-found: warn
+          path: reports/e2e/
   gate:
     name: Quality gate
     if: always()
-    needs: [checks, integration, coverage, security]
+    needs: [checks, integration, coverage, security, e2e]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -198,5 +245,6 @@ jobs:
           INTEGRATION: ${{ needs.integration.result }}
           COVERAGE: ${{ needs.coverage.result }}
           SECURITY: ${{ needs.security.result }}
+          E2E: ${{ needs.e2e.result }}
         run: |
-          [[ "$CHECKS" == success && "$INTEGRATION" == success && "$COVERAGE" == success && "$SECURITY" == success ]]
+          [[ "$CHECKS" == success && "$INTEGRATION" == success && "$COVERAGE" == success && "$SECURITY" == success && "$E2E" == success ]]

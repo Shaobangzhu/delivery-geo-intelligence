@@ -160,3 +160,6 @@ vite.config.ts.timestamp-*
 
 # Synthetic CI diagnostics
 reports/
+
+# Dedicated offline E2E build
+dist-e2e/

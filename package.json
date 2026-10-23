@@ -9,7 +9,7 @@
     "dev:frontend": "npm run dev -w frontend",
     "dev:backend": "npm run dev -w backend",
     "data:init-a1": "npm run data:init-a1 -w backend",
-    "typecheck": "npm run typecheck -w frontend && npm run typecheck -w backend",
+    "typecheck": "npm run typecheck -w frontend && npm run typecheck -w backend && npm run typecheck:e2e",
     "build": "npm run build -w frontend && npm run build -w backend",
     "test": "npm run test -w backend && npm run test -w frontend",
     "db:up": "docker compose up -d --wait",
@@ -26,7 +26,14 @@
     "test:backend:integration": "npm run test:integration -w backend",
     "test:frontend": "npm test -w frontend",
     "coverage:check": "node scripts/check-coverage.mjs",
-    "security:check": "npm audit --omit=dev --audit-level=high && npm audit --audit-level=high"
+    "security:check": "npm audit --omit=dev --audit-level=high && npm audit --audit-level=high",
+    "typecheck:e2e": "tsc -p e2e/tsconfig.json",
+    "e2e:backend": "npm run build -w backend && node e2e/server.mjs",
+    "e2e:frontend": "npm run e2e:serve -w frontend",
+    "test:e2e": "playwright test",
+    "test:e2e:repeat": "playwright test --repeat-each=3 --retries=0",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report reports/e2e/html"
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0",
@@ -34,6 +41,7 @@
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
+    "@playwright/test": "1.64.1",
     "eslint": "9.39.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.13.0",

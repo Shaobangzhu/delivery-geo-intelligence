@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
-  { ignores: ["**/node_modules/**", "**/dist/**", "**/coverage/**"] },
+  { ignores: ["**/node_modules/**", "**/dist/**", "**/coverage/**", "**/dist-e2e/**", "reports/**"] },
   {
     files: ["**/*.mjs"],
     ...js.configs.recommended,
@@ -14,12 +14,13 @@ export default [
       "no-unused-vars": ["error", { argsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", ignoreRestSiblings: true }]
     }
   },
+  { files: ["e2e/arcgis-runtime.mjs"], languageOptions: { globals: globals.browser } },
   ...tseslint.configs.recommended.map((config) => ({
     ...config,
-    files: ["backend/**/*.ts", "frontend/**/*.{ts,tsx}"]
+    files: ["backend/**/*.ts", "frontend/**/*.{ts,tsx}", "e2e/**/*.ts", "playwright.config.ts"]
   })),
   {
-    files: ["backend/**/*.ts", "frontend/**/*.{ts,tsx}"],
+    files: ["backend/**/*.ts", "frontend/**/*.{ts,tsx}", "e2e/**/*.ts", "playwright.config.ts"],
     rules: {
       ...js.configs.recommended.rules,
       // TypeScript resolves names and already enforces unused locals/parameters.

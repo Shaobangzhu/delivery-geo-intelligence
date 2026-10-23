@@ -12,11 +12,12 @@ Official 2024/2025 annual aggregates stay separate from detailed analytics; no a
 
 ## Implemented application
 
-React, TypeScript, Vite, and React Router provide three primary pages:
+React, TypeScript, Vite, and React Router provide four primary pages:
 
 - **Dashboard** (/dashboard): period/category filters, summary cards, charts, merchant rankings, and an ArcGIS map.
 - **History** (/history): paginated Delivery CRUD, Prop 22 payments, Uber Eats sessions, vehicle/annual-mileage settings in centered modals, and read-only Uber Annual Statements. Delivery addresses are cleared after save.
 - **Merchants** (/merchants): management of verified public physical pickup locations. Two stores of the same brand are separate Merchant records.
+- **Data & Settings** (/settings): backend dependency observations, request metrics and separate browser-session map lifecycle status.
 
 Express and Zod validate requests. The native MongoDB Node.js driver stores Merchants and Deliveries in the DGI MongoDB container. React calls Express; Express calls MongoDB and, for address geocoding, ArcGIS. Frontend and backend run on the host; Docker Compose runs MongoDB only. / redirects to /dashboard; GET /api/health checks the API.
 
@@ -259,3 +260,7 @@ Provider fault injection, availability classification, telemetry privacy regress
 ## Continuous integration
 
 [CI implementation](docs/ci.md) defines blocking PR/main checks for lint, types, production build, unit/integration tests, coverage non-regression, offline AI evaluation and dependency security. Use `npm ci`, `npm run quality:check`, and `npm run security:check` locally. CI MongoDB is a dedicated disposable service; no developer database or live provider credential is required. GitHub branch protection must be configured separately as documented.
+
+## Chromium E2E smoke tests
+
+After `npm ci`, install only Chromium with `npx playwright install --only-shell chromium` and run `npm run test:e2e`. Playwright automatically starts a dedicated offline frontend/backend and disposable synthetic MongoDB; no real `.env`, personal records or live ArcGIS/OpenAI credentials are needed. The blocking **E2E smoke (Chromium)** CI check covers Dashboard filters/analytics and map-controller lifecycle, History entry/edit/validation, Merchant CRUD and Settings failure/refresh states. See [E2E testing](docs/e2e-testing.md) for fixtures, debugging, failure artifacts and the SDK mock boundary. Run `npm run test:e2e:repeat` for three diagnostic repetitions; no historical flakiness rate is claimed.
