@@ -4,6 +4,8 @@ Measured on 2026-10-22 with Node **22.12.0**, npm **10.9.0**, and disposable Mon
 
 ## Repository audit
 
+Later milestones retain the original measurements below as historical evidence. See the [2026-10-24 release recovery](cloudflare-allure-deployment.md#interrupted-session-recovery-2026-10-24) for the actual Allure privacy failure, generated-output regression, current checks and separate local/CI/main-release/deployment verification states. No coverage floor was reduced by that fix.
+
 Before this milestone, the root already exposed `typecheck`, `build`, and `test`, forwarding to the two npm workspaces. There was one committed root npm v3 lockfile, no ESLint configuration, no coverage provider/configuration, and no numeric coverage thresholds. `npm run typecheck` passed before implementation. The original backend test command compiled TypeScript and ran `node --test test/*.test.mjs`; the frontend used `vitest run`. Historical test counts in README were not treated as current measurements.
 
 The backend had 11 native test files, combining pure domain tests and HTTP/MongoDB integration tests. Nine files imported `dotenv/config` and used `MONGODB_URI` from the environment; integration tests generated unique database names and dropped those databases in cleanup. That avoided ordinary collection collisions but still required access to a user-configured server. The application Docker Compose stack uses credentials and a persistent volume, so it is deliberately not used for quality checks. Original secret-loading test commands were not executed during this audit.

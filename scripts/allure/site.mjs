@@ -11,6 +11,13 @@ export function protectReport(output) {
     for (const item of readdirSync(directory, { withFileTypes: true })) {
       const file = join(directory, item.name);
       if (item.isDirectory()) protect(file);
+      else if (item.name === "summary.json") {
+        // The root summary independently synthesizes commit/CI hyperlinks.
+        // Project those three link fields only; all other data is audited later.
+        const summary = JSON.parse(readFileSync(file, "utf8"));
+        for (const key of ["commitHref", "pullRequestHref", "jobHref"]) delete summary[key];
+        writeFileSync(file, JSON.stringify(summary));
+      }
       else if (item.name.endsWith(".html")) {
         const hashes = [];
         let html = readFileSync(file, "utf8").replace(/<meta\b[^>]*http-equiv="Content-Security-Policy"[^>]*>/gi, "");
@@ -18,6 +25,17 @@ export function protectReport(output) {
           const source = attributes.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
           if (source) return /^(?:https?:|data:|\/\/)/i.test(source) ? "" : tag;
           if (/gtag\(|window\.dataLayer/.test(body)) return "";
+          // Allure 3 derives ci.repository.url from Git even without CI env vars.
+          // That unaudited link context is unnecessary: explicit DGI metadata
+          // already records the SHA/run/category. Drop only this generated field.
+          const bootstrap = body.match(/^\s*window\.allureReportOptions\s*=\s*(\{[^\n]+\})\s*;?\s*$/);
+          if (bootstrap) {
+            const options = JSON.parse(bootstrap[1]);
+            delete options.ci;
+            // JSON remains data inside the one approved bootstrap assignment.
+            body = `window.allureReportOptions = ${JSON.stringify(options).replace(/</g, "\\u003c").replace(/>/g, "\\u003e")}`;
+            tag = `<script${attributes}>${body}</script>`;
+          }
           hashes.push(`'sha256-${createHash("sha256").update(body).digest("base64")}'`);
           return tag;
         });

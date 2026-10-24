@@ -127,6 +127,8 @@ This milestone's workflow changes have been validated locally, **not executed on
 
 ## Changed files
 
+The subsequent [Cloudflare recovery investigation](cloudflare-allure-deployment.md#interrupted-session-recovery-2026-10-24) reproduces the Git-derived CI/commit-link privacy failure in actual Allure output. The isolated reporting probe now includes a synthetic Git remote, and protected reports omit only the generated CI context and summary link fields. Strict public payload checks and failed test exits remain enforced. Earlier no-Git local results above did not verify this metadata branch.
+
 | Area | Files |
 | --- | --- |
 | Locked dependencies and public commands | `package.json`, `package-lock.json`, `backend/package.json`, `frontend/package.json` |

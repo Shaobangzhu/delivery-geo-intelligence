@@ -5,6 +5,7 @@ import { artifactRoot, root } from "./results.mjs";
 import { apiClient, sourceRun, restoreHistory, saveHistoryManifest, repository, assertSource } from "./github.mjs";
 import { stagePublication, verifyPublication, deployAllowed } from "./publication.mjs";
 import { uploadReport } from "./upload.mjs";
+import { privacyDiagnostic } from "./history.mjs";
 
 const [command] = process.argv.slice(2);
 const sourceFile = join(artifactRoot, "report-source.json");
@@ -72,5 +73,5 @@ try {
 } catch (error) {
   // Do not print raw GitHub/Cloudflare payloads, signed artifact URLs, headers,
   // environment values or stack paths on any preparation/publication failure.
-  console.error(/^report_[a-z0-9_]+$/.test(error.message) ? error.message : "report_release_failed"); process.exitCode = 1;
+  console.error(privacyDiagnostic(error)); process.exitCode = 1;
 }

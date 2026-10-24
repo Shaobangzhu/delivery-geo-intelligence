@@ -4,6 +4,8 @@
 
 ## Check names and local equivalents
 
+The [2026-10-24 reporting recovery](cloudflare-allure-deployment.md#interrupted-session-recovery-2026-10-24) fixes the Git-derived metadata privacy rejection that stopped `allure:verify` before application E2E execution. The reporting probe now uses a real isolated Git repository/remote; all required CI checks and failure propagation remain unchanged.
+
 These are the exact job/check display names (not workflow file paths):
 
 | Required check | Local command | Limit |

@@ -1,20 +1,20 @@
 // Intentional failing probes validate the reporting infrastructure, not product
 // behavior. Their temporary results never enter the application report.
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { artifactRoot, root, prepareResults, collectBatch, mergeResults } from "./results.mjs";
 import { protectReport } from "./site.mjs";
 import { verifyStaticSite } from "./verify-site.mjs";
 import { publicInput, stagePublication } from "./publication.mjs";
-import { beforeHistory, afterHistory } from "./history.mjs";
+import { beforeHistory, afterHistory, privacyDiagnostic } from "./history.mjs";
 
 mkdirSync(artifactRoot, { recursive: true });
 const base = mkdtempSync(join(artifactRoot, ".allure-verify-"));
 const summary = { runtime: process.version, category: "isolated-reporting-probes", layers: {} };
-const run = (args, env = {}) => spawnSync(process.execPath, args, {
-  cwd: root, encoding: "utf8", timeout: 90_000, maxBuffer: 5_000_000,
+const run = (args, env = {}, cwd = root) => spawnSync(process.execPath, args, {
+  cwd, encoding: "utf8", timeout: 90_000, maxBuffer: 5_000_000,
   env: { PATH: process.env.PATH, HOME: process.env.HOME, TZ: "UTC", CI: "true", ALLURE_TESTPLAN_PATH: "", ...env }
 });
 function inspect(layer, execution, result) {
@@ -76,22 +76,38 @@ test.describe("Reporting probe", () => {
   const merged = mergeResults(base); assert.equal(merged.results, 9); assert.equal(merged.partial, false);
   const config = join(base, "allurerc.mjs"), output = join(base, "allure-report"), history = join(base, "history.jsonl");
   const input = publicInput(base, merged);
+  // Real Git metadata caused the CI-only bootstrap privacy regression. Use an
+  // isolated repository with a synthetic remote; no remote is ever contacted.
+  const gitCwd = join(base, "git-fixture"); mkdirSync(gitCwd);
+  const git = process.platform === "darwin" ? "/usr/bin/git" : "git";
+  const gitEnv = { PATH: process.env.PATH, HOME: base, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  for (const args of [["init", "--initial-branch=synthetic-report"], ["-c", "user.name=Synthetic fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Synthetic reporting fixture"],
+    ["remote", "add", "origin", "https://github.com/synthetic/report-fixture.git"]]) execFileSync(git, args, { cwd: gitCwd, env: gitEnv, stdio: "ignore" });
   // Real adapter results seed an isolated history round trip. The second name
   // is a fixture for a previous/current run comparison, never product history.
   for (const suffix of ["a", "b", "b"]) {
     const name = `DGI local ${suffix.repeat(16)}`;
     beforeHistory(history, name);
     writeFileSync(config, `export default ${JSON.stringify({ name, historyPath: history, appendHistory: true, historyLimit: 30, plugins: { awesome: { options: { singleFile: false } } } })};`);
-    const generated = run([join(root, "node_modules/allure/cli.js"), "generate", input.directory, "--config", config, "--output", output, "--clean"]);
+    const generated = run([join(root, "node_modules/allure/cli.js"), "generate", input.directory, "--config", config, "--output", output, "--clean"], {
+      ...gitEnv, PATH: process.platform === "darwin" ? `/usr/bin:${process.env.PATH}` : process.env.PATH
+    }, gitCwd);
     assert.equal(generated.status, 0, "Allure 3 must generate diagnostics for failed tests without rewriting test exits");
     assert.equal(afterHistory(history).length, suffix === "a" ? 1 : 2);
   }
   assert.match(readFileSync(join(output, "index.html"), "utf8"), /<html/i);
+  const original = readFileSync(join(output, "index.html"), "utf8");
+  assert.ok(original.includes("https://github.com/synthetic/report-fixture"), "real Allure output must exercise Git-derived CI URL");
+  assert.ok(JSON.parse(readFileSync(join(output, "summary.json"))).commitHref.startsWith("https://github.com/synthetic/report-fixture"));
   protectReport(output);
+  assert.ok(!readFileSync(join(output, "index.html"), "utf8").includes("https://github.com/synthetic/report-fixture"));
   const candidate = stagePublication(base);
   summary.publication = { mode: candidate.mode, publicAttachments: candidate.publicAttachments, replayHistoryEntries: afterHistory(history).length };
+  summary.gitMetadataProjection = "verified with a real generated report and isolated synthetic Git remote";
   summary.browser = await verifyStaticSite(output);
   summary.staticGeneration = "passed; 9 real probe executions, including 3 intentional failures";
   writeFileSync(join(artifactRoot, "allure-verification.json"), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify(summary, null, 2));
+} catch (error) {
+  console.error(privacyDiagnostic(error)); process.exitCode = 1;
 } finally { rmSync(base, { recursive: true, force: true }); }

@@ -93,6 +93,14 @@ function filesAt(directory) {
 }
 export const headers = "/*\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: DENY\n  Referrer-Policy: no-referrer\n  X-Robots-Tag: noindex, nofollow\n  Cache-Control: no-store\n";
 function auditSiteFile(name, bytes, assets) {
+  try { return auditSiteContent(name, bytes, assets); }
+  catch (error) {
+    // Expose only an allowlisted static filename and schema path, never values.
+    error.auditFile = /^(?:index\.html|(?:data\/(?:test-results|test-env-groups|history)|widgets)\/[a-zA-Z0-9_.-]+\.json|(?:summary|test-results|dgi-summary)\.json)$/.test(name) ? name : "[unapproved-file]";
+    throw error;
+  }
+}
+function auditSiteContent(name, bytes, assets) {
   if (assets[name]) { if (assets[name] !== sha256(bytes)) throw new Error("report_vendor_asset_modified"); return; }
   if (name === "_headers") { if (bytes.toString() !== headers) throw new Error("report_public_headers_rejected"); return; }
   if (name === "index.html") {

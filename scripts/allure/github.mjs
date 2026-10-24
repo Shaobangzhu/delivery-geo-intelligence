@@ -81,10 +81,11 @@ export async function restoreHistory(api, target, source, { log = console.log } 
         const zip = new AdmZip(bytes), entries = zip.getEntries();
         if (entries.length !== 2 || entries.some((e) => !["history.jsonl", "manifest.json"].includes(e.entryName) || e.header.size > 50_000_000)) throw new Error("invalid");
         const history = zip.readFile("history.jsonl"), manifest = JSON.parse(zip.readAsText("manifest.json"));
+        assertSource(manifest.source);
         if (manifest.schemaVersion !== 1 || manifest.sha256 !== sha256(history) || !digits(manifest.source?.runId) || !sha(manifest.source?.sha)) throw new Error("invalid");
         if (BigInt(manifest.source.runId) > BigInt(source.runId)) continue;
         const original = await sourceRun(api, manifest.source.runId, { current: false });
-        if (original.sha !== manifest.source.sha) throw new Error("invalid");
+        if (Object.keys(original).some((key) => original[key] !== manifest.source[key])) throw new Error("invalid");
         const normalized = normalizeHistory(history.toString());
         if (!normalized.some((entry) => entry.name === `DGI CI ${manifest.source.runId}`) ||
             normalized.some((entry) => !/^DGI CI \d+$/.test(entry.name) || BigInt(entry.name.slice(7)) > BigInt(manifest.source.runId))) throw new Error("invalid");

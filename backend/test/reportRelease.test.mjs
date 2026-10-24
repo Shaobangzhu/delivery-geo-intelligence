@@ -172,6 +172,68 @@ test("Public audit rejects personal payloads, unknown files, modified UI code an
   }
 });
 
+test("Git-derived CI links are projected out while other bootstrap fields stay strictly audited", (t) => {
+  const f = site(t), index = join(f.output, "index.html");
+  const git = { commit: "a".repeat(40), branch: "synthetic-report" };
+  const html = (options) => `<html><head><script>window.allureReportOptions = ${JSON.stringify(options)}</script></head><body><script src="app.js"></script></body></html>`;
+  writeFileSync(index, html({ reportName: "Synthetic quality report", git, ci: { repository: { url: "https://github.com/synthetic/report-fixture" } } }));
+  protectReport(f.output);
+  const protectedHtml = readFileSync(index, "utf8");
+  assert.ok(!protectedHtml.includes("https://github.com/"));
+  const options = JSON.parse(protectedHtml.match(/window\.allureReportOptions = (\{[^\n]+\})/)[1]);
+  assert.equal(options.ci, undefined); assert.deepEqual(options.git, git);
+  assert.doesNotThrow(() => stagePublication(f.base, source, f.assets));
+  writeFileSync(join(f.output, "summary.json"), JSON.stringify({ status: "failed", stats: { failed: 1 }, commitHref: "https://github.com/synthetic/report-fixture/commit/example", diagnostic: "Safe summary" }));
+  protectReport(f.output);
+  assert.deepEqual(JSON.parse(readFileSync(join(f.output, "summary.json"))), { status: "failed", stats: { failed: 1 }, diagnostic: "Safe summary" });
+  assert.doesNotThrow(() => stagePublication(f.base, source, f.assets));
+  for (const unsafe of ["https://private.invalid/record", "Bearer synthetic_token", "123 Synthetic Street", "-122.123456, 47.654321", "/home/synthetic/private"]) {
+    writeFileSync(index, html({ reportName: "Synthetic quality report", git, diagnostic: unsafe })); protectReport(f.output);
+    assert.throws(() => stagePublication(f.base, source, f.assets), /report_privacy_text_rejected|report_public_html_rejected/);
+  }
+});
+
+test("Privacy diagnostics reveal schema locations without rejected values or arbitrary keys", () => {
+  assert.throws(() => auditJson({ ci: { repository: { url: "https://private.invalid/record" } } }), (error) => {
+    assert.equal(error.auditPath, "$.ci.repository.url");
+    assert.ok(!JSON.stringify(error).includes("private.invalid")); return true;
+  });
+  assert.throws(() => auditJson({ arbitraryPersonalName: "Bearer synthetic_token" }), (error) => {
+    assert.equal(error.auditPath, "$.[key]"); return true;
+  });
+});
+
+test("History checksum corruption and PR source history cannot be restored", async (t) => {
+  const zip = new AdmZip(historyZip(JSON.stringify(history(100))));
+  zip.updateFile("history.jsonl", Buffer.from(JSON.stringify(history(101))));
+  for (const f of [historyApi(zip.toBuffer()), historyApi(historyZip(JSON.stringify(history(100))), { sourceEvent: "pull_request" })]) {
+    const result = await restoreHistory(f.api, temp(t), source, { log() {} });
+    assert.equal(result.reason, "malformed_artifact_discarded"); assert.equal(result.entries, 0);
+  }
+});
+
+test("Missing current report and mismatched provenance fail closed", (t) => {
+  assert.throws(() => mergeResults(temp(t), true), /Missing Allure test layers/);
+  const base = temp(t), raw = prepareResults("backend", "unit", base);
+  writeFileSync(join(raw, "case-result.json"), JSON.stringify({ uuid: "case", name: "Synthetic operation", status: "passed" }));
+  collectBatch("backend", "unit", 0, base);
+  const summary = mergeResults(base, true);
+  assert.throws(() => publicInput(base, summary, source), /provenance_rejected/);
+});
+
+test("The actual CI gate rejects any failed or skipped required stage even when reporting succeeds", () => {
+  const ci = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+  const gate = ci.match(/\[\[ "\$CHECKS" == success[^\n]+\]\]/)[0];
+  const stages = ["CHECKS", "INTEGRATION", "COVERAGE", "SECURITY", "E2E", "REPORTING"];
+  const success = Object.fromEntries(stages.map((key) => [key, "success"]));
+  // Node can add NODE_V8_COVERAGE to a supplied spawn env under c8. Keep the
+  // stage denominator explicit and give each child a fresh environment object.
+  assert.equal(spawnSync("bash", ["-c", gate], { env: { ...success } }).status, 0);
+  for (const key of stages) for (const value of ["failure", "skipped", "cancelled"]) {
+    assert.equal(spawnSync("bash", ["-c", gate], { env: { ...success, [key]: value } }).status, 1, `${key}=${value}`);
+  }
+});
+
 test("Deployment is denied for local/PR/fork/disabled/unreviewed candidates", (t) => {
   const f = site(t), manifest = stagePublication(f.base, source, f.assets);
   const now = Date.UTC(2026, 9, 23);

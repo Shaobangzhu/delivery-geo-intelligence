@@ -6,20 +6,30 @@ import { forbiddenText } from "./results.mjs";
 export const HISTORY_LIMIT = 30;
 const statuses = new Set(["passed", "failed", "broken", "skipped", "unknown"]);
 const identifier = /^[a-f0-9.-]{16,150}$/;
+const pathKeys = new Set(["ci", "repository", "url", "git", "commit", "branch", "name", "message", "trace", "statusDetails", "steps", "value", "labels", "reportName", "diagnostic", "commitHref", "pullRequestHref", "jobHref"]);
+export function privacyDiagnostic(error) {
+  return JSON.stringify({ category: /^report_[a-z0-9_]+$/.test(error.message) ? error.message : "report_verification_failed",
+    ...(error.auditFile ? { file: error.auditFile } : {}), ...(error.auditPath ? { path: error.auditPath } : {}) });
+}
 export function assertPublicText(value) {
   if (typeof value !== "string" || value.length > 4000 || forbiddenText(value) ||
       /[<>]|https?:\/\/|(?:\/Users\/|\/home\/|[A-Z]:\\)|(?:file|mongodb(?:\+srv)?|javascript|data):|\$\{|\{\{|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value)) throw new Error("report_privacy_text_rejected");
   return value;
 }
-export function auditJson(value, depth = 0) {
+export function auditJson(value, depth = 0, path = "$") {
   if (depth > 30) throw new Error("report_privacy_depth_rejected");
-  if (typeof value === "string") assertPublicText(value);
-  else if (Array.isArray(value)) value.forEach((item) => auditJson(item, depth + 1));
+  if (typeof value === "string") {
+    try { assertPublicText(value); }
+    catch (error) { error.auditPath = path; throw error; }
+  }
+  else if (Array.isArray(value)) value.forEach((item, index) => auditJson(item, depth + 1, `${path}[${index}]`));
   else if (value && typeof value === "object") for (const [key, item] of Object.entries(value)) {
     assertPublicText(key);
     if (/^(?:prompt|completion|commands?|authorization|api[_-]?key|accessToken|customerRecords?|deliveryRecords?|residentialAddress|address|latitude|longitude|coordinates)$/i.test(key)) throw new Error("report_privacy_field_rejected");
     if (["parameters", "attachments", "links", "reportLinks"].includes(key) && (!Array.isArray(item) || item.length)) throw new Error("report_privacy_field_rejected");
-    auditJson(item, depth + 1);
+    // Paths contain schema keys only; arbitrary keys are represented by a marker.
+    const segment = pathKeys.has(key) ? key : "[key]";
+    auditJson(item, depth + 1, `${path}.${segment}`);
   }
 }
 export function readBounded(file, limit = 50_000_000) {
