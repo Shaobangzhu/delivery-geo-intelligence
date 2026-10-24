@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "test": "vitest run",
+    "test": "node ../scripts/allure/run.mjs frontend unit run",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
     "lint": "eslint src vite.config.ts vitest.config.ts --max-warnings=0",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "node ../scripts/allure/run.mjs frontend coverage run --coverage",
     "e2e:serve": "vite build --config vite.e2e.config.ts && vite preview --config vite.e2e.config.ts"
   },
   "dependencies": {
@@ -26,6 +26,8 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "5.0.5",
+    "@vitest/runner": "4.1.11",
+    "allure-vitest": "3.14.0",
     "jsdom": "26.1.0",
     "typescript": "^7.0.2",
     "vite": "8.3.5",

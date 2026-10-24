@@ -264,3 +264,15 @@ Provider fault injection, availability classification, telemetry privacy regress
 ## Chromium E2E smoke tests
 
 After `npm ci`, install only Chromium with `npx playwright install --only-shell chromium` and run `npm run test:e2e`. Playwright automatically starts a dedicated offline frontend/backend and disposable synthetic MongoDB; no real `.env`, personal records or live ArcGIS/OpenAI credentials are needed. The blocking **E2E smoke (Chromium)** CI check covers Dashboard filters/analytics and map-controller lifecycle, History entry/edit/validation, Merchant CRUD and Settings failure/refresh states. See [E2E testing](docs/e2e-testing.md) for fixtures, debugging, failure artifacts and the SDK mock boundary. Run `npm run test:e2e:repeat` for three diagnostic repetitions; no historical flakiness rate is claimed.
+
+### Consolidated test reporting
+
+Existing backend, Vitest and Chromium commands collect **Allure 3** results during their normal executions. Run `npm run allure:test` to clean, execute each layer once and generate `artifacts/allure-report/index.html`; `npm run allure:open` serves it on loopback. `npm run allure:generate` consolidates existing results; `allure:clean` removes generated reports while retaining local JSONL history. CI uploads audited results even when tests fail, while failed tests still fail the Quality gate. Node 22 uses reporter-only integration. See [Allure reporting](docs/allure-reporting.md) for source/diagnostic boundaries.
+
+## Quality Engineering
+
+The [reporting recovery notes](docs/cloudflare-allure-deployment.md#interrupted-session-recovery-2026-10-24) document the Git-metadata privacy fix and distinguish local verification, GitHub CI, trusted main history and confirmed deployment.
+
+Quality checks, offline provider fault injection, isolated MongoDB integration and Chromium workflows remain blocking CI checks. A separate **Quality report release** workflow can publish only sanitized static Allure HTML to Cloudflare Pages; it never deploys DGI and cannot turn failed tests green. Publication is **disabled by default**, requires trusted current-main artifacts, a reviewed UI-bundle fingerprint and environment-scoped Cloudflare secrets. It preserves the latest **30 JSONL report-run records** in trusted GitHub artifacts, independently of Cloudflare availability. Public candidates omit all test screenshots/traces and development logs.
+
+Use `npm run allure:publish:prepare` and `npm run allure:publish:check` for a local dry run. [Cloudflare Allure deployment](docs/cloudflare-allure-deployment.md) documents the required project/environment/secrets, explicit enablement, current prebuilt-UI security review, Access protection, history recovery and rollback. No live report URL or enabled Access policy is claimed before actual deployment verification.

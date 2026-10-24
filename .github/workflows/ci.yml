@@ -56,11 +56,21 @@ jobs:
         with:
           name: check-${{ matrix.name }}
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/
             backend/coverage/
             frontend/coverage/
+      - name: Upload audited Allure results
+        if: always() && (matrix.command == 'test:backend:unit' || matrix.command == 'test:frontend')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: allure-${{ matrix.name }}
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+          path: artifacts/allure-results/
   integration:
     name: MongoDB integration tests
     runs-on: ubuntu-24.04
@@ -106,11 +116,21 @@ jobs:
         with:
           name: integration
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/
             backend/coverage/
             frontend/coverage/
+      - name: Upload audited Allure results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: allure-integration
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+          path: artifacts/allure-results/
   coverage:
     name: Coverage
     runs-on: ubuntu-24.04
@@ -156,11 +176,21 @@ jobs:
         with:
           name: coverage
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/
             backend/coverage/
             frontend/coverage/
+      - name: Upload audited Allure results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: allure-coverage
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+          path: artifacts/allure-results/
   security:
     name: Dependency security
     runs-on: ubuntu-24.04
@@ -186,6 +216,7 @@ jobs:
         with:
           name: security
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/
@@ -226,6 +257,8 @@ jobs:
           npm run test:mongo:ready 2>&1 | tee reports/mongodb-readiness.log
       - name: Install Chromium headless shell and OS dependencies only
         run: npx playwright install --with-deps --only-shell chromium
+      - name: Verify reporting failure and privacy contracts with isolated probes
+        run: npm run allure:verify
       - name: Run blocking E2E smoke tests
         env:
           DGI_CI_MONGO_URI: mongodb://dgi_ci:synthetic_ci_only@127.0.0.1:${{ job.services.mongodb.ports['27017'] }}/dgi_ci_test?authSource=admin
@@ -239,14 +272,61 @@ jobs:
         with:
           name: e2e-chromium
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/e2e/
             reports/mongodb-readiness.log
+            artifacts/allure-verification.json
+      - name: Upload audited Allure results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: allure-e2e
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+          path: artifacts/allure-results/
+  reporting:
+    name: Allure report
+    if: always()
+    needs: [checks, integration, coverage, e2e]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@10.9.0
+      - run: npm ci
+      - name: Download only audited results from this run
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: allure-*
+          path: artifacts/allure-results/
+          merge-multiple: true
+      - name: Generate consolidated static diagnostics (partial if upstream failed)
+        run: npm run allure:generate -- --allow-partial
+      - name: Upload consolidated static report and audited input
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: consolidated-test-report
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+          path: |
+            artifacts/allure-results/
+            artifacts/allure-summary.json
+            artifacts/allure-report/
   gate:
     name: Quality gate
     if: always()
-    needs: [checks, integration, coverage, security, e2e]
+    needs: [checks, integration, coverage, security, e2e, reporting]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -257,5 +337,6 @@ jobs:
           COVERAGE: ${{ needs.coverage.result }}
           SECURITY: ${{ needs.security.result }}
           E2E: ${{ needs.e2e.result }}
+          REPORTING: ${{ needs.reporting.result }}
         run: |
-          [[ "$CHECKS" == success && "$INTEGRATION" == success && "$COVERAGE" == success && "$SECURITY" == success && "$E2E" == success ]]
+          [[ "$CHECKS" == success && "$INTEGRATION" == success && "$COVERAGE" == success && "$SECURITY" == success && "$E2E" == success && "$REPORTING" == success ]]
