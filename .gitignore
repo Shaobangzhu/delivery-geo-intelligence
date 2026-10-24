@@ -163,3 +163,6 @@ reports/
 
 # Dedicated offline E2E build
 dist-e2e/
+
+# Quarantined and audited Allure output (never commit)
+artifacts/

@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
-  { ignores: ["**/node_modules/**", "**/dist/**", "**/coverage/**", "**/dist-e2e/**", "reports/**"] },
+  { ignores: ["**/node_modules/**", "**/dist/**", "**/coverage/**", "**/dist-e2e/**", "reports/**", "artifacts/**"] },
   {
     files: ["**/*.mjs"],
     ...js.configs.recommended,

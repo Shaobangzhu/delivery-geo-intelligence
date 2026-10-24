@@ -15,7 +15,8 @@ export default defineConfig({
   reporter: [
     ["list"], ["html", { outputFolder: "reports/e2e/html", open: "never" }],
     ["json", { outputFile: "reports/e2e/results.json" }],
-    ["junit", { outputFile: "reports/e2e/junit.xml" }]
+    ["junit", { outputFile: "reports/e2e/junit.xml" }],
+    ["allure-playwright", { resultsDir: "artifacts/.allure-raw/e2e/chromium", detail: false, suiteTitle: true }]
   ],
   metadata: { dataset: "synthetic-only-v1", providers: "offline", map: "SDK contract adapter", fixtureTime: "2026-03-08T20:00:00.000Z" },
   use: {

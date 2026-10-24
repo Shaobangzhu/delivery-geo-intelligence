@@ -18,9 +18,12 @@ These are the exact job/check display names (not workflow file paths):
 | Coverage | `npm run test:coverage && npm run coverage:check` | 20 min |
 | Dependency security | `npm run security:check` | 10 min |
 | E2E smoke (Chromium) | `npm run test:e2e` | 15 min |
+| Allure report | `npm run allure:generate` after collecting results | 10 min |
 | Quality gate | Aggregate requiring every preceding job to succeed | 2 min |
 
 The six independent fast checks are matrix jobs with fail-fast disabled. Integration, coverage and security run independently. E2E waits for the fast checks, including the production build, then provisions its own service and offline application build. `Quality gate` runs with `always()` and explicitly requires `success` for every dependency; failed, skipped or cancelled stages cannot turn it green. No `continue-on-error` is used. Bash pipeline failure propagation is retained when tee writes diagnostic logs. Workflow concurrency cancels superseded work for the same PR/ref; cancelled work cannot satisfy the required latest checks.
+
+The later Allure milestone adds **Allure report**, also required by **Quality gate**. Existing test executions upload audited Allure batches with `always()`; reporting downloads available batches from this run and generates a consolidated static diagnostic report, including partial reports after upstream failures. Original test jobs and exits remain blocking. E2E additionally verifies report adapters/static rendering with isolated intentional-failure probes after browser installation. No application suite is rerun for CI reporting. See [Allure reporting](allure-reporting.md) for the result inventory, privacy projection, seven-day report artifact and upstream prebuilt-bundle security review required before public hosting.
 
 `npm run quality:check` remains the credential-free local suite (lint, types, production-mode build, full coverage tests, offline AI evaluation) and now also enforces coverage floors. `npm run security:check` is separate because it requires current registry audit data; run it before opening a PR. Chromium E2E is also separate: install the browser with `npx playwright install --only-shell chromium`, then `npm run test:e2e`; see [E2E isolation and diagnostics](e2e-testing.md). Independent unit/integration commands match the CI stages. `npm test` still runs all tests. Normal `npm run build` retains application environment loading; CI's `build:quality` uses the same production bundling with environment files disabled. No global NODE_ENV=test overrides production compilation.
 
@@ -74,7 +77,7 @@ Only known synthetic test diagnostics and source-code coverage are uploaded. E2E
 Workflow files alone do not enable branch protection. After pushing this change and observing actual check names, an administrator should create an **active** branch ruleset (or equivalent branch protection) targeting exactly `main`:
 
 1. Require a pull request before merging; require at least one approval, dismiss stale approvals after new commits, require approval of the most recent reviewable push, and require all conversations resolved. Configure code owners if the repository has an actual ownership file; do not claim a nonexistent ownership policy is enforced.
-2. Require the eleven exact checks listed above, including `Quality gate`. Bind them to the GitHub Actions source when the settings offer that choice. Require branches to be up to date before merging; avoid duplicate check names from unrelated workflows.
+2. Require the twelve exact checks listed above, including `Allure report` and `Quality gate`. Bind them to the GitHub Actions source when the settings offer that choice. Require branches to be up to date before merging; avoid duplicate check names from unrelated workflows.
 3. Block force pushes and deletion of main. Apply the rules to administrators; keep the bypass list empty and do not grant routine bot/app bypasses. Review organization/other overlapping rules for unintended bypass rights.
 4. Verify with a deliberately failing PR that merge is blocked, then repair it. Do not merge that failure. Workflow existence/local validation does not prove GitHub enforcement. Fork PRs may require a maintainer's initial workflow approval under repository Actions policy.
 5. Keep merge queue disabled until adding/testing a `merge_group` trigger; this workflow currently implements only the requested PR/push/manual events. Private-repository plan limitations may affect ruleset/protection availability.
@@ -113,6 +116,8 @@ A fresh registry audit also exposed two blocking production advisories: [body-pa
 4. Inspect **Quality gate** only after its dependencies settle. Every required result must equal `success`; verify the actual new run, including all three database stages, rather than inferring success from YAML or local checks. Official actionlint validates schema/expressions, while the live GitHub runner validates its service handling.
 
 ### Allure milestone mismatch
+
+This subsection records the earlier recovery checkpoint. The later [Allure 3 milestone](allure-reporting.md) implements the reporting that was absent then; its current results and publishing limitations supersede the absence described below.
 
 At recovery start the working tree was clean on `main` at `5be2001`. Root/workspace manifests and lockfile, native test runner, Vitest/Playwright reporters, scripts and workflow contain **no Allure dependency, adapter, CLI, generation script or collection job**. Therefore the claimed completed Prompt 06 Allure 3 implementation is absent in this checkout. It is not reverted or recreated here. Allure result generation/combined HTML cannot be honestly marked verified, and no speculative CLI command is run or new reporting framework installed.
 

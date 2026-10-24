@@ -30,11 +30,16 @@
     "typecheck:e2e": "tsc -p e2e/tsconfig.json",
     "e2e:backend": "npm run build -w backend && node e2e/server.mjs",
     "e2e:frontend": "npm run e2e:serve -w frontend",
-    "test:e2e": "playwright test",
-    "test:e2e:repeat": "playwright test --repeat-each=3 --retries=0",
-    "test:e2e:debug": "playwright test --debug",
+    "test:e2e": "node scripts/allure/run.mjs e2e chromium test",
+    "test:e2e:repeat": "node scripts/allure/run.mjs e2e chromium test --repeat-each=3 --retries=0",
+    "test:e2e:debug": "node scripts/allure/run.mjs e2e chromium test --debug",
     "test:e2e:report": "playwright show-report reports/e2e/html",
-    "test:mongo:ready": "node scripts/wait-for-test-mongo.mjs"
+    "test:mongo:ready": "node scripts/wait-for-test-mongo.mjs",
+    "allure:clean": "node scripts/allure/report.mjs clean",
+    "allure:generate": "node scripts/allure/report.mjs generate",
+    "allure:open": "allure open artifacts/allure-report --host 127.0.0.1",
+    "allure:test": "node scripts/allure/report.mjs test",
+    "allure:verify": "node scripts/allure/verify.mjs"
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0",
@@ -43,11 +48,21 @@
   "devDependencies": {
     "@eslint/js": "9.39.5",
     "@playwright/test": "1.64.1",
+    "@vitest/coverage-v8": "5.0.5",
+    "adm-zip": "0.6.1",
+    "allure": "3.22.1",
+    "allure-js-commons": "3.14.0",
+    "allure-playwright": "3.14.0",
     "eslint": "9.39.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.13.0",
     "jsdom": "26.1.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.55.0"
+  },
+  "overrides": {
+    "@allurereport/web-commons": {
+      "dompurify": "3.4.17"
+    }
   }
 }

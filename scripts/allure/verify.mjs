@@ -1,0 +1,85 @@
+// Intentional failing probes validate the reporting infrastructure, not product
+// behavior. Their temporary results never enter the application report.
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { artifactRoot, root, prepareResults, collectBatch, mergeResults } from "./results.mjs";
+import { protectReport } from "./site.mjs";
+import { verifyStaticSite } from "./verify-site.mjs";
+
+mkdirSync(artifactRoot, { recursive: true });
+const base = mkdtempSync(join(artifactRoot, ".allure-verify-"));
+const summary = { runtime: process.version, category: "isolated-reporting-probes", layers: {} };
+const run = (args, env = {}) => spawnSync(process.execPath, args, {
+  cwd: root, encoding: "utf8", timeout: 90_000, maxBuffer: 5_000_000,
+  env: { PATH: process.env.PATH, HOME: process.env.HOME, TZ: "UTC", CI: "true", ALLURE_TESTPLAN_PATH: "", ...env }
+});
+function inspect(layer, execution, result) {
+  assert.equal(result.status, 1, `${layer}: intentional failure must exit 1`);
+  const manifest = collectBatch(layer, execution, result.status, base);
+  assert.deepEqual(manifest.counts, { failed: 1, passed: 1, skipped: 1 }, `${layer}: actual reporter statuses`);
+  const directory = join(base, "allure-results", layer, execution);
+  const results = readdirSync(directory).filter((n) => n.endsWith("-result.json")).map((n) => JSON.parse(readFileSync(join(directory, n))));
+  assert.ok(results.every((r) => Number.isFinite(r.start) && r.stop >= r.start));
+  assert.ok(results.every((r) => r.labels.some((l) => ["parentSuite", "suite", "subSuite"].includes(l.name))));
+  const text = JSON.stringify(results);
+  assert.ok(!text.includes("SYNTHETIC_SECRET")); assert.ok(!text.includes("/Users/"));
+  summary.layers[layer] = { exitCode: result.status, counts: manifest.counts,
+    auditedAttachments: manifest.auditedAttachments, omittedAttachments: manifest.omittedAttachments };
+}
+try {
+  const native = join(base, "native.test.mjs");
+  writeFileSync(native, `import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+describe("Reporting probe", () => {
+  it("pass", () => assert.equal(1, 1));
+  it("failure", () => assert.equal("SYNTHETIC_SECRET_expected", "SYNTHETIC_SECRET_actual"));
+  it.skip("skip", () => {});
+});`);
+  const backendRaw = prepareResults("backend", "unit", base);
+  inspect("backend", "unit", run(["--test", "--test-reporter=allure-node-test/reporter", native], {
+    ALLURE_NODE_TEST_CONFIG: JSON.stringify({ resultsDir: backendRaw })
+  }));
+
+  const frontendRaw = prepareResults("frontend", "unit", base);
+  const vitest = join(base, "frontend.test.mjs"), vitestConfig = join(base, "vitest.config.mjs");
+  writeFileSync(vitest, `import { describe, test, expect } from "vitest";
+describe("Reporting probe", () => {
+  test("pass", () => expect(1).toBe(1));
+  test("failure", () => expect("SYNTHETIC_SECRET_actual").toBe("SYNTHETIC_SECRET_expected"));
+  test("skip", (context) => context.skip());
+});`);
+  writeFileSync(vitestConfig, `export default ${JSON.stringify({ root, envDir: false, test: {
+    include: [vitest], environment: "node", maxWorkers: 1, setupFiles: ["allure-vitest/setup"],
+    reporters: [["allure-vitest/reporter", { resultsDir: frontendRaw, reportMatchers: false }]]
+  } })};`);
+  inspect("frontend", "unit", run([join(root, "node_modules/vitest/vitest.mjs"), "run", "--config", vitestConfig]));
+
+  const e2eRaw = prepareResults("e2e", "chromium", base);
+  const e2e = join(base, "reporting.spec.mjs"), e2eConfig = join(base, "playwright.config.mjs");
+  writeFileSync(e2e, `import { test, expect } from "@playwright/test";
+test.describe("Reporting probe", () => {
+  test("pass", async ({ page }) => { await page.setContent("<h1>Synthetic fixture</h1>"); await expect(page.getByRole("heading")).toBeVisible(); });
+  test("failure", async ({ page }) => { await page.setContent("<h1>Synthetic fixture</h1>"); expect(1).toBe(2); });
+  test.skip("skip", async () => {});
+});`);
+  writeFileSync(e2eConfig, `export default ${JSON.stringify({ testDir: base, testMatch: "reporting.spec.mjs", workers: 1,
+    retries: 0, timeout: 15_000, outputDir: join(base, "playwright-output"),
+    reporter: [["allure-playwright", { resultsDir: e2eRaw, detail: false }]],
+    use: { browserName: "chromium", headless: true, screenshot: "only-on-failure", trace: "retain-on-failure" }
+  })};`);
+  inspect("e2e", "chromium", run([join(root, "node_modules/@playwright/test/cli.js"), "test", "--config", e2eConfig]));
+  assert.ok(summary.layers.e2e.auditedAttachments >= 1, "real synthetic Playwright failure screenshot must survive the audit");
+  const merged = mergeResults(base); assert.equal(merged.results, 9); assert.equal(merged.partial, false);
+  const config = join(base, "allurerc.mjs"), output = join(base, "report");
+  writeFileSync(config, `export default ${JSON.stringify({ name: "Intentional reporting probes", plugins: { awesome: { options: { singleFile: false } } } })};`);
+  const generated = run([join(root, "node_modules/allure/cli.js"), "generate", join(base, "allure-merged"), "--config", config, "--output", output, "--clean"]);
+  assert.equal(generated.status, 0, "Allure 3 must generate diagnostics for failed tests without rewriting test exits");
+  assert.match(readFileSync(join(output, "index.html"), "utf8"), /<html/i);
+  protectReport(output);
+  summary.browser = await verifyStaticSite(output);
+  summary.staticGeneration = "passed; 9 real probe executions, including 3 intentional failures";
+  writeFileSync(join(artifactRoot, "allure-verification.json"), JSON.stringify(summary, null, 2));
+  console.log(JSON.stringify(summary, null, 2));
+} finally { rmSync(base, { recursive: true, force: true }); }
