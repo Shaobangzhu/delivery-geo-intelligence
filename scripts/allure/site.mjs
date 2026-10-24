@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 // Post-process generated HTML only; never edit installed vendor bundles. Allure
 // 3.22.1 hardcodes Google Analytics in its template without a disable option.
+export const contentSecurityPolicy = (hashes) => `default-src 'self'; script-src 'self' ${hashes.join(" ")}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'`;
 export function protectReport(output) {
   let count = 0;
   function protect(directory) {
@@ -20,7 +21,7 @@ export function protectReport(output) {
           hashes.push(`'sha256-${createHash("sha256").update(body).digest("base64")}'`);
           return tag;
         });
-        const csp = `default-src 'self'; script-src 'self' ${hashes.join(" ")}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'`;
+        const csp = contentSecurityPolicy(hashes);
         html = html.replace(/<head>/i, `<head><meta http-equiv="Content-Security-Policy" content="${csp}">`);
         if (/googletagmanager|gtag\(/i.test(html)) throw new Error("Unexpected report analytics markup");
         writeFileSync(file, html); count++;

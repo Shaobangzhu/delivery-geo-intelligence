@@ -18,6 +18,7 @@ export function rawDirectory(layer, execution, base = artifactRoot) {
   return join(base, ".allure-raw", batch(layer, execution));
 }
 function metadata(layer, execution) {
+  const branch = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || "";
   const git = (args, pattern) => {
     // An Intel-only PATH git can be unusable from native ARM Node on macOS.
     // Prefer PATH normally, then Apple's universal executable; no shell/env dump.
@@ -29,8 +30,7 @@ function metadata(layer, execution) {
   };
   return {
     commit: git(["rev-parse", "HEAD"], /^[a-f0-9]{40,64}$/),
-    branch: /^[a-zA-Z0-9_./-]{1,120}$/.test(process.env.GITHUB_HEAD_REF ?? process.env.GITHUB_REF_NAME ?? "")
-      ? process.env.GITHUB_HEAD_REF ?? process.env.GITHUB_REF_NAME : git(["branch", "--show-current"], /^[a-zA-Z0-9_./-]{1,120}$/),
+    branch: /^[a-zA-Z0-9_./-]{1,120}$/.test(branch) ? branch : git(["branch", "--show-current"], /^[a-zA-Z0-9_./-]{1,120}$/),
     ciRun: /^\d+$/.test(process.env.GITHUB_RUN_ID ?? "") ? process.env.GITHUB_RUN_ID : "local",
     runtime: process.version, environment: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     layer, execution, dataset: "synthetic-only-v1"
@@ -169,7 +169,9 @@ export function mergeResults(base = artifactRoot, allowPartial = false) {
   return summary;
 }
 export function cleanResults(base = artifactRoot) {
-  for (const name of [".allure-raw", "allure-results", "allure-merged", "allure-report"]) rmSync(join(base, name), { recursive: true, force: true });
+  // History is intentionally retained across local test/report executions.
+  for (const name of [".allure-raw", "allure-results", "allure-merged", "allure-report", "allure-public-input", "allure-publish"]) rmSync(join(base, name), { recursive: true, force: true });
   rmSync(join(base, "allure-summary.json"), { force: true });
   rmSync(join(base, "allure-verification.json"), { force: true });
+  rmSync(join(base, "publication-manifest.json"), { force: true });
 }

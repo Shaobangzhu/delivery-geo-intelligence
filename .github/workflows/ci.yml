@@ -56,6 +56,7 @@ jobs:
         with:
           name: check-${{ matrix.name }}
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/
@@ -67,6 +68,7 @@ jobs:
         with:
           name: allure-${{ matrix.name }}
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: artifacts/allure-results/
   integration:
@@ -114,6 +116,7 @@ jobs:
         with:
           name: integration
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/
@@ -125,6 +128,7 @@ jobs:
         with:
           name: allure-integration
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: artifacts/allure-results/
   coverage:
@@ -172,6 +176,7 @@ jobs:
         with:
           name: coverage
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/
@@ -183,6 +188,7 @@ jobs:
         with:
           name: allure-coverage
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: artifacts/allure-results/
   security:
@@ -210,6 +216,7 @@ jobs:
         with:
           name: security
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/
@@ -265,6 +272,7 @@ jobs:
         with:
           name: e2e-chromium
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             reports/e2e/
@@ -276,6 +284,7 @@ jobs:
         with:
           name: allure-e2e
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: artifacts/allure-results/
   reporting:
@@ -308,6 +317,7 @@ jobs:
         with:
           name: consolidated-test-report
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
           path: |
             artifacts/allure-results/

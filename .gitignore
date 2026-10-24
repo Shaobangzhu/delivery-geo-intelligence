@@ -166,3 +166,4 @@ dist-e2e/
 
 # Quarantined and audited Allure output (never commit)
 artifacts/
+.wrangler/

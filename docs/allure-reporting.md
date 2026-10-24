@@ -1,6 +1,6 @@
 # Allure 3 reporting
 
-Allure is a diagnostic report, not a replacement for test exit codes, JUnit, coverage thresholds or the CI Quality gate. No hosting/deployment is configured. The generated site is static HTML/JS/assets and can be served by a static host after the publishing review below.
+Allure is a diagnostic report, not a replacement for test exit codes, JUnit, coverage thresholds or the CI Quality gate. The later [Cloudflare release milestone](cloudflare-allure-deployment.md) provides a separate, disabled-by-default publishing workflow and bounded Allure 3 JSONL history. External hosting credentials/Access have not been configured or verified here. The original reporting milestone's verification below remains historical evidence.
 
 ## Supported versions and boundaries
 
@@ -34,6 +34,9 @@ artifacts/
   allure-summary.json           # layers, actual outcomes/exit codes, audit counts
   allure-verification.json      # reporting probe results, no raw probe diagnostics
   allure-report/index.html      # generated static site with all supporting assets
+  allure-history/history.jsonl  # bounded local/trusted-main history, never PR-restored
+  allure-publish/index.html     # narrower audited static publication candidate
+  publication-manifest.json    # byte inventory, provenance, bundle-review fingerprint
 ```
 
 Every supported command replaces its own execution directory, preventing append-only stale results. Do not run the same layer/execution concurrently in one checkout. Different CI jobs have isolated checkouts. Start a new consolidated local run with `allure:clean` or `allure:test`; an individual command deliberately preserves other layers so sequential aggregation works. Aggregation requires matching commit and CI run IDs, rejects duplicate result identities, missing/changed files and collisions, and processes directories/files in a fixed order. It never fabricates results for a suite that failed before collection.
@@ -52,7 +55,7 @@ npm run allure:test
 npm run allure:open
 ```
 
-`allure:test` cleans only Allure paths, runs the backend, frontend and E2E suite once each, then generates the report. Each later layer still runs if an earlier suite fails; the first failing test exit remains nonzero even if report generation succeeds. No live OpenAI/ArcGIS service or production credential is needed. MongoDB defaults to the existing temporary-process harness; a first run may download its pinned binary. The guarded disposable service alternative is documented in [CI](ci.md) and [E2E](e2e-testing.md). Never supply a developer/application database URI.
+`allure:test` cleans generated Allure paths while retaining JSONL history, runs the backend, frontend and E2E suite once each, then generates the report. Each later layer still runs if an earlier suite fails; the first failing test exit remains nonzero even if report generation succeeds. No live OpenAI/ArcGIS service or production credential is needed. MongoDB defaults to the existing temporary-process harness; a first run may download its pinned binary. The guarded disposable service alternative is documented in [CI](ci.md) and [E2E](e2e-testing.md). Never supply a developer/application database URI.
 
 To collect selected existing executions instead:
 
@@ -88,7 +91,9 @@ Adapter output is inherently unsafe to publish: failures may include expected/ac
 - Permit only failure PNGs produced by the synthetic E2E harness, with signature/size/path checks. Trace ZIPs must pass bounded entry/path/content/URL inspection; unapproved or sensitive traces are omitted. Arbitrary trace resources are never automatically trusted. Some otherwise useful Playwright traces are intentionally withheld by this conservative filter. The summary records accepted/omitted attachment counts.
 - Binary pixels cannot be exhaustively inspected by text scanning. The existing offline E2E harness, guarded/reset synthetic database, no personal addresses/records, mock providers and no reused application server are prerequisites for admitting screenshots. Before public hosting, manually review representative failure images and retained traces, metadata and generated report content. Adding a new attachment type requires a privacy review and regression coverage.
 
-Regression fixtures use synthetic secrets/addresses and assert their absence in publishable results; real secrets, `.env` files and production records are never read. Raw temporary adapter output remains local under ignored `artifacts/.allure-raw/`; `allure:clean` removes it. Do not upload that directory or the repository wholesale. Only the audited generated site is a future hosting candidate; no Cloudflare credentials, deployment, public links or external analytics are introduced.
+Regression fixtures use synthetic secrets/addresses and assert their absence in publishable results; real secrets, `.env` files and production records are never read. Raw temporary adapter output remains local under ignored `artifacts/.allure-raw/`; `allure:clean` removes it. Do not upload that directory or the repository wholesale. At the original reporting milestone only the audited site was a future hosting candidate; no deployment, public link or external analytics was introduced. The later release controls are described below.
+
+The subsequent release workflow narrows that boundary further: **all test binary attachments are removed from publication input**, while private CI diagnostics remain available separately. It validates schemas, source provenance, JSONL history, exact vendor bytes, bootstrap/CSP and a complete site inventory. `allure:publish:prepare`/`allure:publish:check` create/check a local non-deployable candidate. Actual upload requires current trusted main, an explicit repository switch, a fingerprint/expiry security review and protected environment secrets; see [release setup and limitations](cloudflare-allure-deployment.md).
 
 ### Dependency review limitation
 

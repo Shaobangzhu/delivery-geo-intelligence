@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { artifactRoot, root, prepareResults, collectBatch, mergeResults } from "./results.mjs";
 import { protectReport } from "./site.mjs";
 import { verifyStaticSite } from "./verify-site.mjs";
+import { publicInput, stagePublication } from "./publication.mjs";
+import { beforeHistory, afterHistory } from "./history.mjs";
 
 mkdirSync(artifactRoot, { recursive: true });
 const base = mkdtempSync(join(artifactRoot, ".allure-verify-"));
@@ -50,7 +52,7 @@ describe("Reporting probe", () => {
   test("failure", () => expect("SYNTHETIC_SECRET_actual").toBe("SYNTHETIC_SECRET_expected"));
   test("skip", (context) => context.skip());
 });`);
-  writeFileSync(vitestConfig, `export default ${JSON.stringify({ root, envDir: false, test: {
+  writeFileSync(vitestConfig, `export default ${JSON.stringify({ root: base, envDir: false, test: {
     include: [vitest], environment: "node", maxWorkers: 1, setupFiles: ["allure-vitest/setup"],
     reporters: [["allure-vitest/reporter", { resultsDir: frontendRaw, reportMatchers: false }]]
   } })};`);
@@ -72,12 +74,22 @@ test.describe("Reporting probe", () => {
   inspect("e2e", "chromium", run([join(root, "node_modules/@playwright/test/cli.js"), "test", "--config", e2eConfig]));
   assert.ok(summary.layers.e2e.auditedAttachments >= 1, "real synthetic Playwright failure screenshot must survive the audit");
   const merged = mergeResults(base); assert.equal(merged.results, 9); assert.equal(merged.partial, false);
-  const config = join(base, "allurerc.mjs"), output = join(base, "report");
-  writeFileSync(config, `export default ${JSON.stringify({ name: "Intentional reporting probes", plugins: { awesome: { options: { singleFile: false } } } })};`);
-  const generated = run([join(root, "node_modules/allure/cli.js"), "generate", join(base, "allure-merged"), "--config", config, "--output", output, "--clean"]);
-  assert.equal(generated.status, 0, "Allure 3 must generate diagnostics for failed tests without rewriting test exits");
+  const config = join(base, "allurerc.mjs"), output = join(base, "allure-report"), history = join(base, "history.jsonl");
+  const input = publicInput(base, merged);
+  // Real adapter results seed an isolated history round trip. The second name
+  // is a fixture for a previous/current run comparison, never product history.
+  for (const suffix of ["a", "b", "b"]) {
+    const name = `DGI local ${suffix.repeat(16)}`;
+    beforeHistory(history, name);
+    writeFileSync(config, `export default ${JSON.stringify({ name, historyPath: history, appendHistory: true, historyLimit: 30, plugins: { awesome: { options: { singleFile: false } } } })};`);
+    const generated = run([join(root, "node_modules/allure/cli.js"), "generate", input.directory, "--config", config, "--output", output, "--clean"]);
+    assert.equal(generated.status, 0, "Allure 3 must generate diagnostics for failed tests without rewriting test exits");
+    assert.equal(afterHistory(history).length, suffix === "a" ? 1 : 2);
+  }
   assert.match(readFileSync(join(output, "index.html"), "utf8"), /<html/i);
   protectReport(output);
+  const candidate = stagePublication(base);
+  summary.publication = { mode: candidate.mode, publicAttachments: candidate.publicAttachments, replayHistoryEntries: afterHistory(history).length };
   summary.browser = await verifyStaticSite(output);
   summary.staticGeneration = "passed; 9 real probe executions, including 3 intentional failures";
   writeFileSync(join(artifactRoot, "allure-verification.json"), JSON.stringify(summary, null, 2));
