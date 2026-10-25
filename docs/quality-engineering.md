@@ -25,7 +25,7 @@ Compatibility fixes and tooling decisions:
 
 ## Reproducible installation and commands
 
-Use Node 22.12.0 for baseline comparisons (`.nvmrc`), npm 10.9.0, and the committed root `package-lock.json`. Supported runtime majors are declared in root `engines`; odd-numbered Node releases are outside the test toolchain's supported range. Install from the repository root:
+Use the current Node 22 patch pinned in `.nvmrc` (22.23.4 at final audit), npm 10.9.0, and the committed root `package-lock.json`. Supported runtime majors are declared in root `engines`; odd-numbered Node releases are outside the test toolchain's supported range. Install from the repository root:
 
 ```sh
 nvm use
@@ -157,3 +157,9 @@ The later reporting milestone supplies the previously absent Allure implementati
 ## Optional report release and history
 
 The later [Cloudflare report release](cloudflare-allure-deployment.md) adds a separate disabled-by-default workflow, a thirty-record Allure 3 JSONL history and strict static-publication audit. It consumes actual main CI results without repeating application tests. Publishing/Cloudflare failures do not change the existing blocking checks. Run `allure:publish:prepare` and `allure:publish:check` locally after collecting results; local candidates cannot deploy. New injected tests exercise trust, missing/corrupt/expired history, replay deduplication, privacy and publication failure propagation. No production source scope/floor or provider isolation changes. A compatible undici 7.30.1 override fixes the actual high advisory found in the new CLI/shared SDK dependency tree; the separate prebuilt Allure UI review limitation remains explicit.
+
+## Final engineering audit (2026-10-24)
+
+See [Quality architecture and evidence](quality-architecture.md) for fresh-install results: 178 backend tests (137 unit / 41 integration), 144 frontend tests, 39 offline AI scenarios and 9 Chromium E2E cases. Current statement/branch/function/line coverage is **94.44/92.19/96.93/94.44% backend**, **89.45/84.92/88.18/92.36% frontend**; existing floors are unchanged. The gate passed in the fresh Git-exported source plus audit changes. An original synchronized-workspace unit-run timeout remains explicitly documented rather than marked passed.
+
+`npm run quality:demo` executes the actual blocking backend command in a disposable source copy, verifies pass → deliberate fault/fail → restored pass, and generates separate sanitized Allure HTML under `reports/quality-gate-demo/`. See [instructions and actual evidence](quality-gate-demo.md) and the [6–7 minute interview walkthrough](doordash-interview-demo.md). This demo neither mutates the application checkout nor publishes a report.

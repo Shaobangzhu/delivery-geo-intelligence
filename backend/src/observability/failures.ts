@@ -9,6 +9,13 @@ export function httpFailure(status: unknown): Extract<ErrorCategory, "authentica
 }
 export function mongoFailure(error: unknown): ErrorCategory {
   const name = error instanceof Error ? error.name : "";
+  // Driver error metadata only; messages/key values can contain personal records.
+  const code = error instanceof Error && "code" in error ? error.code : undefined;
+  if (name === "MongoServerError") {
+    if (code === 11000 || code === 121) return "request_rejected";
+    if (code === 13 || code === 18) return "authentication";
+    if (code === 50 || code === 262) return "timeout";
+  }
   if (["MongoOperationTimeoutError", "MongoNetworkTimeoutError"].includes(name)) return "timeout";
   if (["MongoNetworkError", "MongoServerSelectionError", "MongoTopologyClosedError", "MongoNotConnectedError"].includes(name)) return "connectivity";
   return "provider";

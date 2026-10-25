@@ -16,13 +16,15 @@ The system API uses allowlisted categories; Settings validates the same categori
 | Provider HTTP 500–599 | `provider_5xx` | Failed evidence, distinct from network and generic provider errors. |
 | Invalid JSON/schema, missing completion structure, invalid final envelope | `invalid_response` | Failed evidence even if transport returned HTTP 200. Grounding/scope safety rejection after a structurally valid response is separate. |
 | MongoNetworkError, MongoServerSelectionError, MongoTopologyClosedError, MongoNotConnectedError | `connectivity` | Failed evidence; driver exception name only is inspected. |
+| MongoServerError 11000/121 (duplicate key / document validation) | `request_rejected` | Failed operation, no outage evidence; does not establish reachability on its own. |
+| MongoServerError 13/18; 50/262 | `authentication`; `timeout` | Failed usable-provider evidence. |
 | Missing credential/configuration | `configuration` / explicit `not_configured` | No paid request is made; configuration alone is not reachability. ArcGIS construction fails before an attempted operation and adds no request sample. |
 | Internal application exception | `internal` | No outage evidence; do not blame provider connectivity. |
 | Other provider errors / unclassified Mongo command failures | `provider` | Failed evidence, without inferring raw payload semantics. |
 
 Only retained infrastructure evidence drives status: no evidence → not_yet_verified; success only → operational; failure only → unavailable; mixed → degraded. Explicit unconfigured overrides evidence. Expected business outcomes remain separate counters. Provider availability is a windowed observation, not uptime proof. Error-category histograms and operation-success rates use different semantics.
 
-HTTP classification is centralized in `backend/src/observability/failures.ts`; frontend enum validation includes the additive `provider_5xx` and `connectivity` categories. Mongo monitoring reads only command category/duration and the recognized error-name discriminator, never the raw command/reply, message, stack or personal-record payload. Missing/invalid numeric samples are discarded rather than coerced into success.
+HTTP classification is centralized in `backend/src/observability/failures.ts`; frontend enum validation includes the additive `provider_5xx` and `connectivity` categories. Mongo monitoring reads only command category/duration and the recognized error-name/numeric-code discriminators, never the raw command/reply, message, stack or personal-record payload. Missing/invalid numeric samples are discarded rather than coerced into success.
 
 ## Fault-injection matrix
 
@@ -51,7 +53,7 @@ Observation-sink exceptions alone are isolated at adapter boundaries. Database/p
 
 ## Known limitations
 
-Metrics reset on restart, reflect one process, and can be incomplete after bounded-capacity eviction or process termination. Durations/quantiles include successful, failed and expected operations; tiny sample sets are not SLO estimates. Mongo command metrics cannot cover failures before command dispatch; explicit health probes complement those observations. Generic unknown Mongo errors are not deeply parsed for speculative categorization. Reported token sums may cover fewer exchanges than model-call counts, and unknown usage stays null; no cost estimation is performed.
+Metrics reset on restart, reflect one process, and can be incomplete after bounded-capacity eviction or process termination. Durations/quantiles include successful, failed and expected operations; tiny sample sets are not SLO estimates. Mongo command metrics describe protocol completion, not committed business writes; `ok:1` replies may still contain per-write errors, and raw replies are deliberately not parsed. They cannot cover failures before command dispatch; explicit health probes complement those observations. Generic unknown Mongo errors are not deeply parsed for speculative categorization. Reported token sums may cover fewer exchanges than model-call counts, and unknown usage stays null; no cost estimation is performed.
 
 Tests establish deterministic contracts and isolation, not real-provider availability, model quality, browser/WebGL behavior, distributed MongoDB failover or security against arbitrary third-party content. The existing ArcGIS/AI business contracts remain authoritative; safe categories are aggregate diagnostics. Synthetic sentinel tests exercise known forbidden data paths but cannot prove arbitrary free-text content harmless. No new telemetry export/persistence or business feature is introduced.
 
@@ -60,3 +62,7 @@ Tests establish deterministic contracts and isolation, not real-provider availab
 On Node 22.12.0/npm 10.9.0, final `npm run quality:check` passed lint, strict typechecks, credential-free builds, **133/133 backend tests**, **134/134 frontend tests**, and **39/39 synthetic AI evaluation scenarios**, with zero real provider calls. Backend tests had zero failures, cancellations and skips. The existing ArcGIS large-chunk warning remains.
 
 The first complete gate run with the internal-failure regression failed one assertion: request preparation was classified as `provider` instead of `internal`. Moving request construction outside the SDK exception boundary fixed both classification and attempted-call counting; the final full gate passed without suppressing that test. Review also corrected malformed-response reachability, explicit 5xx/authentication/connectivity classification, and health-sink double-record/rethrow behavior. `git diff --check` passed. Historical coverage baseline files were not lowered or rewritten.
+
+## Final audit update (2026-10-24)
+
+The [final architecture audit](quality-architecture.md) records the current 178 backend / 144 frontend results, coverage, hosted evidence and remaining environment limitations. Eight Mongo classification regressions and ten frontend contract/subscriber regressions were added. Browser telemetry now isolates each subscriber; Settings checks empty-evidence, latency and AI denominator consistency. The [quality gate demonstration](quality-gate-demo.md) records actual 0/1/0 exits and two failed health tests after a temporary isolated fault. Earlier results above remain historical.
