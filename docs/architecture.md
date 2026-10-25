@@ -99,9 +99,29 @@ Dashboard Ask DGI → POST /api/ai/ask → Express orchestrator
 
 `ai/provider.ts` creates only a server-side SDK client; `ai/tools.ts` owns strict schemas, Zod validation, typed handlers and aggregate projections. `ai/projection.ts` strips unknown record fields recursively and validates domain text/dates. `ai/evidence.ts` binds facts to request-specific IDs, executions, accounting bases and cohorts. `ai/agent.ts` bounds execution, tool payloads and time, validates final structured output, and emits metadata only. `ai/routes.ts` validates the HTTP boundary, generates request IDs, handles safe errors and client cancellation. App registration injects the existing queue; no HTTP round-trip, independent calculation engine, write tool, model-generated query, or new collection is used.
 
-Six tools are `get_period_summary`, `get_delivery_efficiency`, `get_session_efficiency`, `compare_strategies`, `get_settlement_efficiency`, and `get_data_quality`; schemas/service mappings and configuration are listed in README. A request pins calendar resolution time, but separate tool reads can see later completed edits. No queue is held during OpenAI requests. Already-running MongoDB operations are not forcibly cancelled; a cancelled queued tool checks its signal before reading.
+### AI tool and HTTP reference
 
-`OPENAI_API_KEY` stays in backend environment only. `OPENAI_MODEL` defaults to documented `gpt-4.1-mini`; invalid AI configuration disables just the endpoint. SDK retries are off; three rounds/six executions/four provider requests and per-response token, payload and 60-second limits prevent indefinite loops. Structured final explanations cannot supply their own numeric metric values; server-rendered evidence preserves null/zero, units, sample counts and reasons. This does not guarantee the model selected the right scope or qualitative interpretation.
+The seven-tool registry in [`backend/src/ai/tools.ts`](../backend/src/ai/tools.ts) validates arguments before coordinated reads. Every declared property is required; nullable inputs use explicit `null`.
+
+| Tool | Strict arguments | Service/output boundary |
+| --- | --- | --- |
+| `get_period_summary` | `period`, `category`, `asOf`, `year` | Dashboard cash-basis counts/earnings; no map payload |
+| `get_delivery_efficiency` | Same | Recorded-delivery rates and sample/completeness metadata |
+| `get_session_efficiency` | `period`, `asOf`, `year` | All-category whole-session revenue, costs/profit and quality |
+| `compare_strategies` | Same | Explicit strategy groups, including Unclassified |
+| `get_settlement_efficiency` | Nullable `settlementId`, `limit` 1–5 | Bounded settlement service; IDs select only within its 20 recent results |
+| `get_data_quality` | `period`, `asOf`, `year` | Core quality and up to five recent settlement completeness summaries |
+| `get_annual_uber_summary` | 1–2 distinct completed `years`, `includeMonthly` boolean | Independent source-reported statements and backend-derived annual comparisons |
+
+Detailed `period` is `week|month|year|all`; `category` is `all|restaurant|grocery|retail|other`. `asOf` is a nullable ISO date. `year` is nullable, available only for Year from 2026 through the trusted current Los Angeles year, and cannot combine with `asOf`. Historical official annual years use the separate annual tool. See [calendar rules](dashboard.md#historical-year-and-detailed-all-scope).
+
+`POST /api/ai/ask` accepts only `{ "question": "How efficient were my delivery sessions?" }`, trimmed to 1–1,000 characters. Success returns `{ requestId, answer, toolsUsed, warnings }`; failures return `{ requestId, error, code }` with safe 400/502/503 classifications. Responses are non-streaming and `Cache-Control: no-store`. There is no persistent chat, RAG, embeddings or autonomous action layer. [Evaluation/failure contract](ai-evaluation.md#safe-failure-and-cancellation-behavior).
+
+Configure optional `OPENAI_API_KEY` only in `backend/.env`; `OPENAI_MODEL` defaults to `gpt-4.1-mini`. Unsupported configuration disables the analyst while ordinary APIs remain available. Suggested questions only fill the input; pressing Ask triggers the request. AI scope is independent of Dashboard filters. Chinese comparison limitations are server-rendered; scripted Chinese evaluations do not establish live-model language quality.
+
+A request pins calendar resolution time, but separate tool reads can see later completed edits. No queue is held during OpenAI requests. Already-running MongoDB operations are not forcibly cancelled; a cancelled queued tool checks its signal before reading.
+
+SDK retries are off; three rounds/six executions/four provider requests and per-response token, payload and 60-second limits prevent indefinite loops. Structured final explanations cannot supply their own numeric metric values; server-rendered evidence preserves null/zero, units, sample counts and reasons. This does not guarantee the model selected the right scope or qualitative interpretation.
 
 Only explicit Ask submissions contact OpenAI. The panel is independent of Dashboard filters, aborts on close/unmount, prevents duplicate submits and clears stale results. Development diagnostics contain request metadata/token totals only, with no prompts, replies or tool payloads. Provider storage is disabled for Responses (`store: false`); no persistent conversation or local telemetry database exists. Mocked tests cover SDK exchanges and safe failures; isolated MongoDB integration confirms no domain mutation. Live OpenAI access is unverified in this milestone.
 
@@ -143,3 +163,7 @@ The annual tool reuses the same service through the existing coordination queue,
 `dashboard.ts` owns strict period/category/year/asOf validation and LA calendar interval resolution for Dashboard, generalized destination heatmap and Efficiency. Express captures one trusted request clock for validation and execution; tests can inject a fixed clock without a client clock-override API. Year supports the full selected calendar year from 2026 onward; All starts 2026-01-01 and ends at midnight after the current LA date. Optional `year` metadata accompanies Year responses; destination responses remain minimal cells only.
 
 React keeps one atomic time/category/year selection, a page-session remembered year, and a local-date refresh boundary. Dashboard, destination and Efficiency requests carry the selected year and reject stale results by request identity. Filter updates keep the existing MapView and layers mounted; no GIS lifecycle redesign is introduced. Settlement Efficiency remains mounted with independent fetching/coverage. Timeline aggregation is one-pass local calendar counting, not a new service or collection. Annual Uber summaries remain separate, with no migration or reconstructed history.
+
+## Scope exclusions
+
+The current diversity map displays each observed physical merchant once; a true grid/hex `COUNT(DISTINCT merchantId)` analysis is not implemented. CSV export, temporal merchant-location history and application-managed backup/restore remain outside the implemented scope. Rate-based statutory settlement verification also remains deferred: it would require sourced historical compensation rates and applicable jurisdictions, rather than assuming one city's wage covers a multi-city statement. Existing reported-guarantee reconciliation is a separate diagnostic.

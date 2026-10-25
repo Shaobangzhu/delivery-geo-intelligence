@@ -1,6 +1,8 @@
 # Quality engineering architecture and final audit
 
-Audit date: **2026-10-24** (America/Los_Angeles). Base: main commit `c15225dbbf73a021855aacc4d3edbcc32a86a290`; audit fixes are on `feat/quality-engineering-audit`. Hosted CI evidence below belongs to that base, not the unpushed audit changes. This document supersedes historical test counts, not the original coverage floors.
+Audit date: **2026-10-24** (America/Los_Angeles). Base: main commit `c15225dbbf73a021855aacc4d3edbcc32a86a290`; the records below describe that audit and its then-local fixes. This document supersedes historical test counts, not the original coverage floors.
+
+**Hosted follow-up verified 2026-10-25:** the fixes are merged at `d4d40a9`. [CI 40171656999](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/40171656999) passed all 12 checks and confirmed the 178 backend / 144 frontend / 39 offline AI / 9 E2E results and coverage recorded below. [Release 40171854177](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/40171854177) restored one previous trusted history entry and prepared the audited candidate; Cloudflare publication was skipped. Earlier statements about unpushed fixes and unverified second-run restore are historical as of the audit date. No external protection or Access setting is claimed.
 
 ## Application and evidence boundaries
 

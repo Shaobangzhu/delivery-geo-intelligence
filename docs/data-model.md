@@ -182,3 +182,19 @@ Synthetic partial input (not personal financial history):
 ```
 
 `GET /api/uber-annual-summaries` exposes up to 20 completed years sorted descending, `hasMore`, and comparison records for adjacent available years. DTOs include `year`, `sources`, `annual`, `taxForms`, `monthlyActivity`, `metrics`, `monthlyGrossTransactionsPeak`, `reconciliation`; comparisons carry `fromYear`, `toYear`, `consecutiveYears` and metric changes. No document `_id`, `importedAt`, PDF paths or personal identifiers are returned. Empty data is valid; invalid stored records/DB failures yield a safe 503. POST/PATCH/DELETE are absent. Imports access only this collection, with insert-only year conflict protection and no migration of existing collections.
+
+## Explicit local initialization and annual import
+
+A fresh application database has no Merchant/Delivery history and imports nothing automatically. Add verified public merchants before entering deliveries. `npm run data:init-a1`, or History's **Initialize Missing Confirmed Records**, explicitly inserts only missing user-confirmed vehicle assumptions and annual mileage records. It preserves edits; it is not a generic synthetic-data seed. The [analytics model](analytics-model.md#a1-personal-session-economics) documents those assumptions.
+
+Annual source PDFs stay outside the repository. After manual review, put **aggregate-only** JSON under Git-ignored `private-exports/uber-annual/`; omit names, addresses, tax/account identifiers and source paths. There is no runtime PDF upload/parser or automatic historical delivery reconstruction.
+
+```sh
+npm run db:status
+npm run data:import-uber-annual -- --file private-exports/uber-annual/2024.json --dry-run
+npm run data:import-uber-annual -- --file private-exports/uber-annual/2024.json --apply
+```
+
+The CLI requires exactly one mode and the existing **local** `MONGODB_URI` from `backend/.env`, using the fixed DGI database. Review dry-run reconciliation before applying. Apply is insert-only: identical observations return `already_imported`, changed observations for an existing year return `annual_conflict` without overwrite. JSON key/month order and import timestamps do not create a distinct report. No ArcGIS/OpenAI calls or unrelated-record initialization occur.
+
+Missing fields/months remain unknown; financial equation mismatches block import, while documented monthly discrepancies remain warnings. Keep CLI reconciliation output private too. Conflicts require manual source review; no public annual write or automatic correction workflow is implemented. Schema and synthetic input are documented [above](#historical-uber-annual-aggregates).
