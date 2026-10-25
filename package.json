@@ -42,7 +42,8 @@
     "allure:verify": "node scripts/allure/verify.mjs",
     "allure:publish:prepare": "node scripts/allure/release.mjs local",
     "allure:publish:check": "node scripts/allure/release.mjs check",
-    "allure:publish:deploy": "node scripts/allure/release.mjs deploy"
+    "allure:publish:deploy": "node scripts/allure/release.mjs deploy",
+    "quality:demo": "node scripts/quality-gate-demo.mjs"
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0",

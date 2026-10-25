@@ -122,10 +122,32 @@ it("distinguishes unavailable provider from no observations while preserving par
     const data = fixture(url.includes("window=1h") ? "1h" : "24h", 0);
     data.providers[0].status = "unavailable"; data.providers[0].lastErrorCategory = "connectivity";
     data.providers[0].sampleCount = 1; data.providers[0].requestCount = 1; data.providers[0].failureCount = 1;
+    data.providers[0].lastUpdatedAt = timestamp; data.providers[0].operations.database_read = 1;
     data.providers[0].latency = { sampleCount: 1, meanMs: 10, p50Ms: 10, p95Ms: 10 };
     return reply(data);
   }));
   render(<Settings />); expect(await screen.findByText("Connectivity")).toBeInTheDocument();
   expect(screen.getAllByText("Not Yet Verified").length).toBeGreaterThan(1);
   expect(screen.getByText("0.0%")).toBeInTheDocument(); expect(screen.queryByText("100.0%")).not.toBeInTheDocument();
+});
+
+for (const scenario of ["zero-sample health", "missing latency", "inverted quantiles", "operation denominator", "AI errors", "AI usage samples", "AI token fabrication", "AI analyst denominator"] as const) {
+  it(`rejects contradictory metrics: ${scenario}`, () => {
+    const data = fixture("24h", scenario === "zero-sample health" || scenario === "AI token fabrication" ? 0 : 2);
+    const row = data.providers[0], ai = data.providers[2].ai!;
+    if (scenario === "zero-sample health") { row.status = "operational"; row.lastSuccessAt = timestamp; }
+    if (scenario === "missing latency") row.latency.p50Ms = null;
+    if (scenario === "inverted quantiles") row.latency.p95Ms = 1;
+    if (scenario === "operation denominator") row.operations.database_read = 100;
+    if (scenario === "AI errors") ai.providerErrors = 3;
+    if (scenario === "AI usage samples") ai.usageSamples = 3;
+    if (scenario === "AI token fabrication") ai.inputTokens = 100;
+    if (scenario === "AI analyst denominator") ai.analystRequests = 3;
+    expect(() => parseSnapshot(data, "24h")).toThrow("invalid_response");
+  });
+}
+it("accepts reported partial AI usage without estimating missing model calls", () => {
+  const data = fixture(), ai = data.providers[2].ai!;
+  ai.providerCalls = 4; ai.usageSamples = 1;
+  expect(parseSnapshot(data, "24h").providers[2].ai).toEqual(ai);
 });

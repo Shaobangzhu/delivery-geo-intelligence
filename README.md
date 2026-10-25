@@ -271,6 +271,8 @@ Existing backend, Vitest and Chromium commands collect **Allure 3** results duri
 
 ## Quality Engineering
 
+The [final engineering audit](docs/quality-architecture.md) documents measured coverage, signal definitions, architecture diagrams, hosted evidence and remaining limits. Run `npm run quality:demo` for a reproducible isolated MongoDB health regression: a real blocking check fails and then passes after restoration, with [sanitized Allure diagnostics](docs/quality-gate-demo.md). The [interview walkthrough](docs/doordash-interview-demo.md) separates verified implementation from mocked boundaries and future scaling ideas.
+
 The [reporting recovery notes](docs/cloudflare-allure-deployment.md#interrupted-session-recovery-2026-10-24) document the Git-metadata privacy fix and distinguish local verification, GitHub CI, trusted main history and confirmed deployment.
 
 Quality checks, offline provider fault injection, isolated MongoDB integration and Chromium workflows remain blocking CI checks. A separate **Quality report release** workflow can publish only sanitized static Allure HTML to Cloudflare Pages; it never deploys DGI and cannot turn failed tests green. Publication is **disabled by default**, requires trusted current-main artifacts, a reviewed UI-bundle fingerprint and environment-scoped Cloudflare secrets. It preserves the latest **30 JSONL report-run records** in trusted GitHub artifacts, independently of Cloudflare availability. Public candidates omit all test screenshots/traces and development logs.

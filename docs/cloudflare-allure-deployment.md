@@ -179,3 +179,9 @@ Recovery local validation used Node 22.23.4 / npm 10.9.0 and an environment-free
 | Existing report integration and probes | `scripts/allure/report.mjs`, `results.mjs`, `site.mjs`, `verify.mjs` |
 | Regression coverage | `backend/test/reportRelease.test.mjs` |
 | Documentation | `README.md`, `docs/cloudflare-allure-deployment.md`, `docs/allure-reporting.md`, `docs/ci.md`, `docs/quality-engineering.md` |
+
+## Verified main preparation update (2026-10-24 final audit)
+
+The earlier local-only/recovery records above are historical. Main `c15225dbbf73a021855aacc4d3edbcc32a86a290` now has [successful CI 40137015043](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/40137015043). [Release 40137232249](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/40137232249) successfully verified that source, handled first-run/expired history, generated 617 pre-audit test executions and passed the trusted-main publication audit. Its **Cloudflare publish job was skipped**. History and publication artifacts were confirmed with 90-day and 7-day retention respectively. No upload, live URL, Access policy or secret/environment configuration is claimed. A real second-main-run history restore remains unverified.
+
+The [final audit](quality-architecture.md) separately records local audit changes: 653 actual report executions, strict dry-run publication checks and zero public attachments. Those local changes have not been validated by a new hosted CI run. Repository rulesets returned an empty list; classic main protection inspection returned 403. Configure/verify protections and complete the prebuilt UI review before enablement.

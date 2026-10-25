@@ -38,13 +38,23 @@ export function parseSnapshot(input: unknown, window: Window): Snapshot {
       (p.status === "operational" && p.lastSuccessAt === null) ||
       (p.configured === false && p.status !== "not_configured") ||
       (latency.sampleCount === 0 && (latency.p50Ms !== null || latency.p95Ms !== null))) return bad();
-    return { provider, configured: p.configured as boolean | null, status: enumValue(p.status, states),
+    const parsed: Provider = { provider, configured: p.configured as boolean | null, status: enumValue(p.status, states),
       lastSuccessAt: optionalDate(p.lastSuccessAt), lastUpdatedAt: optionalDate(p.lastUpdatedAt), lastErrorCategory: p.lastErrorCategory === null ? null : enumValue(p.lastErrorCategory, categories),
       sampleCount: count(p.sampleCount), requestCount: count(p.requestCount), successCount: count(p.successCount), failureCount: count(p.failureCount), noMatchCount: count(p.noMatchCount), lowConfidenceCount: count(p.lowConfidenceCount),
       latency: { sampleCount: count(latency.sampleCount), p50Ms: optionalNumber(latency.p50Ms), p95Ms: optionalNumber(latency.p95Ms) },
       errorCounts: counts(p.errorCounts, categories), operations: counts(p.operations, ["database_read", "database_write", "database_other", "health_ping", "geocode", "analyst_request"]), model,
       healthCheck: health ? { timestamp: date(health.timestamp), durationMs: number(health.durationMs), outcome: enumValue(health.outcome, ["success", "failure"] as const) } : null,
-      ai: a ? { analystRequests: count(a.analystRequests), providerCalls: count(a.providerCalls), providerErrors: count(a.providerErrors), usageSamples: count(a.usageSamples), inputTokens: optionalNumber(a.inputTokens), outputTokens: optionalNumber(a.outputTokens) } : null };
+      ai: a ? { analystRequests: count(a.analystRequests), providerCalls: count(a.providerCalls), providerErrors: count(a.providerErrors), usageSamples: count(a.usageSamples), inputTokens: a.inputTokens === null ? null : count(a.inputTokens), outputTokens: a.outputTokens === null ? null : count(a.outputTokens) } : null };
+    const { sampleCount, lastSuccessAt, lastUpdatedAt, status, ai } = parsed;
+    // Validate evidence relationships as well as field types. A timestamp alone
+    // cannot turn zero observations into a healthy provider.
+    if ((sampleCount === 0 && (lastSuccessAt !== null || lastUpdatedAt !== null || !["not_configured", "not_yet_verified"].includes(status))) ||
+      (sampleCount > 0 && (lastUpdatedAt === null || parsed.latency.p50Ms === null || parsed.latency.p95Ms === null)) ||
+      (parsed.latency.p50Ms !== null && parsed.latency.p95Ms !== null && parsed.latency.p95Ms < parsed.latency.p50Ms) ||
+      Object.values(parsed.operations).reduce((total, n) => total + n, 0) !== sampleCount ||
+      (ai && (ai.analystRequests !== sampleCount || ai.providerErrors > ai.providerCalls || ai.usageSamples > ai.providerCalls ||
+        (ai.usageSamples === 0 && (ai.inputTokens !== null || ai.outputTokens !== null))))) return bad();
+    return parsed;
   });
   if (new Set(providers.map((p) => p.provider)).size !== 3) return bad();
   return { schemaVersion: 1, window, generatedAt: date(root.generatedAt), startedAt: date(root.startedAt), incomplete: root.incomplete, providers };
