@@ -63,7 +63,7 @@ The [CI workflow](.github/workflows/ci.yml) runs on PRs targeting `main`, pushes
 
 ## Verified quality metrics
 
-Latest successful main CI inspected: **October 25, 2026**, commit `d4d40a9`, [run 40171656999](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/40171656999). **All 12 checks succeeded.** The following values come from that run's logs:
+Reference measured main CI: **October 25, 2026**, commit `d4d40a9`, [run 40171656999](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/40171656999). **All 12 checks succeeded.** The following values come from that run's logs; the newer successful main run is linked in the report record below:
 
 | Layer | Passing executions | Coverage: statements / branches |
 | --- | ---: | ---: |
@@ -74,7 +74,7 @@ Latest successful main CI inspected: **October 25, 2026**, commit `d4d40a9`, [ru
 
 Unit/integration jobs overlap with coverage jobs; do not sum them as unique tests. Allure contains **653 executions across these batches**, not 653 distinct cases. See the [audit](docs/quality-architecture.md#fresh-validation-and-coverage) for function/line coverage, floors and limits. These dated measurements do not guarantee reliability.
 
-**Reports:** download `consolidated-test-report` from CI or generate HTML locally. [Release 40171854177](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/40171854177) restored trusted-main history and audited a candidate; Cloudflare upload was **skipped**. No public report URL or hosted application is claimed. Publication requires bundle security review and enablement. [Allure](docs/allure-reporting.md) · [Separate report hosting/history/Access setup](docs/cloudflare-allure-deployment.md).
+**Reports:** view the [public Allure quality report](https://dgi-quality-report.pages.dev/) or download `consolidated-test-report` from CI. The [2026-11-01 release](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/41323822424) uploaded the audited static report from successful [main CI 41316524928](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/41316524928); Cloudflare lists it as a production deployment. The report contains synthetic test outcomes, not the DGI application. Direct browser access to the production URL was not verified during the release review because browser approval was unavailable. The exact Allure bundle is [approved through 2026-11-07 UTC](docs/allure-bundle-security-review.md), after which the gate denies new uploads until re-review. [Allure architecture](docs/allure-reporting.md) · [Hosting, history and verification](docs/cloudflare-allure-deployment.md).
 
 ## AI Operations Analyst
 
