@@ -1,22 +1,22 @@
-# Allure browser bundle security review — pending approval
+# Allure browser bundle security review — owner approved
 
-**Decision: PENDING HUMAN APPROVAL. Production recommendation: NO-GO.**
+**Decision: approved by the requesting repository owner on 2026-11-01 for the exact bundle digest below, expiring 2026-11-07 (UTC).** This is a time-bounded acceptance of the documented residual risk, not an upstream fix. Publication still requires every independent source, privacy, security and environment gate to pass.
 
-Evidence reviewed on **2026-10-31 (America/Los_Angeles)** against main commit `120d09ffe967367d1e59469f2b8aa44b974539f3` and the dependency remediation described in [deployment readiness](cloudflare-allure-readiness.md). This document records a technical assessment, not an exception or permission to publish.
+Evidence reviewed on **2026-10-31 (America/Los_Angeles)** against main commit `120d09ffe967367d1e59469f2b8aa44b974539f3` and the dependency remediation described in [deployment readiness](cloudflare-allure-readiness.md). The requesting owner explicitly replied “批准” in this task thread on 2026-11-01 after being shown the exact digest, proposed expiry and pending-approval condition. The later trusted-main candidate from release run `41291539157` retained that same digest.
 
 ## Decision record
 
 | Field | Value |
 | --- | --- |
 | Technical assessment prepared by | Codex, acting as the requested release/security reviewer |
-| Accountable human security reviewer | **Unassigned — owner must designate and obtain approval** |
-| Approval / approval date | **None** |
-| Effective approval expiry | **Unset; no approval is in force** |
-| Proposed review expiry, if approved | `2026-11-07` end of day UTC; proposal only, reassess if approval is delayed |
-| Permitted deployment today | None; leave deployment enablement and bundle approval variables unset |
+| Accountable human security reviewer | Requesting repository owner (approval in this task thread; no separate identity attestation) |
+| Approval / approval date | Explicit “批准” on `2026-11-01` (America/Los_Angeles) |
+| Approved bundle digest | `57564730603ece6f72bc19a00feb1ac622c342e58a6a860431183286f69d7f79` |
+| Effective approval expiry | `2026-11-07` end of day UTC |
+| Permitted deployment today | Only via the existing protected trusted-main release workflow after all gates pass |
 | Evidence invalidation | Any vendor-byte, input projection, CSP, fixture, attachment, advisory or publishing policy change requires a new review |
 
-The proposed date is not a value to copy into GitHub before approval. The existing gate requires a real `YYYY-MM-DD` expiry, not expired and at most 31 days ahead. Approval must identify the exact fingerprint below, advisory scope, accepted residual risk, reviewer and date. A reviewer may reject this candidate and require an upstream fix. This assessment does not automatically waive a critical advisory because its known preconditions appear absent.
+The existing gate requires a real `YYYY-MM-DD` expiry, not expired and at most 31 days ahead. This decision accepts the residual risk for the exact reviewed bytes through the date above. A changed fingerprint, newly relevant advisory or weakened publication boundary invalidates it immediately. The critical upstream finding remains open in the embedded bundle; approval is not a finding of immunity.
 
 ## Exact shipped bytes
 
@@ -31,7 +31,7 @@ The installed `dompurify` dependency is **3.4.17**, but `@allurereport/plugin-aw
 | `app-1cf27b2f4f66161c2cd6.js.LICENSE.txt` | `89de6756cd53b8c3af3934a07816476a486af5aff34444e8531f1aa79b6cb351` |
 | Actual candidate `bundleDigest` (all shipped vendor assets) | `57564730603ece6f72bc19a00feb1ac622c342e58a6a860431183286f69d7f79` |
 
-The candidate digest matches the latest hosted preparation and the local dry run. **It is evidence, not an approved `QUALITY_REPORT_BUNDLE_SHA256`.** No repository variable was set. The independent `follow-redirects` lockfile patch does not modify these browser assets.
+The candidate digest matches the hosted trusted-main preparation and the local dry run. It may be entered as `QUALITY_REPORT_BUNDLE_SHA256` only with this recorded owner approval and its expiry. The independent `follow-redirects` lockfile patch does not modify these browser assets.
 
 Reproduce the archive inspection after `npm ci`, without executing vendor code:
 
@@ -77,4 +77,4 @@ The existing publication boundary substantially reduces exposure to the document
 
 These are mitigations, **not an upstream patch or proof that arbitrary hostile content is safe**. CSP still trusts the reviewed same-origin vendor scripts; pattern matching cannot certify arbitrary prose as non-private. A compromised trusted maintainer or future relaxation of input/attachment rules changes the threat model. Cloudflare Access must be separately configured and tested if confidentiality is required; it is not assumed active.
 
-Until an accountable human explicitly accepts this precise residual risk, or a verified upstream browser-bundle fix is adopted and reviewed, publication remains disabled. Do not hand-edit minified vendor code, weaken CSP/allowlists, disable audits, set approval variables automatically, or use the local candidate as trusted CI evidence.
+The owner's time-bounded approval applies only to this fingerprint and scope. Do not hand-edit minified vendor code, weaken CSP/allowlists, disable audits, or use the local candidate as trusted CI evidence. Re-review before expiry and prefer a verified upstream browser-bundle fix.
