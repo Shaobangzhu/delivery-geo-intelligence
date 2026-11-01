@@ -1,6 +1,6 @@
 # Static quality reports on Cloudflare Pages
 
-This pipeline deploys **only generated, audited Allure Report 3 HTML/assets** to the Direct Upload project `dgi-quality-report`. It does not deploy DGI, run application migrations, upload frontend/backend builds, or need production provider/database credentials. There is no confirmed live report URL yet. Cloudflare project creation, secrets, environment protections and Access have not been verified/applied by this milestone.
+This pipeline deploys **only generated, audited Allure Report 3 HTML/assets** to the Direct Upload project `dgi-quality-report`. It does not deploy DGI, run application migrations, upload frontend/backend builds, or need production provider/database credentials. There is no confirmed live report URL yet. The [deployment readiness review](cloudflare-allure-readiness.md) verifies the existing GitHub environment, secret names and main-only branch restriction; the expected Pages project is absent from the viewed account, repository variables are unset, and reviewer protections remain incomplete. Access and an actual upload are not verified. Production remains **NO-GO** pending the [human bundle security decision](allure-bundle-security-review.md).
 
 ## Architecture and trust
 

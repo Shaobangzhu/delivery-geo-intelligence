@@ -1,6 +1,6 @@
 # Allure 3 reporting
 
-Allure is a diagnostic report, not a replacement for test exit codes, JUnit, coverage thresholds or the CI Quality gate. The later [Cloudflare release milestone](cloudflare-allure-deployment.md) provides a separate, disabled-by-default publishing workflow and bounded Allure 3 JSONL history. External hosting credentials/Access have not been configured or verified here. The original reporting milestone's verification below remains historical evidence.
+Allure is a diagnostic report, not a replacement for test exit codes, JUnit, coverage thresholds or the CI Quality gate. The later [Cloudflare release milestone](cloudflare-allure-deployment.md) provides a separate, disabled-by-default publishing workflow and bounded Allure 3 JSONL history. The [deployment readiness review](cloudflare-allure-readiness.md) records verified environment configuration, the dependency patch and remaining owner actions. The [prebuilt browser bundle security decision](allure-bundle-security-review.md) is **PENDING HUMAN APPROVAL**; no production upload or Access protection is claimed. The original reporting milestone's verification below remains historical evidence.
 
 ## Supported versions and boundaries
 
