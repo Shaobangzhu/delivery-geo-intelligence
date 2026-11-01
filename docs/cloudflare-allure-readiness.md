@@ -1,5 +1,7 @@
 # Cloudflare Allure deployment readiness
 
+This is the historical pre-deployment audit. The owner's later bundle approval and the first successful production upload on 2026-11-01 are recorded in the [security decision](allure-bundle-security-review.md) and [deployment guide](cloudflare-allure-deployment.md). The NO-GO conclusion below describes the state at the time of this audit.
+
 **Review begun 2026-10-31, completed 2026-11-01 (America/Los_Angeles): NO-GO for production publishing.** Implementation and local validation are separate from approval and an actual Cloudflare upload. No deployment, project creation, credential change, repository-variable change or protection-rule change was performed. External configuration observations below were made on October 31; they are not a continuously monitored state.
 
 ## Verified repository and hosted evidence
