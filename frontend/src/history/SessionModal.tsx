@@ -3,6 +3,7 @@ import { DialogFrame } from "./DialogFrame";
 import { type DeliveryPage, type Merchant } from "./api";
 import { listSessionCandidates, saveSession, sessionError, strategies, type DeliverySession, type DeliveryStrategy } from "./sessionApi";
 import { displaySessionTime, initialOccurrence, losAngelesInput, sessionInstant, sessionTimeCandidates } from "./sessionTime";
+import { platforms, type DeliveryPlatform } from "./platform";
 
 export function SessionModal({ session, merchants, onClose, onSaved }: {
   session: DeliverySession | null; merchants: Merchant[]; onClose: () => void; onSaved: () => void;
@@ -15,7 +16,10 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
   const [strategy, setStrategy] = useState<DeliveryStrategy | "">(session?.strategy ?? "");
   const [miles, setMiles] = useState(session?.totalDrivenMiles === undefined ? "" : String(session.totalDrivenMiles));
   const [taxMiles, setTaxMiles] = useState(session?.taxEligibleBusinessMiles === undefined ? "" : String(session.taxEligibleBusinessMiles));
-  const [notes, setNotes] = useState(session?.notes ?? "");
+  const [offers, setOffers] = useState({
+    uber_eats: session?.tripsOfferedByPlatform?.uber_eats?.toString() ?? "",
+    doordash: session?.tripsOfferedByPlatform?.doordash?.toString() ?? ""
+  });
   const [selected, setSelected] = useState(session?.deliveryIds ?? []);
   const [linkOpen, setLinkOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -43,7 +47,7 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
   function toggle(deliveryId: string) {
     setSelected((previous) => previous.includes(deliveryId) ? previous.filter((item) => item !== deliveryId) : [...previous, deliveryId]);
   }
-  async function submit(event: FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (pending.current) return;
     setError("");
     if (!startIso || !endIso || Date.parse(endIso) <= Date.parse(startIso)) {
@@ -54,6 +58,16 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
     if ([total, eligible].some((value) => value !== null && (!Number.isFinite(value) || value < 0)) || (total !== null && eligible !== null && eligible > total)) {
       setError("Enter nonnegative miles; IRS eligible miles cannot exceed total driven miles."); return;
     }
+    const offerChanges: Partial<Record<DeliveryPlatform, number | null>> = {};
+    for (const { value: platform } of platforms) {
+      const raw = offers[platform].trim();
+      const input = event.currentTarget.elements.namedItem(platform) as HTMLInputElement;
+      const count = raw ? Number(raw) : undefined;
+      if (input.validity.badInput || (count !== undefined && (!/^\d+$/.test(raw) || !Number.isSafeInteger(count) || count < 0))) {
+        setError("Enter Trips Offered as nonnegative whole numbers within the safe integer range, or leave blank if unknown."); return;
+      }
+      if (count !== session?.tripsOfferedByPlatform?.[platform]) offerChanges[platform] = count ?? null;
+    }
     const original = session?.deliveryIds ?? [];
     const linksChanged = Boolean(session?.associationIntegrity) || selected.length !== original.length || selected.some((item) => !original.includes(item));
     pending.current = true; setBusy(true);
@@ -62,7 +76,7 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
         ...(strategy ? { strategy } : session?.strategy ? { strategy: null } : {}),
         ...(total !== null ? { totalDrivenMiles: total } : session?.totalDrivenMiles !== undefined ? { totalDrivenMiles: null } : {}),
         ...(eligible !== null ? { taxEligibleBusinessMiles: eligible } : session?.taxEligibleBusinessMiles !== undefined ? { taxEligibleBusinessMiles: null } : {}),
-        ...(notes.trim() ? { notes: notes.trim() } : session?.notes ? { notes: null } : {}),
+        ...(Object.keys(offerChanges).length ? { tripsOfferedByPlatform: offerChanges } : {}),
         ...(linksChanged ? { deliveryIds: selected } : {})
       }, session?.id);
       onSaved();
@@ -83,10 +97,11 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
           {sessionTimeCandidates(end).length === 2 && <><label htmlFor={`${id}-end-fold`}>End clock occurrence</label><select id={`${id}-end-fold`} value={endOccurrence} disabled={busy} onChange={(event) => setEndOccurrence(event.target.value as "earlier" | "later")}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></select></>}
         </div>
         <div className="form-field form-wide"><label htmlFor={`${id}-strategy`}>Operating Strategy</label><select id={`${id}-strategy`} disabled={busy} value={strategy} onChange={(event) => setStrategy(event.target.value as DeliveryStrategy | "")}><option value="">Not recorded</option>{strategies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+        {platforms.map(({ value, label }) => <div className="form-field" key={value}><label htmlFor={`${id}-${value}`}>{label} — Trips Offered</label><input id={`${id}-${value}`} name={value} type="number" min="0" max={Number.MAX_SAFE_INTEGER} step="1" aria-describedby={`${id}-offers-help`} disabled={busy} value={offers[value]} onChange={(event) => setOffers((previous) => ({ ...previous, [value]: event.target.value }))} /></div>)}
+        <p id={`${id}-offers-help`} className="duration-help form-wide">Enter offers reported by each delivery platform during this session. Leave blank if unknown or not monitored. Zero means no offers were received while online.</p>
         <div className="form-field"><label htmlFor={`${id}-miles`}>Total Driven Miles</label><input id={`${id}-miles`} type="number" min="0" step="any" disabled={busy} value={miles} onChange={(event) => setMiles(event.target.value)} /></div>
         <div className="form-field"><label htmlFor={`${id}-tax`}>IRS Eligible Business Miles</label><input id={`${id}-tax`} type="number" min="0" step="any" disabled={busy} value={taxMiles} onChange={(event) => setTaxMiles(event.target.value)} /></div>
         <p className="duration-help form-wide">Leave unknown mileage blank. Eligibility is manually recorded; session miles do not automatically qualify for a tax deduction.</p>
-        <div className="form-field form-wide"><label htmlFor={`${id}-notes`}>Session Notes</label><textarea id={`${id}-notes`} rows={2} maxLength={2000} disabled={busy} value={notes} onChange={(event) => setNotes(event.target.value)} /></div>
       </div>
       <details className="settlement-details" open={linkOpen} onToggle={(event) => setLinkOpen(event.currentTarget.open)}>
         <summary>Link Deliveries (Optional) · {selected.length} selected</summary>

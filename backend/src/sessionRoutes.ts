@@ -1,7 +1,7 @@
 import type { Express, Response } from "express";
 import { ObjectId, type Db } from "mongodb";
 import type { ZodError } from "zod";
-import { objectIdSchema, type DeliveryDocument } from "./model.js";
+import { deliveryPlatformSchema, objectIdSchema, type DeliveryDocument } from "./model.js";
 import {
   sessionCreateSchema, sessionInputSchema, sessionPatchSchema, sessionFieldsResponse,
   vehicleProfileSchema, vehicleProfilePatchSchema, annualMileageSchema, taxYearSchema,
@@ -80,8 +80,9 @@ export function registerSessionRoutes(app: Express, db: Db, withReferenceWrite: 
   app.post("/api/delivery-sessions", async (request, response) => {
     const parsed = sessionCreateSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response, parsed.error);
-    const { deliveryIds, startedAt, endedAt, ...fields } = parsed.data;
-    const row: DeliverySessionDocument = { _id: new ObjectId(), startedAt: new Date(startedAt), endedAt: new Date(endedAt), ...fields };
+    const { deliveryIds, startedAt, endedAt, tripsOfferedByPlatform, ...fields } = parsed.data;
+    const row: DeliverySessionDocument = { _id: new ObjectId(), startedAt: new Date(startedAt), endedAt: new Date(endedAt), ...fields,
+      ...(tripsOfferedByPlatform && Object.keys(tripsOfferedByPlatform).length ? { tripsOfferedByPlatform } : {}) };
     const ids = (deliveryIds ?? []).map((id) => new ObjectId(id));
     return withReferenceWrite(async () => {
       const error = await checkLinks(ids, row._id);
@@ -100,9 +101,22 @@ export function registerSessionRoutes(app: Express, db: Db, withReferenceWrite: 
       const existing = await sessions.findOne({ _id: sessionId });
       if (!existing) return { kind: "missing" as const };
       const { _id, associationIntegrity, ...fields } = existing;
-      const { deliveryIds, ...changes } = patch.data;
+      const { deliveryIds, tripsOfferedByPlatform, ...changes } = patch.data;
       if (associationIntegrity && deliveryIds === undefined) return { kind: "review" as const };
       const merged: Record<string, unknown> = { ...fields, startedAt: existing.startedAt.toISOString(), endedAt: existing.endedAt.toISOString(), ...changes };
+      // Offers are manual observations, independent of Delivery membership.
+      // Omitted platform keys preserve observations; null clears only that key.
+      if (tripsOfferedByPlatform === null) delete merged.tripsOfferedByPlatform;
+      else if (tripsOfferedByPlatform !== undefined) {
+        const counts = { ...existing.tripsOfferedByPlatform };
+        for (const platform of deliveryPlatformSchema.options) {
+          const count = tripsOfferedByPlatform[platform];
+          if (count === null) delete counts[platform];
+          else if (count !== undefined) counts[platform] = count;
+        }
+        if (Object.keys(counts).length) merged.tripsOfferedByPlatform = counts;
+        else delete merged.tripsOfferedByPlatform;
+      }
       for (const [key, value] of Object.entries(merged)) if (value === null) delete merged[key];
       const validated = sessionInputSchema.safeParse(merged);
       if (!validated.success) return { kind: "invalid" as const, error: validated.error };

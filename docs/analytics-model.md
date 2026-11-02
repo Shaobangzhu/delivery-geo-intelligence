@@ -153,6 +153,8 @@ Efficiency uses the same range, retaining complete whole Sessions and explicit b
 
 ## Platform-specific settlement boundaries
 
+Session Trips Offered counts are manually observed platform push opportunities reported by Uber Eats or DoorDash. They do not measure market-wide merchant demand, and missing counts mean unknown. Counts are independent of linked deliveries and do not establish platform-specific online time from Session duration. They do not participate in Dashboard analytics, efficiency, settlement attribution, or AI tools.
+
 A known-platform payment selects only matching-platform Delivery payouts. It never adds another payment's adjustment. Overlapping Uber Eats and DoorDash coverage is legitimate; same-platform overlaps remain blocked. Legacy unknown-platform overlaps compete conservatively with either platform. LA inclusive statement dates and DST handling remain unchanged; weekly/biweekly schedules are not assumed.
 
 A Session contributes hours, mileage and current-profile costs only when its nonempty, complete explicit Delivery links establish one known platform, timestamps fit the Session, and no pending association marker remains. Mixed Sessions are excluded from both platforms, never divided or counted twice. Unknown/unassociated Sessions and unknown Delivery platforms block supported complete coverage. Manual confirmation cannot override structural ambiguity. Platform reassignment invalidates prior confirmation and requires review of preserved official statement values.
