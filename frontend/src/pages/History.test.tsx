@@ -36,12 +36,13 @@ function installApi(options: {
       if (options.get) return options.get(url);
       const search = url.searchParams.get("search")?.toLowerCase() ?? "";
       const category = url.searchParams.get("category") ?? "";
+      const platform = url.searchParams.get("platform");
       const from = url.searchParams.get("from");
       const to = url.searchParams.get("to");
       const sort = url.searchParams.get("sort");
       let selected = rows.filter((row) => {
         const merchant = merchants.find((item) => item.id === row.merchantId);
-        return (!search || merchant?.name.toLowerCase().includes(search)) &&
+        return (!platform || (platform === "unknown" ? !row.platform : row.platform === platform)) && (!search || merchant?.name.toLowerCase().includes(search)) &&
           (!category || merchant?.category === category) &&
           (!from || row.pickedUpAt >= from) && (!to || row.pickedUpAt < to);
       });
@@ -132,6 +133,7 @@ describe("Delivery History", () => {
     await screen.findByText("Showing 11–12 of 12 deliveries");
     expect(new URL(String(requests(fetchMock, "GET", "/api/deliveries").at(-1)?.[0]), "http://localhost").searchParams.get("page")).toBe("2");
 
+    await user.selectOptions(screen.getByLabelText("Delivery Platform"), "unknown");
     await user.type(screen.getByLabelText("Merchant search"), "Grocery");
     await user.selectOptions(screen.getByLabelText("Category"), "grocery");
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-04-01" } });
@@ -142,6 +144,7 @@ describe("Delivery History", () => {
       const query = new URL(String(last?.[0]), "http://localhost").searchParams;
       expect(query.get("search")).toBe("Grocery");
       expect(query.get("category")).toBe("grocery");
+      expect(query.get("platform")).toBe("unknown");
       expect(query.get("from")).toBeTruthy();
       expect(query.get("to")).toBeTruthy();
       expect(query.get("sort")).toBe("oldest");
@@ -181,6 +184,7 @@ describe("Delivery History", () => {
     await screen.findByText("Test Merchant A");
     await user.click(screen.getByRole("button", { name: /Add Delivery/ }));
     const dialog = screen.getByRole("dialog");
+    await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "doordash");
     await user.selectOptions(within(dialog).getByLabelText(/Merchant/), "merchant-a");
     fireEvent.change(within(dialog).getByLabelText(/Pickup Date & Time/), { target: { value: "2026-04-21T12:30" } });
     await user.type(within(dialog).getByLabelText(/Destination Address/), "synthetic-destination-token");
@@ -206,6 +210,7 @@ describe("Delivery History", () => {
     await screen.findByText("Test Merchant A");
     await user.click(screen.getByRole("button", { name: /Add Delivery/ }));
     const dialog = screen.getByRole("dialog");
+    await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "doordash");
     await user.selectOptions(within(dialog).getByLabelText(/Merchant/), "merchant-a");
     fireEvent.change(within(dialog).getByLabelText(/Pickup Date & Time/), { target: { value: "2026-04-21T12:30" } });
     await user.type(within(dialog).getByLabelText(/Destination Address/), "synthetic-destination-token");
@@ -226,6 +231,7 @@ describe("Delivery History", () => {
     await screen.findByText("Test Merchant A");
     await user.click(screen.getByRole("button", { name: /Add Delivery/ }));
     const dialog = screen.getByRole("dialog");
+    await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "doordash");
     await user.selectOptions(within(dialog).getByLabelText(/Merchant/), "merchant-a");
     fireEvent.change(within(dialog).getByLabelText(/Pickup Date & Time/), { target: { value: "2026-04-21T12:30" } });
     await user.type(within(dialog).getByLabelText(/Destination Address/), "synthetic-destination-token");
@@ -268,6 +274,7 @@ describe("Delivery History", () => {
     await user.click(screen.getByRole("button", { name: /Add Delivery/ }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("group", { name: /Delivery Duration/ })).toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "doordash");
     await user.selectOptions(within(dialog).getByLabelText(/Merchant/), "merchant-a");
     fireEvent.change(within(dialog).getByLabelText(/Pickup Date & Time/), { target: { value: "2026-04-21T12:30" } });
     await user.type(within(dialog).getByLabelText(/Destination Address/), "synthetic-destination-token");
@@ -290,7 +297,7 @@ describe("Delivery History", () => {
     render(<History />);
     await screen.findByText("1 hr 23 mins 45 secs");
     const unknownRow = screen.getByText("Test Grocery B").closest("tr")!;
-    expect(within(unknownRow).getAllByRole("cell")[5]).toHaveTextContent("—");
+    expect(within(unknownRow).getAllByRole("cell")[6]).toHaveTextContent("—");
     await user.click(screen.getByRole("button", { name: "Edit delivery for Test Merchant A" }));
     expect(screen.getByLabelText("Hours")).toHaveValue(1);
     expect(screen.getByLabelText("Minutes")).toHaveValue(23);
@@ -356,4 +363,20 @@ describe("Delivery History", () => {
     expect(await screen.findByText("Showing 1–1 of 1 deliveries")).toBeInTheDocument();
     expect(requests(fetchMock, "DELETE", "/api/deliveries/delivery-a")).toHaveLength(1);
   });
+});
+
+it("shows platform labels and rejects a stale Delivery response after platform changes", async () => {
+  let finish!: (value: Response) => void;
+  const pending = new Promise<Response>((resolve) => { finish = resolve; });
+  const mock = installApi({ get: (url) => url.searchParams.get("platform") ? reply({ data: [
+    { ...initialRows[0], platform: "uber_eats" }, { ...initialRows[1], platform: "doordash" }, { ...initialRows[0], id: "unknown" }
+  ], pagination: { page: 1, pageSize: 10, total: 3, totalPages: 1 } }) : pending });
+  const user = userEvent.setup(); render(<History />);
+  await user.selectOptions(screen.getByLabelText("Delivery Platform"), "doordash");
+  await screen.findByText("Showing 1–3 of 3 deliveries");
+  const table = screen.getAllByRole("table")[0];
+  for (const label of ["Platform", "Uber Eats", "DoorDash", "Unknown"]) expect(within(table).getByText(label)).toBeInTheDocument();
+  const gets = requests(mock, "GET", "/api/deliveries"); expect(gets[0][1].signal.aborted).toBe(true);
+  finish(reply({ data: [], pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 } }));
+  await waitFor(() => expect(screen.getByText("Showing 1–3 of 3 deliveries")).toBeInTheDocument());
 });

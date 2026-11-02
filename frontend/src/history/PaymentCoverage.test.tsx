@@ -5,7 +5,7 @@ import { PaymentModal } from "./PaymentModal";
 import type { EarningsAdjustment } from "./earningsApi";
 
 const label = "I have recorded all Uber Eats deliveries and sessions for this settlement period.";
-const payment: EarningsAdjustment = { id: "synthetic-payment", type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 24.17,
+const payment: EarningsAdjustment = { platform: "uber_eats", id: "synthetic-payment", type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 24.17,
   coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14" };
 afterEach(() => vi.unstubAllGlobals());
 function requests() {

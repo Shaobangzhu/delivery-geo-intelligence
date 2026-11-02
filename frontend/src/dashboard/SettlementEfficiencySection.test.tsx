@@ -65,3 +65,20 @@ it("retains the real settlement component and its selected coverage when parent 
   expect(screen.getByLabelText("Settlement")).toHaveValue(partial.settlementId);
   expect(mock.mock.calls.filter(([url]) => url.startsWith("/api/efficiency/settlements"))).toHaveLength(1);
 });
+
+it("distinguishes same-period platforms and explains unsafe attribution without replacing null results", async () => {
+  const reasons = ["mixed_platform_session", "unknown_delivery_platform", "unknown_session_platform", "unknown_payment_platform"];
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ ...page, data: [
+    { ...ready, platform: "uber_eats" }, { ...partial, platform: "doordash", coverageStartDate: ready.coverageStartDate, coverageEndDate: ready.coverageEndDate, reasons }
+  ] }) })));
+  const user = userEvent.setup(); render(<SettlementEfficiencySection />); await screen.findByText("ready");
+  const select = screen.getByLabelText("Settlement");
+  expect(within(select).getByRole("option", { name: /Uber Eats/ })).toBeInTheDocument();
+  await user.selectOptions(select, partial.settlementId);
+  expect(screen.getByText("DoorDash", { selector: "strong" })).toBeInTheDocument();
+  expect(screen.getByText(/Mixed-platform sessions cannot be allocated/)).toBeInTheDocument();
+  expect(screen.getByText(/Legacy delivery platform is unknown/)).toBeInTheDocument();
+  expect(screen.getByText(/Session attribution is incomplete/)).toBeInTheDocument();
+  expect(screen.getByText(/Payment platform attribution is missing/)).toBeInTheDocument();
+  expect(screen.getByText("Recorded Work-Period Gross Revenue").nextElementSibling).toHaveTextContent("—");
+});

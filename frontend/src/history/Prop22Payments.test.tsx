@@ -38,6 +38,7 @@ it("captures, displays, edits, and confirms deletion of independent Prop 22 paym
   fireEvent.change(screen.getByLabelText("Payment Date *"), { target: { value: "2026-10-08" } });
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
   expect(mock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+  await user.selectOptions(screen.getByLabelText("Payment Platform *"), "uber_eats");
   await user.type(screen.getByLabelText("Amount Received *"), "24.17");
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -45,7 +46,7 @@ it("captures, displays, edits, and confirms deletion of independent Prop 22 paym
   expect(within(section).getByText("$24.17")).toBeInTheDocument();
   expect(within(section).getByText("—")).toBeInTheDocument();
   const post = mock.mock.calls.find(([, init]) => init?.method === "POST")!;
-  expect(JSON.parse(String(post[1]?.body))).toEqual({ type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 });
+  expect(JSON.parse(String(post[1]?.body))).toEqual({ platform: "uber_eats", type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 });
   await user.click(screen.getByRole("button", { name: "Edit Prop 22 payment 2026-10-08" }));
   expect(screen.getByLabelText("Amount Received *")).toHaveValue(24.17);
   await user.clear(screen.getByLabelText("Amount Received *")); await user.type(screen.getByLabelText("Amount Received *"), "25");
@@ -79,6 +80,7 @@ it("keeps a payment modal pending, prevents duplicate saves, and shows a safe fa
   vi.stubGlobal("fetch", mock); render(<History />);
   await user.click(screen.getByRole("button", { name: /Add Prop 22 Payment/ }));
   fireEvent.change(screen.getByLabelText("Payment Date *"), { target: { value: "2026-10-08" } });
+  await user.selectOptions(screen.getByLabelText("Payment Platform *"), "uber_eats");
   await user.type(screen.getByLabelText("Amount Received *"), "10");
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
   expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();

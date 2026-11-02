@@ -37,8 +37,8 @@ async function reset() {
     city: "Synthetic City", location: { type: "Point", coordinates: [0.01 + index * 0.01, 0.01] }
   })));
   await db.collection("deliveries").insertMany([
-    { merchantId: new ObjectId(ids[0]), pickedUpAt: new Date("2026-03-08T17:00:00Z"), destinationLocation: { type: "Point", coordinates: [0.01, 0.01] }, payout: 12.5, distanceMiles: 4, deliveryDurationSeconds: 1200 },
-    { merchantId: new ObjectId(ids[1]), pickedUpAt: new Date("2026-03-07T17:00:00Z"), payout: 7.5, distanceMiles: 2, deliveryDurationSeconds: 600 },
+    { platform: "uber_eats", merchantId: new ObjectId(ids[0]), pickedUpAt: new Date("2026-03-08T17:00:00Z"), destinationLocation: { type: "Point", coordinates: [0.01, 0.01] }, payout: 12.5, distanceMiles: 4, deliveryDurationSeconds: 1200 },
+    { platform: "doordash", merchantId: new ObjectId(ids[1]), pickedUpAt: new Date("2026-03-07T17:00:00Z"), payout: 7.5, distanceMiles: 2, deliveryDurationSeconds: 600 },
     { merchantId: new ObjectId(ids[0]), pickedUpAt: new Date("2026-03-01T17:00:00Z"), destinationLocation: { type: "Point", coordinates: [0.01, 0.01] }, payout: 10, distanceMiles: 3, deliveryDurationSeconds: 900 }
   ]);
   await db.collection("earningsAdjustments").insertOne({ type: "prop22_guarantee", paymentDate: "2026-03-08", amount: 5 });

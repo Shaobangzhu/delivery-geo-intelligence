@@ -1,3 +1,4 @@
+import { PlatformOptions, platformLabel, type PlatformFilter } from "../history/platform";
 import { useEffect, useMemo, useState } from "react";
 import { listDeliveries, listMerchants, userFacingError, type Category, type Delivery, type DeliveryPage, type Merchant, type SortOrder } from "../history/api";
 import { ConfirmDelete } from "../history/ConfirmDelete";
@@ -37,6 +38,7 @@ export function History() {
   const [result, setResult] = useState<DeliveryPage>(emptyPage);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState("");
+  const [platform, setPlatform] = useState<PlatformFilter>("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<Category | "">("");
   const [fromDate, setFromDate] = useState("");
@@ -67,13 +69,13 @@ export function History() {
     let active = true;
     setLoading(true);
     setListError("");
-    listDeliveries({ search, category, fromDate, toDate, sort, page, pageSize: PAGE_SIZE }, controller.signal)
+    listDeliveries({ platform, search, category, fromDate, toDate, sort, page, pageSize: PAGE_SIZE }, controller.signal)
       .then((data) => { if (active) { setResult(data); setLoading(false); } })
       .catch((error: unknown) => {
         if (active && !isAbort(error)) { setListError(userFacingError(error)); setLoading(false); }
       });
     return () => { active = false; controller.abort(); };
-  }, [search, category, fromDate, toDate, sort, page, reload]);
+  }, [platform, search, category, fromDate, toDate, sort, page, reload]);
 
   const merchantById = useMemo(() => new Map(merchants.map((merchant) => [merchant.id, merchant])), [merchants]);
   const { total, totalPages } = result.pagination;
@@ -111,6 +113,9 @@ export function History() {
           <label htmlFor="merchant-search">Merchant search</label>
           <input id="merchant-search" type="search" placeholder="Search merchant…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
         </div>
+        <div className="filter-field"><label htmlFor="delivery-platform-filter">Delivery Platform</label>
+          <select id="delivery-platform-filter" value={platform} onChange={(event) => { setPlatform(event.target.value as PlatformFilter); setPage(1); }}><PlatformOptions filter /></select>
+        </div>
         <div className="filter-field category-field">
           <label htmlFor="category-filter">Category</label>
           <select id="category-filter" value={category} onChange={(event) => { setCategory(event.target.value as Category | ""); setPage(1); }}>
@@ -140,16 +145,17 @@ export function History() {
 
       <div className="history-table-card">
         <div className="table-scroll"><table className="history-table">
-          <thead><tr><th scope="col">Date &amp; Time</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Payout</th><th scope="col">Distance</th><th scope="col">Duration</th><th scope="col">Destination</th><th scope="col">Actions</th></tr></thead>
+          <thead><tr><th scope="col">Date &amp; Time</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Platform</th><th scope="col">Payout</th><th scope="col">Distance</th><th scope="col">Duration</th><th scope="col">Destination</th><th scope="col">Actions</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={8} className="table-message">Loading deliveries…</td></tr>
-              : result.data.length === 0 ? <tr><td colSpan={8} className="table-message">{listError ? "No records to display." : "No deliveries match the current filters."}</td></tr>
+            {loading ? <tr><td colSpan={9} className="table-message">Loading deliveries…</td></tr>
+              : result.data.length === 0 ? <tr><td colSpan={9} className="table-message">{listError ? "No records to display." : "No deliveries match the current filters."}</td></tr>
               : result.data.map((delivery) => {
                 const merchant = merchantById.get(delivery.merchantId);
                 return <tr key={delivery.id}>
                   <td className="date-cell">{formatDateTime(delivery.pickedUpAt)}</td>
                   <td><span className="merchant-name">{merchant?.name ?? "Unknown merchant"}</span>{merchant && <span className="merchant-city">{merchant.publicAddress ?? merchant.city}</span>}</td>
                   <td><span className={`category-label${merchant ? ` category-${merchant.category}` : ""}`}>{merchant ? categories.find((item) => item.value === merchant.category)?.label : "Unknown"}</span></td>
+                  <td><span className="platform-label">{platformLabel(delivery.platform)}</span></td>
                   <td className="number-cell">{delivery.payout === undefined ? "—" : `$${delivery.payout.toFixed(2)}`}</td>
                   <td className="number-cell">{delivery.distanceMiles === undefined ? "—" : `${delivery.distanceMiles.toFixed(1)} mi`}</td>
                   <td className="duration-cell">{formatDuration(delivery.deliveryDurationSeconds)}</td>

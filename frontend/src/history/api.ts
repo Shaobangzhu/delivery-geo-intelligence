@@ -1,3 +1,4 @@
+import type { DeliveryPlatform, PlatformFilter } from "./platform";
 export type Category = "restaurant" | "grocery" | "retail" | "other";
 export type SortOrder = "newest" | "oldest" | "payoutDesc" | "payoutAsc" | "distanceDesc" | "distanceAsc";
 
@@ -10,6 +11,7 @@ export interface Merchant {
 }
 
 export interface Delivery {
+  platform?: DeliveryPlatform;
   id: string;
   merchantId: string;
   pickedUpAt: string;
@@ -27,6 +29,7 @@ export interface DeliveryPage {
 }
 
 export interface DeliveryFilters {
+  platform?: PlatformFilter;
   search: string;
   category: Category | "";
   fromDate: string;
@@ -37,6 +40,7 @@ export interface DeliveryFilters {
 }
 
 export interface DeliveryPayload {
+  platform?: DeliveryPlatform;
   merchantId: string;
   pickedUpAt: string;
   payout?: number | null;
@@ -83,6 +87,7 @@ export function listDeliveries(filters: DeliveryFilters, signal?: AbortSignal): 
     pageSize: String(filters.pageSize)
   });
   if (filters.search.trim()) query.set("search", filters.search.trim());
+  if (filters.platform) query.set("platform", filters.platform);
   if (filters.category) query.set("category", filters.category);
   if (filters.fromDate) query.set("from", dateAtLocalMidnight(filters.fromDate, false));
   if (filters.toDate) query.set("to", dateAtLocalMidnight(filters.toDate, true));

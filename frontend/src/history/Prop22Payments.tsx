@@ -1,3 +1,4 @@
+import { PlatformOptions, platformLabel, type PlatformFilter } from "./platform";
 import { useEffect, useRef, useState } from "react";
 import { DialogFrame } from "./DialogFrame";
 import { PaymentModal } from "./PaymentModal";
@@ -7,6 +8,7 @@ function displayDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
 }
 export function Prop22Payments({ adding, onCloseAdd }: { adding: boolean; onCloseAdd: () => void }) {
+  const [platform, setPlatform] = useState<PlatformFilter>("");
   const [rows, setRows] = useState<EarningsAdjustment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -19,10 +21,10 @@ export function Prop22Payments({ adding, onCloseAdd }: { adding: boolean; onClos
   useEffect(() => {
     const controller = new AbortController(); let active = true;
     setLoading(true); setError("");
-    listPayments(controller.signal).then((data) => { if (active) { setRows(data); setLoading(false); } })
+    listPayments(controller.signal, platform).then((data) => { if (active) { setRows(data); setLoading(false); } })
       .catch(() => { if (active) { setError(paymentError()); setLoading(false); } });
     return () => { active = false; controller.abort(); };
-  }, [reload]);
+  }, [reload, platform]);
   function saved() { setEditing(null); onCloseAdd(); setReload((value) => value + 1); }
   async function confirmDelete() {
     if (!target || pending.current) return;
@@ -33,11 +35,12 @@ export function Prop22Payments({ adding, onCloseAdd }: { adding: boolean; onClos
   }
   return <section className="prop22-section" aria-labelledby="prop22-title">
     <h2 id="prop22-title">Prop 22 Payments</h2>
+    <div className="filter-field payment-platform-filter"><label htmlFor="payment-platform-filter">Payment Platform</label><select id="payment-platform-filter" value={platform} onChange={(event) => setPlatform(event.target.value as PlatformFilter)}><PlatformOptions filter /></select></div>
     {error && <p role="alert" className="form-error">{error}</p>}
     <div className="history-table-card table-scroll"><table className="history-table payment-table">
-      <thead><tr><th scope="col">Payment Date</th><th scope="col">Coverage Period</th><th scope="col">Amount</th><th scope="col">Actions</th></tr></thead>
-      <tbody>{loading ? <tr><td colSpan={4}>Loading payments…</td></tr> : error ? <tr><td colSpan={4}>Payments unavailable.</td></tr> : !rows.length ? <tr><td colSpan={4}>No Prop 22 payments recorded.</td></tr> : rows.map((row) => <tr key={row.id}>
-        <td>{displayDate(row.paymentDate)}</td><td>{row.coverageStartDate && row.coverageEndDate ? `${displayDate(row.coverageStartDate)} – ${displayDate(row.coverageEndDate)}` : "—"}</td><td>${row.amount.toFixed(2)}</td>
+      <thead><tr><th scope="col">Payment Date</th><th scope="col">Platform</th><th scope="col">Coverage Period</th><th scope="col">Amount</th><th scope="col">Actions</th></tr></thead>
+      <tbody>{loading ? <tr><td colSpan={5}>Loading payments…</td></tr> : error ? <tr><td colSpan={5}>Payments unavailable.</td></tr> : !rows.length ? <tr><td colSpan={5}>No Prop 22 payments recorded.</td></tr> : rows.map((row) => <tr key={row.id}>
+        <td>{displayDate(row.paymentDate)}</td><td><span className="platform-label">{platformLabel(row.platform)}</span></td><td>{row.coverageStartDate && row.coverageEndDate ? `${displayDate(row.coverageStartDate)} – ${displayDate(row.coverageEndDate)}` : "—"}</td><td>${row.amount.toFixed(2)}</td>
         <td><div className="row-actions"><button type="button" className="icon-action" aria-label={`Edit Prop 22 payment ${row.paymentDate}`} onClick={() => setEditing(row)}>✎</button><button type="button" className="icon-action delete-action" aria-label={`Delete Prop 22 payment ${row.paymentDate}`} onClick={() => { setDeleteError(""); setTarget(row); }}>⌫</button></div></td>
       </tr>)}</tbody>
     </table></div>

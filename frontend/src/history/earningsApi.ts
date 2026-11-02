@@ -1,3 +1,4 @@
+import type { DeliveryPlatform, PlatformFilter } from "./platform";
 import { requestJson } from "./api";
 
 export interface SettlementDetails {
@@ -15,6 +16,7 @@ export interface Reconciliation {
   tolerance: number;
 }
 export interface EarningsAdjustment {
+  platform?: DeliveryPlatform;
   id: string;
   type: "prop22_guarantee";
   paymentDate: string;
@@ -29,8 +31,8 @@ export type PaymentPayload = Omit<EarningsAdjustment, "id" | "coverageStartDate"
   settlementDetails?: { [K in keyof SettlementDetails]?: number | null } | null;
   coverageStartDate?: string | null; coverageEndDate?: string | null; notes?: string | null;
 };
-export async function listPayments(signal?: AbortSignal) {
-  return (await requestJson<{ data: EarningsAdjustment[] }>("/api/earnings-adjustments", { signal })).data;
+export async function listPayments(signal?: AbortSignal, platform: PlatformFilter = "") {
+  return (await requestJson<{ data: EarningsAdjustment[] }>(`/api/earnings-adjustments${platform ? `?platform=${platform}` : ""}`, { signal })).data;
 }
 export function getPayment(id: string, signal?: AbortSignal) {
   return requestJson<{ data: EarningsAdjustment; reconciliation: Reconciliation }>(`/api/earnings-adjustments/${id}`, { signal });
