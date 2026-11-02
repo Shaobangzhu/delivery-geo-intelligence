@@ -28,15 +28,20 @@ beforeEach(() => {
   vi.mocked(api.getEconomics).mockResolvedValue(initialized);
   vi.mocked(api.listSessionCandidates).mockResolvedValue({ data: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } });
   vi.mocked(api.saveSession).mockImplementation(async (payload: SessionPayload, id?: string) => {
-    const next = { ...base, ...payload, id: id ?? base.id,
+    const previous = rows.find((row) => row.id === id);
+    const next = { ...(previous ?? base), ...payload, id: id ?? base.id,
       sessionDurationSeconds: (Date.parse(payload.endedAt) - Date.parse(payload.startedAt)) / 1000,
-      deliveryIds: payload.deliveryIds ?? [], linkedDeliveries: [] } as DeliverySession;
-    for (const key of ["strategy", "totalDrivenMiles", "taxEligibleBusinessMiles", "notes"] as const) if (payload[key] === null) delete next[key];
+      deliveryIds: payload.deliveryIds ?? previous?.deliveryIds ?? [], linkedDeliveries: previous?.linkedDeliveries ?? [] } as DeliverySession;
+    const counts = { ...previous?.tripsOfferedByPlatform, ...payload.tripsOfferedByPlatform };
+    for (const platform of ["uber_eats", "doordash"] as const) if (counts[platform] === null) delete counts[platform];
+    if (payload.tripsOfferedByPlatform === null || !Object.keys(counts).length) delete next.tripsOfferedByPlatform;
+    else next.tripsOfferedByPlatform = counts as DeliverySession["tripsOfferedByPlatform"];
+    for (const key of ["strategy", "totalDrivenMiles", "taxEligibleBusinessMiles"] as const) if (payload[key] === null) delete next[key];
     rows = [next]; return { data: next };
   });
   vi.mocked(api.deleteSession).mockImplementation(async () => { rows = []; });
 });
-afterEach(() => vi.resetAllMocks());
+afterEach(() => { vi.resetAllMocks(); vi.unstubAllGlobals(); });
 
 it("clears stale vehicle assumptions after a failed refresh", async () => {
   const view = render(<UberSessions merchants={merchants} deliveryRevision={0} />);
@@ -158,9 +163,119 @@ it("keeps pending session saves inside the modal and sanitizes association error
   await user.click(screen.getByRole("button", { name: "Save Session" }));
   expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
   expect(screen.getByLabelText("Total Driven Miles")).toBeDisabled();
+  expect(screen.getByLabelText("Uber Eats — Trips Offered")).toBeDisabled();
+  expect(screen.getByLabelText("DoorDash — Trips Offered")).toBeDisabled();
+  fireEvent.submit(screen.getByRole("button", { name: "Saving…" }).closest("form")!);
   await user.keyboard("{Escape}"); expect(close).not.toHaveBeenCalled(); expect(api.saveSession).toHaveBeenCalledOnce();
   fail(new ApiError(409)); expect(await screen.findByRole("alert")).toHaveTextContent("another session");
   expect(screen.getByRole("button", { name: "Save Session" })).toBeEnabled();
+});
+
+it.each([
+  ["unknown", "", "", undefined],
+  ["Uber Eats", "3", "", { uber_eats: 3 }],
+  ["DoorDash", "", "5", { doordash: 5 }],
+  ["both platforms", "3", "5", { uber_eats: 3, doordash: 5 }],
+  ["explicit zero", "0", "", { uber_eats: 0 }],
+  ["largest safe integer", String(Number.MAX_SAFE_INTEGER), "0", { uber_eats: Number.MAX_SAFE_INTEGER, doordash: 0 }]
+])("creates a zero-linked-delivery Session with %s offers and no notes", async (_name, uber, door, expected) => {
+  const user = userEvent.setup(), saved = vi.fn();
+  render(<SessionModal session={null} merchants={merchants} onClose={vi.fn()} onSaved={saved} />);
+  expect(screen.queryByLabelText("Session Notes")).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Uber Eats — Trips Offered")).toHaveValue(null);
+  expect(screen.getByLabelText("DoorDash — Trips Offered")).toHaveValue(null);
+  expect(screen.getByLabelText("Uber Eats — Trips Offered")).toHaveAccessibleDescription("Enter offers reported by each delivery platform during this session. Leave blank if unknown or not monitored. Zero means no offers were received while online.");
+  fireEvent.change(screen.getByLabelText("Session Start *"), { target: { value: "2026-03-07T23:30" } });
+  fireEvent.change(screen.getByLabelText("Session End *"), { target: { value: "2026-03-08T03:30" } });
+  fireEvent.change(screen.getByLabelText("Uber Eats — Trips Offered"), { target: { value: uber } });
+  fireEvent.change(screen.getByLabelText("DoorDash — Trips Offered"), { target: { value: door } });
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  expect(api.saveSession).toHaveBeenCalledExactlyOnceWith({ startedAt: base.startedAt, endedAt: base.endedAt,
+    ...(expected ? { tripsOfferedByPlatform: expected } : {}) }, undefined);
+  expect(api.listSessionCandidates).not.toHaveBeenCalled();
+});
+
+it.each(["Uber Eats", "DoorDash"].flatMap((platform) => ["-1", "1.5", "9007199254740992", "1e3", "1.0000000000000001"].map((value) => [platform, value])))("rejects invalid %s offers: %s", async (platform, value) => {
+  const user = userEvent.setup();
+  render(<SessionModal session={base} merchants={merchants} onClose={vi.fn()} onSaved={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText(`${platform} — Trips Offered`), { target: { value } });
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("nonnegative whole numbers");
+  expect(api.saveSession).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["unchanged", "3", "5", undefined, { uber_eats: 3, doordash: 5 }],
+  ["Uber Eats zero", "0", "5", { uber_eats: 0 }, { uber_eats: 0, doordash: 5 }],
+  ["DoorDash update", "3", "7", { doordash: 7 }, { uber_eats: 3, doordash: 7 }],
+  ["Uber Eats cleared", "", "5", { uber_eats: null }, { doordash: 5 }],
+  ["DoorDash cleared", "3", "", { doordash: null }, { uber_eats: 3 }],
+  ["both cleared", "", "", { uber_eats: null, doordash: null }, undefined]
+])("edits %s offers with nested PATCH semantics and preserves historical notes", async (_name, uber, door, changes, expected) => {
+  const user = userEvent.setup();
+  rows = [{ ...base, notes: "Synthetic historical Session notes", tripsOfferedByPlatform: { uber_eats: 3, doordash: 5 } }];
+  mount(); await user.click(await screen.findByRole("button", { name: "Edit session test-a" }));
+  expect(screen.queryByLabelText("Session Notes")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Uber Eats — Trips Offered")).toHaveValue(3);
+  expect(screen.getByLabelText("DoorDash — Trips Offered")).toHaveValue(5);
+  fireEvent.change(screen.getByLabelText("Uber Eats — Trips Offered"), { target: { value: uber } });
+  fireEvent.change(screen.getByLabelText("DoorDash — Trips Offered"), { target: { value: door } });
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  const payload = vi.mocked(api.saveSession).mock.calls[0][0];
+  expect(payload).not.toHaveProperty("notes");
+  if (changes) expect(payload.tripsOfferedByPlatform).toEqual(changes);
+  else expect(payload).not.toHaveProperty("tripsOfferedByPlatform");
+  expect(rows[0].notes).toBe("Synthetic historical Session notes");
+  expect(rows[0].tripsOfferedByPlatform).toEqual(expected);
+  const expectedCounts: DeliverySession["tripsOfferedByPlatform"] = expected;
+  expect(screen.getByText(`Uber Eats: ${expectedCounts?.uber_eats ?? "—"} · DoorDash: ${expectedCounts?.doordash ?? "—"}`)).toBeInTheDocument();
+});
+
+it("rejects native bad numeric input rather than treating it as a request to clear", async () => {
+  const user = userEvent.setup();
+  render(<SessionModal session={{ ...base, tripsOfferedByPlatform: { uber_eats: 3 } }} merchants={merchants} onClose={vi.fn()} onSaved={vi.fn()} />);
+  const input = screen.getByLabelText("Uber Eats — Trips Offered");
+  fireEvent.change(input, { target: { value: "" } });
+  // Browsers expose incomplete/nonfinite number entry as empty with badInput;
+  // jsdom does not implement that interactive validity state.
+  Object.defineProperty(input, "validity", { value: { badInput: true } });
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("nonnegative whole numbers");
+  expect(api.saveSession).not.toHaveBeenCalled();
+});
+
+it("prepopulates zero without supplying an unknown platform or resending unchanged counts", async () => {
+  const user = userEvent.setup();
+  render(<SessionModal session={{ ...base, notes: "Synthetic legacy note", tripsOfferedByPlatform: { uber_eats: 0 } }} merchants={merchants} onClose={vi.fn()} onSaved={vi.fn()} />);
+  expect(screen.getByLabelText("Uber Eats — Trips Offered")).toHaveValue(0);
+  expect(screen.getByLabelText("DoorDash — Trips Offered")).toHaveValue(null);
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  expect(vi.mocked(api.saveSession).mock.calls[0][0]).not.toHaveProperty("tripsOfferedByPlatform");
+  expect(vi.mocked(api.saveSession).mock.calls[0][0]).not.toHaveProperty("notes");
+});
+
+it("displays missing offer counts as unknown and keeps all Session table columns aligned", async () => {
+  rows = [base, { ...base, id: "session-b", tripsOfferedByPlatform: { uber_eats: 0, doordash: 9 } },
+    { ...base, id: "session-c", tripsOfferedByPlatform: { uber_eats: 3 } }];
+  mount();
+  expect(screen.getByText("Loading sessions…")).toHaveAttribute("colspan", "8");
+  await screen.findByText("Uber Eats: — · DoorDash: —");
+  expect(screen.getByText("Uber Eats: 0 · DoorDash: 9")).toBeInTheDocument();
+  expect(screen.getByText("Uber Eats: 3 · DoorDash: —")).toBeInTheDocument();
+  const table = screen.getByRole("columnheader", { name: "Trips Offered" }).closest("table")!;
+  expect(within(table).getAllByRole("columnheader")).toHaveLength(8);
+  for (const row of within(table).getAllByRole("row").slice(1)) expect(within(row).getAllByRole("cell")).toHaveLength(8);
+});
+
+it("spans the empty and unavailable Session table rows across all columns", async () => {
+  const view = render(<UberSessions merchants={merchants} deliveryRevision={0} />);
+  expect(await screen.findByText("No delivery sessions recorded.")).toHaveAttribute("colspan", "8");
+  vi.mocked(api.listSessions).mockRejectedValue(new Error("Synthetic failure"));
+  view.rerender(<UberSessions merchants={merchants} deliveryRevision={1} />);
+  expect(await screen.findByText("Sessions unavailable.")).toHaveAttribute("colspan", "8");
 });
 
 it("handles unavailable lists with retry", async () => {
@@ -173,7 +288,7 @@ it("handles unavailable lists with retry", async () => {
 it("preserves explicit links outside edited time bounds until they are intentionally unchecked", async () => {
   const user = userEvent.setup();
   const linked = { id: "delivery-existing", merchantId: "merchant-a", pickedUpAt: "2026-03-08T08:00:00.000Z" };
-  render(<SessionModal session={{ ...base, deliveryIds: [linked.id], linkedDeliveries: [linked] }} merchants={merchants} onClose={vi.fn()} onSaved={vi.fn()} />);
+  render(<SessionModal session={{ ...base, notes: "Synthetic historical note", deliveryIds: [linked.id], linkedDeliveries: [linked] }} merchants={merchants} onClose={vi.fn()} onSaved={vi.fn()} />);
   fireEvent.change(screen.getByLabelText("Session Start *"), { target: { value: "2026-03-09T09:00" } });
   fireEvent.change(screen.getByLabelText("Session End *"), { target: { value: "2026-03-09T10:00" } });
   await user.click(screen.getByText(/Link Deliveries/));
@@ -183,4 +298,24 @@ it("preserves explicit links outside edited time bounds until they are intention
   expect(api.saveSession).toHaveBeenLastCalledWith(expect.not.objectContaining({ deliveryIds: expect.anything() }), base.id);
   await user.click(checkbox); await user.click(screen.getByRole("button", { name: "Save Session" }));
   expect(api.saveSession).toHaveBeenLastCalledWith(expect.objectContaining({ deliveryIds: [] }), base.id);
+  for (const [payload] of vi.mocked(api.saveSession).mock.calls) expect(payload).not.toHaveProperty("notes");
+});
+
+it("uses saveSession to serialize only changed platform removals without legacy notes", async () => {
+  const user = userEvent.setup(), saved = vi.fn();
+  const realApi = await vi.importActual<typeof import("./sessionApi")>("./sessionApi");
+  vi.mocked(api.saveSession).mockImplementation(realApi.saveSession);
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: base }), { status: 200 }));
+  vi.stubGlobal("fetch", fetch);
+  render(<SessionModal session={{ ...base, notes: "Synthetic historical note", tripsOfferedByPlatform: { uber_eats: 3, doordash: 5 } }} merchants={merchants} onClose={vi.fn()} onSaved={saved} />);
+  await user.clear(screen.getByLabelText("Uber Eats — Trips Offered"));
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  expect(fetch).toHaveBeenCalledOnce();
+  const [url, options] = fetch.mock.calls[0];
+  expect(url).toBe(`/api/delivery-sessions/${base.id}`);
+  expect(options.method).toBe("PATCH");
+  const body = JSON.parse(options.body);
+  expect(body.tripsOfferedByPlatform).toEqual({ uber_eats: null });
+  expect(body).not.toHaveProperty("notes");
 });

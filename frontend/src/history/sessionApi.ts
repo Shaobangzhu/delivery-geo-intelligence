@@ -1,4 +1,5 @@
 import { ApiError, requestJson, type DeliveryPage } from "./api";
+import type { DeliveryPlatform } from "./platform";
 
 export type DeliveryStrategy = "wide_area_marathon" | "home_based_multi_order" | "eastvale_local_only" | "other";
 export const strategies: { value: DeliveryStrategy; label: string }[] = [
@@ -22,11 +23,13 @@ export interface DeliverySession {
   associationIntegrity?: "pending";
   id: string; startedAt: string; endedAt: string; sessionDurationSeconds: number;
   strategy?: DeliveryStrategy; totalDrivenMiles?: number; taxEligibleBusinessMiles?: number; notes?: string;
+  tripsOfferedByPlatform?: Partial<Record<DeliveryPlatform, number>>;
   deliveryIds: string[]; linkedDeliveries: LinkedDelivery[]; vehicleCost: VehicleCost;
 }
 export interface SessionPayload {
   startedAt: string; endedAt: string; strategy?: DeliveryStrategy | null;
-  totalDrivenMiles?: number | null; taxEligibleBusinessMiles?: number | null; notes?: string | null;
+  totalDrivenMiles?: number | null; taxEligibleBusinessMiles?: number | null;
+  tripsOfferedByPlatform?: Partial<Record<DeliveryPlatform, number | null>> | null;
   deliveryIds?: string[];
 }
 export interface VehicleProfile {

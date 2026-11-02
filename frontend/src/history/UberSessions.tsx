@@ -7,6 +7,7 @@ import { AnnualMileageModal } from "./AnnualMileageModal";
 import { SessionCost } from "./SessionCost";
 import { formatDuration } from "./duration";
 import { displaySessionDate, displaySessionTime } from "./sessionTime";
+import { platforms } from "./platform";
 import { deleteSession, getEconomics, initializeEconomics, listSessions, sessionError, strategies, usd, type AnnualMileage, type DeliverySession, type EconomicsResponse } from "./sessionApi";
 
 export function UberSessions({ merchants, deliveryRevision }: { merchants: Merchant[]; deliveryRevision: number }) {
@@ -45,10 +46,12 @@ export function UberSessions({ merchants, deliveryRevision }: { merchants: Merch
     <div className="session-section-heading"><div><h2 id="sessions-title">Delivery Sessions</h2><p className="duration-help">Complete operating periods; time and mileage are recorded independently of individual deliveries.</p></div><button type="button" className="button secondary" disabled={loading || Boolean(error)} onClick={() => setEditing(null)}>＋ Add Session</button></div>
     {error && <p role="alert" className="history-alert">{error} <button type="button" className="text-button" onClick={() => setReload((value) => value + 1)}>Retry session data</button></p>}
     <div className="history-table-card table-scroll"><table className="history-table session-table">
-      <thead><tr><th scope="col">Date</th><th scope="col">Start–End (Los Angeles)</th><th scope="col">Duration</th><th scope="col">Strategy</th><th scope="col">Total Miles</th><th scope="col">Estimated Vehicle Cost</th><th scope="col">Actions</th></tr></thead>
-      <tbody>{loading ? <tr><td colSpan={7}>Loading sessions…</td></tr> : error ? <tr><td colSpan={7}>Sessions unavailable.</td></tr> : !rows.length ? <tr><td colSpan={7}>No delivery sessions recorded.</td></tr> : rows.map((row) => <tr key={row.id}>
+      <thead><tr><th scope="col">Date</th><th scope="col">Start–End (Los Angeles)</th><th scope="col">Duration</th><th scope="col">Strategy</th><th scope="col">Trips Offered</th><th scope="col">Total Miles</th><th scope="col">Estimated Vehicle Cost</th><th scope="col">Actions</th></tr></thead>
+      <tbody>{loading ? <tr><td colSpan={8}>Loading sessions…</td></tr> : error ? <tr><td colSpan={8}>Sessions unavailable.</td></tr> : !rows.length ? <tr><td colSpan={8}>No delivery sessions recorded.</td></tr> : rows.map((row) => <tr key={row.id}>
         <td>{displaySessionDate(row.startedAt)}{row.associationIntegrity && <small className="merchant-city">Association review required</small>}</td><td>{displaySessionTime(row.startedAt)}<br />{displaySessionTime(row.endedAt)}</td><td>{formatDuration(row.sessionDurationSeconds)}</td>
-        <td>{strategies.find((item) => item.value === row.strategy)?.label ?? "Not recorded"}<span className="merchant-city">{row.deliveryIds.length} linked deliveries</span></td><td>{row.totalDrivenMiles === undefined ? "Unknown" : `${row.totalDrivenMiles} mi`}</td>
+        <td>{strategies.find((item) => item.value === row.strategy)?.label ?? "Not recorded"}<span className="merchant-city">{row.deliveryIds.length} linked deliveries</span></td>
+        <td className="session-offers-cell">{platforms.map(({ value, label }) => `${label}: ${row.tripsOfferedByPlatform?.[value] ?? "—"}`).join(" · ")}</td>
+        <td>{row.totalDrivenMiles === undefined ? "Unknown" : `${row.totalDrivenMiles} mi`}</td>
         <td><details><summary>{row.vehicleCost.knownAndEstimatedCost === null ? "Unavailable" : usd(row.vehicleCost.knownAndEstimatedCost)} · {row.vehicleCost.completeness === "complete" ? "Complete" : "Incomplete"}</summary><SessionCost cost={row.vehicleCost} /></details></td>
         <td><div className="row-actions"><button type="button" className="icon-action" aria-label={`Edit session ${row.id.slice(-6)}`} onClick={() => setEditing(row)}>✎</button><button type="button" className="icon-action destructive" aria-label={`Delete session ${row.id.slice(-6)}`} onClick={() => { setActionError(""); setTarget(row); }}>⌫</button></div></td>
       </tr>)}</tbody>

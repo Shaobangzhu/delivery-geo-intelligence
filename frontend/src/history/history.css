@@ -123,6 +123,7 @@
 .session-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .session-section h2 { margin: 0; font-size: 18px; }
 .session-table { min-width: 900px; }
+.session-offers-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .session-table summary, .vehicle-panel summary { cursor: pointer; color: #294775; }
 .session-table summary:focus-visible, .vehicle-panel summary:focus-visible { outline: 2px solid #0875ff; outline-offset: 3px; }
 .session-cost { min-width: 250px; max-width: 380px; margin-top: 12px; font-size: 12px; }
