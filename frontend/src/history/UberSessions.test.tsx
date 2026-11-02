@@ -40,7 +40,7 @@ afterEach(() => vi.resetAllMocks());
 
 it("clears stale vehicle assumptions after a failed refresh", async () => {
   const view = render(<UberSessions merchants={merchants} deliveryRevision={0} />);
-  await screen.findByText("No Uber Eats sessions recorded.");
+  await screen.findByText("No delivery sessions recorded.");
   const user = userEvent.setup(); await user.click(screen.getByText("Tesla Model Y — Vehicle Economics"));
   expect(screen.getByRole("button", { name: "Edit Vehicle Settings" })).toBeInTheDocument();
   vi.mocked(api.getEconomics).mockRejectedValue(new Error("Synthetic load failure"));
@@ -60,7 +60,7 @@ it("shows an unfinished association warning and resubmits reviewed links even wh
 function mount() { render(<UberSessions merchants={merchants} deliveryRevision={0} />); }
 
 it("creates an explicitly linked session across midnight/DST and validates independent business mileage", async () => {
-  const user = userEvent.setup(); mount(); await screen.findByText("No Uber Eats sessions recorded.");
+  const user = userEvent.setup(); mount(); await screen.findByText("No delivery sessions recorded.");
   await user.click(screen.getByRole("button", { name: /Add Session/ }));
   const dialog = screen.getByRole("dialog", { name: "Add Session" });
   expect(screen.getByLabelText("Session Start *")).toHaveFocus();
@@ -100,7 +100,7 @@ it("edits a session with no automatic relinking, intentionally clears optional m
   expect(screen.getByRole("dialog")).toHaveTextContent("unlinked and retained"); expect(api.deleteSession).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Cancel" })); expect(api.deleteSession).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Delete session test-a" })); await user.click(screen.getByRole("button", { name: "Delete Session" }));
-  await screen.findByText("No Uber Eats sessions recorded."); expect(api.deleteSession).toHaveBeenCalledExactlyOnceWith(base.id);
+  await screen.findByText("No delivery sessions recorded."); expect(api.deleteSession).toHaveBeenCalledExactlyOnceWith(base.id);
 });
 
 it("labels partial cost components without presenting unknown depreciation as zero", async () => {
@@ -116,7 +116,7 @@ it("labels partial cost components without presenting unknown depreciation as ze
 it("initializes confirmed history, displays correct attribution, and saves optional vehicle estimates", async () => {
   const user = userEvent.setup(); vi.mocked(api.getEconomics).mockResolvedValue({ data: null, historicalMileage: [] });
   vi.mocked(api.initializeEconomics).mockImplementation(async () => { vi.mocked(api.getEconomics).mockResolvedValue(initialized); return initialized; });
-  mount(); await screen.findByText("No Uber Eats sessions recorded.");
+  mount(); await screen.findByText("No delivery sessions recorded.");
   await user.click(screen.getByText("Tesla Model Y — Vehicle Economics", { exact: true }));
   await user.click(screen.getByRole("button", { name: "Initialize Missing Confirmed Records" }));
   expect(await screen.findByText("42.97%")).toBeInTheDocument(); expect(screen.getByText("20.00%")).toBeInTheDocument();
@@ -136,7 +136,7 @@ it("initializes confirmed history, displays correct attribution, and saves optio
 });
 
 it("creates annual mileage with unknown non-Uber categories and edits known history", async () => {
-  const user = userEvent.setup(); mount(); await screen.findByText("No Uber Eats sessions recorded.");
+  const user = userEvent.setup(); mount(); await screen.findByText("No delivery sessions recorded.");
   await user.click(screen.getByText("Tesla Model Y — Vehicle Economics", { exact: true }));
   await user.click(screen.getByRole("button", { name: /Add Annual Mileage/ }));
   for (const [label, value] of [["Tax Year *", "2026"], ["Total Vehicle Miles *", "1000"], ["Uber Eats Business Miles *", "400"]]) await user.type(screen.getByLabelText(label), value);
@@ -167,7 +167,7 @@ it("handles unavailable lists with retry", async () => {
   const user = userEvent.setup(); vi.mocked(api.listSessions).mockRejectedValueOnce(new Error("private database detail"));
   mount(); expect(await screen.findByRole("alert")).not.toHaveTextContent("private database detail");
   await user.click(screen.getByRole("button", { name: "Retry session data" }));
-  await screen.findByText("No Uber Eats sessions recorded.");
+  await screen.findByText("No delivery sessions recorded.");
 });
 
 it("preserves explicit links outside edited time bounds until they are intentionally unchecked", async () => {

@@ -322,3 +322,26 @@ test.integration("isolated API reads complete periods and safely extends Payment
     try { if (connected) await db.dropDatabase(); } finally { await client.close(); }
   }
 });
+
+test("proven foreign boundary-crossing Sessions cannot contaminate platform coverage even with missing foreign mileage", () => {
+  const f = fixture();
+  const foreign = { _id: new ObjectId(), startedAt: new Date("2026-02-28T23:00:00-08:00"), endedAt: new Date("2026-03-01T01:00:00-08:00") };
+  f.sessions.push(foreign);
+  f.deliveries.push({ _id: new ObjectId(), platform: "doordash", pickedUpAt: new Date("2026-03-01T00:30:00-08:00"), sessionId: foreign._id, payout: 0 });
+  const result = calc(f);
+  assert.equal(result.status, "ready"); assert.equal(result.workPeriodRevenue, 84.17);
+  assert.equal(result.sessionCoverage.totalHours, 3); assert.equal(result.sessionCoverage.totalMiles, 30);
+  assert.equal(result.sessionCoverage.excludedOtherPlatformSessionCount, 1);
+  assert.equal(result.sessionCoverage.excludedBoundarySessionCount, 0);
+  assert.equal(result.vehicleCost.fullTotal, 2.7);
+});
+test("out-of-window unknown linked Delivery prevents exclusive Session attribution without losing known platform payouts", () => {
+  const f = fixture();
+  f.deliveries.push({ _id: new ObjectId(), sessionId: f.sessions[0]._id, pickedUpAt: new Date("2026-04-01T00:00:00Z"), payout: 0 });
+  const result = calc(f);
+  assert.equal(result.deliveryRevenue.knownTotal, 60); assert.equal(result.actualAdjustment, 24.17);
+  assert.ok(result.reasons.includes("unknown_session_platform"));
+  assert.ok(result.reasons.includes("linked_delivery_outside_coverage"));
+  assert.equal(result.workPeriodRevenue, null); assert.equal(result.adjustedEarningsPerHour, null);
+  assert.equal(result.sessionCoverage.totalMiles, null); assert.equal(result.estimatedEconomicProfit, null);
+});

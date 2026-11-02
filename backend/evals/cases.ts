@@ -54,6 +54,18 @@ const controlled = (error: unknown, code: string, status?: number) => {
 const reject = (promise: Promise<unknown>, code: string, status?: number) => assert.rejects(promise, (error) => controlled(error, code, status));
 
 export const cases: AgentEvalCase[] = [
+  failure("settlement-platform-projection", "Privacy & Injection", "Validate platform metadata without inferred or private values.", async () => {
+    const fixture = syntheticRegistry();
+    const args = { settlementId: null, limit: 1 };
+    const valid = await fixture.registry.execute("get_settlement_efficiency", args);
+    assert.equal(valid.settlements[0]!.platform, "uber_eats");
+    const original = await fixture.domain.settlements({} as Db);
+    for (const platform of ["unknown", "month", "SYNTHETIC_PRIVATE_NOTE"]) {
+      fixture.domain.settlements = async () => ({ ...original, data: original.data.map((row) => ({ ...row, platform: platform as never })) });
+      await reject(fixture.registry.execute("get_settlement_efficiency", args), "invalid_tool_result", 503);
+    }
+    assert.equal(fixture.registry.definitions.some((tool) => String(tool.name) === "compare_delivery_platforms"), false);
+  }),
   success("detailed-all", "Calendar Scope", "How much have I recorded in DGI since 2026?", { tools: ["get_period_summary"], explanation: safeExplanation, select: /Total earnings/,
     args: { get_period_summary: { period: "all", category: "all", asOf: null, year: null } } }, ({ result, fixture }) => {
     assert.match(result.answer, /2026-01-01–2026-03-08/);

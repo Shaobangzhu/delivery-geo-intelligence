@@ -8,6 +8,8 @@ Explore **personally recorded last-mile delivery activity** through maps, earnin
 
 [CI runs](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/workflows/ci.yml) · [Public Allure quality report](https://dgi-quality-report.pages.dev/) · [Quick start](#quick-start) · [Engineering docs](#engineering-docs)
 
+Multi-platform History supports Uber Eats and DoorDash Deliveries and Prop 22 payments. New records require platform; legacy records remain Unknown until explicitly corrected. Settlement analysis requires exclusive Session attribution; Dashboard cash earnings remain an all-platform aggregate. See [data contracts](docs/data-model.md#multi-platform-delivery-foundation) and [settlement boundaries](docs/analytics-model.md#platform-specific-settlement-boundaries).
+
 ## Application preview
 
 ### Dashboard
