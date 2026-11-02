@@ -70,7 +70,16 @@ export function History() {
     setLoading(true);
     setListError("");
     listDeliveries({ platform, search, category, fromDate, toDate, sort, page, pageSize: PAGE_SIZE }, controller.signal)
-      .then((data) => { if (active) { setResult(data); setLoading(false); } })
+      .then((data) => {
+        if (!active) return;
+        const lastPage = Math.max(1, data.pagination.totalPages);
+        if (page > lastPage) {
+          setPage(lastPage);
+          return;
+        }
+        setResult(data);
+        setLoading(false);
+      })
       .catch((error: unknown) => {
         if (active && !isAbort(error)) { setListError(userFacingError(error)); setLoading(false); }
       });
@@ -84,7 +93,7 @@ export function History() {
 
   function refreshAfterSave() {
     setEditor(undefined);
-    setPage(1);
+    if (editor === null) setPage(1);
     setReload((value) => value + 1);
   }
 

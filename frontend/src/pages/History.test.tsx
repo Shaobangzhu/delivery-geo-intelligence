@@ -68,7 +68,8 @@ function installApi(options: {
       if (options.patch) return options.patch(payload);
       const id = url.pathname.split("/").at(-1);
       rows = rows.map((row) => row.id === id ? { ...row, merchantId: payload.merchantId,
-        pickedUpAt: payload.pickedUpAt, hasDestinationLocation: row.hasDestinationLocation || Boolean(payload.destinationAddress) } : row);
+        pickedUpAt: payload.pickedUpAt, ...(payload.platform ? { platform: payload.platform } : {}),
+        hasDestinationLocation: row.hasDestinationLocation || Boolean(payload.destinationAddress) } : row);
       rows = rows.map((row) => {
         if (row.id !== id || payload.deliveryDurationSeconds === undefined) return row;
         const { deliveryDurationSeconds: previous, ...rest } = row;
@@ -90,10 +91,161 @@ function requests(fetchMock: ReturnType<typeof vi.fn>, method: string, path: str
   return fetchMock.mock.calls.filter(([input, init]) => new URL(String(input), "http://localhost").pathname === path && (init?.method ?? "GET") === method);
 }
 
+function syntheticRows(count: number): Delivery[] {
+  return Array.from({ length: count }, (_, index) => ({
+    ...initialRows[0], id: `delivery-${index}`, pickedUpAt: new Date(Date.UTC(2026, 3, 20, 14, index)).toISOString()
+  }));
+}
+
+async function navigateToPage(user: ReturnType<typeof userEvent.setup>, page: number) {
+  for (let current = 1; current < page; current += 1) {
+    const next = screen.getByRole("button", { name: "Next page" });
+    await waitFor(() => expect(next).toBeEnabled());
+    await user.click(next);
+    await waitFor(() => expect(screen.getByRole("button", { name: `Page ${current + 1}` })).toHaveAttribute("aria-current", "page"));
+  }
+  await waitFor(() => expect(screen.getByRole("button", { name: `Page ${page}` })).toBeEnabled());
+}
+
+function deliveryQueries(fetchMock: ReturnType<typeof vi.fn>) {
+  return requests(fetchMock, "GET", "/api/deliveries")
+    .map(([input]) => new URL(String(input), "http://localhost").searchParams);
+}
+
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Delivery History", () => {
+  it("refreshes an edited platform on page 8 without resetting pagination", async () => {
+    const user = userEvent.setup();
+    const fetchMock = installApi({ rows: syntheticRows(88) });
+    render(<History />);
+    await screen.findByText("Showing 1–10 of 88 deliveries");
+    await navigateToPage(user, 8);
+    await screen.findByText("Showing 71–80 of 88 deliveries");
+    const before = deliveryQueries(fetchMock).length;
+    await user.click(screen.getAllByRole("button", { name: "Edit delivery for Test Merchant A" })[0]);
+    const dialog = screen.getByRole("dialog", { name: "Edit Delivery" });
+    await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "uber_eats");
+    await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await within(screen.getAllByRole("table")[0]).findByText("Uber Eats")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Page 8" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Showing 71–80 of 88 deliveries")).toBeInTheDocument();
+    expect(deliveryQueries(fetchMock).slice(before).map((query) => query.get("page"))).toEqual(["8"]);
+  });
+
+  it("returns to page 1 after creating a delivery from page 2", async () => {
+    const user = userEvent.setup();
+    const fetchMock = installApi({ rows: syntheticRows(12) });
+    render(<History />);
+    await screen.findByText("Showing 1–10 of 12 deliveries");
+    await navigateToPage(user, 2);
+    const before = deliveryQueries(fetchMock).length;
+    await user.click(screen.getByRole("button", { name: /Add Delivery/ }));
+    const dialog = screen.getByRole("dialog");
+    await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "doordash");
+    await user.selectOptions(within(dialog).getByLabelText(/Merchant/), "merchant-a");
+    fireEvent.change(within(dialog).getByLabelText(/Pickup Date & Time/), { target: { value: "2026-04-21T12:30" } });
+    await user.type(within(dialog).getByLabelText(/Destination Address/), "synthetic-destination-token");
+    await user.click(within(dialog).getByRole("button", { name: "Save Delivery" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await screen.findByText("Showing 1–10 of 13 deliveries");
+    expect(screen.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+    expect(deliveryQueries(fetchMock).slice(before).map((query) => query.get("page"))).toEqual(["1"]);
+  });
+
+  it.each([
+    { count: 22, page: 2, expectedPage: 2, expectedRequests: ["2"], showing: "Showing 11–20 of 21 deliveries" },
+    { count: 21, page: 3, expectedPage: 2, expectedRequests: ["3", "2"], showing: "Showing 11–20 of 20 deliveries" },
+    { count: 1, page: 1, expectedPage: 1, expectedRequests: ["1"], showing: "Showing 0 of 0 deliveries" }
+  ])("keeps filtered pagination valid after an edit ($count records)", async ({ count, page, expectedPage, expectedRequests, showing }) => {
+    const user = userEvent.setup();
+    const fetchMock = installApi({ rows: syntheticRows(count) });
+    render(<History />);
+    await screen.findByText(`Showing 1–${Math.min(count, 10)} of ${count} deliveries`);
+    await user.type(screen.getByLabelText("Merchant search"), "Merchant A");
+    await user.selectOptions(screen.getByLabelText("Delivery Platform"), "unknown");
+    await user.selectOptions(screen.getByLabelText("Category"), "restaurant");
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-04-01" } });
+    fireEvent.change(screen.getByLabelText("To date"), { target: { value: "2026-04-30" } });
+    await user.selectOptions(screen.getByLabelText("Sort"), "oldest");
+    await navigateToPage(user, page);
+    const before = deliveryQueries(fetchMock).length;
+    const originalQuery = Object.fromEntries(deliveryQueries(fetchMock).at(-1)!);
+    await user.click(screen.getAllByRole("button", { name: "Edit delivery for Test Merchant A" })[0]);
+    const dialog = screen.getByRole("dialog");
+    await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "doordash");
+    await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await screen.findByText(showing);
+    const refreshed = deliveryQueries(fetchMock).slice(before);
+    expect(refreshed.map((query) => query.get("page"))).toEqual(expectedRequests);
+    for (const query of refreshed) {
+      expect(Object.fromEntries(query)).toEqual({ ...originalQuery, page: query.get("page") });
+    }
+    expect(within(screen.getAllByRole("table")[0]).queryByText("DoorDash")).not.toBeInTheDocument();
+    if (count > 1) {
+      expect(screen.getByRole("button", { name: `Page ${expectedPage}` })).toHaveAttribute("aria-current", "page");
+    } else {
+      expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    }
+  });
+
+  it("preserves page 2 when editing is canceled or fails", async () => {
+    const user = userEvent.setup();
+    const fetchMock = installApi({ rows: syntheticRows(12), patch: () => reply({ error: "Save failed" }, 500) });
+    render(<History />);
+    await screen.findByText("Showing 1–10 of 12 deliveries");
+    await navigateToPage(user, 2);
+    const before = deliveryQueries(fetchMock).length;
+    await user.click(screen.getAllByRole("button", { name: "Edit delivery for Test Merchant A" })[0]);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    await user.click(screen.getAllByRole("button", { name: "Edit delivery for Test Merchant A" })[0]);
+    const dialog = screen.getByRole("dialog", { name: "Edit Delivery" });
+    await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "uber_eats");
+    await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("The server could not complete the request.");
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    expect(deliveryQueries(fetchMock)).toHaveLength(before);
+  });
+
+  it.each(["Merchant search", "Delivery Platform", "Category", "From date", "To date", "Sort"])(
+    "still resets page 2 to page 1 when %s changes", async (label) => {
+      const user = userEvent.setup();
+      const fetchMock = installApi({ rows: syntheticRows(12) });
+      render(<History />);
+      await screen.findByText("Showing 1–10 of 12 deliveries");
+      await navigateToPage(user, 2);
+      if (label === "Merchant search") await user.type(screen.getByLabelText(label), "Test");
+      else if (label === "From date" || label === "To date") {
+        fireEvent.change(screen.getByLabelText(label), { target: { value: label === "From date" ? "2026-04-01" : "2026-04-30" } });
+      } else {
+        await user.selectOptions(screen.getByLabelText(label), label === "Sort" ? "oldest" : label === "Category" ? "restaurant" : "unknown");
+      }
+      await waitFor(() => expect(screen.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page"));
+      expect(deliveryQueries(fetchMock).at(-1)?.get("page")).toBe("1");
+    }
+  );
+
+  it("returns to the previous page when deleting the last delivery on a page", async () => {
+    const user = userEvent.setup();
+    const fetchMock = installApi({ rows: syntheticRows(11) });
+    render(<History />);
+    await screen.findByText("Showing 1–10 of 11 deliveries");
+    await navigateToPage(user, 2);
+    const before = deliveryQueries(fetchMock).length;
+    await user.click(screen.getByRole("button", { name: "Delete delivery for Test Merchant A" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Delivery" }));
+    await screen.findByText("Showing 1–10 of 10 deliveries");
+    expect(screen.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+    expect(deliveryQueries(fetchMock).slice(before).map((query) => query.get("page"))).toEqual(["1"]);
+  });
+
   it("ignores an older list response after filters change", async () => {
     const user = userEvent.setup();
     let finishOld!: (response: Response) => void;
