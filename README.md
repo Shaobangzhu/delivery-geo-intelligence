@@ -14,25 +14,25 @@ Explore **personally recorded last-mile delivery activity** through maps, earnin
 
 ![Dashboard with synthetic delivery totals, earnings, filters, charts, and the offline map panel](docs/images/dashboard-synthetic.png)
 
-*Two synthetic deliveries in the selected week produce the visible summary and charts. The pale map canvas uses the offline SDK adapter; this capture does not verify a live ArcGIS basemap.*
+_The Dashboard demo highlights the Merchant Diversity view for the 2026 year-to-date period, displaying 84 recorded deliveries, 21 unique merchants, 43 observed destination areas, and $1,127.99 in total earnings. Interactive map markers, merchant category distribution, pickup activity trends, and merchant rankings demonstrate the platform's geospatial analytics capabilities._
 
 ### History
 
 ![History page listing three synthetic deliveries and one synthetic Prop 22 payment](docs/images/history-synthetic.png)
 
-*Three synthetic delivery records and one synthetic Prop 22 payment demonstrate the list and entry controls.*
+_Three synthetic delivery records and one synthetic Prop 22 payment demonstrate the list and entry controls._
 
 ### Merchants
 
 ![Merchants page listing two synthetic public pickup locations](docs/images/merchants-synthetic.png)
 
-*Two synthetic public pickup locations demonstrate merchant search and management.*
+_Two synthetic public pickup locations demonstrate merchant search and management._
 
 ### Data & Settings
 
 ![Data & Settings page showing synthetic MongoDB health and unverified browser and provider states](docs/images/settings-synthetic.png)
 
-*The Dashboard, History, and Merchants captures were taken November 1, 2026 in isolated Chromium at 1200 × 820; this Settings capture was taken October 25, 2026. All use synthetic E2E fixtures, a local Express API and disposable MongoDB, an offline ArcGIS SDK adapter, injected geocoding, and no OpenAI configuration. They contain no personal records or Home coordinates. No capture verifies live ArcGIS rendering or connectivity. [Capture boundaries](docs/e2e-testing.md#readme-showcase-screenshots).*
+_The Dashboard, History, and Merchants captures were taken November 1, 2026 in isolated Chromium at 1200 × 820; this Settings capture was taken October 25, 2026. All use synthetic E2E fixtures, a local Express API and disposable MongoDB, an offline ArcGIS SDK adapter, injected geocoding, and no OpenAI configuration. They contain no personal records or Home coordinates. No capture verifies live ArcGIS rendering or connectivity. [Capture boundaries](docs/e2e-testing.md#readme-showcase-screenshots)._
 
 ## MERN architecture
 
@@ -55,13 +55,13 @@ flowchart LR
 
 React owns interaction and browser maps; Express validates requests and owns persistence, geocoding, analytics, and optional AI orchestration.
 
-| Layer | Responsibility |
-| --- | --- |
-| **React + TypeScript** | Four routed pages, forms, charts, browser ArcGIS map lifecycle. |
+| Layer                       | Responsibility                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| **React + TypeScript**      | Four routed pages, forms, charts, browser ArcGIS map lifecycle.                            |
 | **Node.js + Express + Zod** | Validated HTTP API, business rules, provider boundaries, read-only analytics and AI tools. |
-| **MongoDB native driver** | Merchant, delivery, settlement, session, vehicle, and annual records; no Mongoose layer. |
-| **ArcGIS** | Browser Maps SDK for visualization; separate backend geocoding for submitted locations. |
-| **OpenAI Responses API** | Optional analyst invoked by an explicit user question. |
+| **MongoDB native driver**   | Merchant, delivery, settlement, session, vehicle, and annual records; no Mongoose layer.   |
+| **ArcGIS**                  | Browser Maps SDK for visualization; separate backend geocoding for submitted locations.    |
+| **OpenAI Responses API**    | Optional analyst invoked by an explicit user question.                                     |
 
 The frontend and backend run locally on the host; Docker Compose starts MongoDB only. The application has no public hosting or multi-user authentication. [Architecture and API](docs/architecture.md) · [Data model](docs/data-model.md).
 
@@ -160,13 +160,13 @@ The [CI workflow](.github/workflows/ci.yml) runs for PRs to `main`, pushes to `m
 
 On **November 1, 2026**, [main commit `f05d31b`](https://github.com/Shaobangzhu/delivery-geo-intelligence/commit/f05d31bdd3a8e369a8ac2dde2e8b137ebd7725af) completed [CI run 41357983707](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/41357983707) with **12 successful jobs**. These are measured run results, not targets or stability estimates.
 
-| Check | Verified result |
-| --- | --- |
-| Backend native Node coverage suite | 178 passed · statement 94.44% · branch 92.19% · function 96.93% · line 94.44% |
-| Frontend Vitest coverage suite | 144 passed · statement 89.45% · branch 84.92% · function 88.18% · line 92.36% |
-| Chromium E2E smoke | 9 passed against the application with synthetic fixtures and isolated providers |
-| Offline AI evaluation | 39/39 scenarios · zero real provider calls |
-| Allure report | 653 execution records across overlapping test batches; **not** 653 unique tests |
+| Check                              | Verified result                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| Backend native Node coverage suite | 178 passed · statement 94.44% · branch 92.19% · function 96.93% · line 94.44%   |
+| Frontend Vitest coverage suite     | 144 passed · statement 89.45% · branch 84.92% · function 88.18% · line 92.36%   |
+| Chromium E2E smoke                 | 9 passed against the application with synthetic fixtures and isolated providers |
+| Offline AI evaluation              | 39/39 scenarios · zero real provider calls                                      |
+| Allure report                      | 653 execution records across overlapping test batches; **not** 653 unique tests |
 
 [Release run 41358311367](https://github.com/Shaobangzhu/delivery-geo-intelligence/actions/runs/41358311367) prepared the audited report and logged a successful Cloudflare Pages upload. The [public report hostname](https://dgi-quality-report.pages.dev/) serves static Allure HTML, while CI retains `consolidated-test-report` artifacts. This release review did not independently open the production site in a browser. The exact browser bundle is [approved through November 7, 2026 UTC](docs/allure-bundle-security-review.md); later uploads require a new review. GitHub branch protection was not active in the latest audit, so the workflow alone does not enforce PR merges. [Coverage and audit context](docs/quality-architecture.md) · [Publishing and history](docs/cloudflare-allure-deployment.md).
 
@@ -184,11 +184,11 @@ cp frontend/.env.example frontend/.env
 
 Set private local configuration before starting:
 
-| File | Required values |
-| --- | --- |
-| `.env` | `DGI_MONGO_ROOT_USERNAME` and a private `DGI_MONGO_ROOT_PASSWORD` for Compose. |
-| `backend/.env` | `MONGODB_URI` using those credentials, loopback port 27017, database `delivery_geo_intelligence`, and `authSource=admin`; URL-encode password characters. Set `ARCGIS_GEOCODING_API_KEY` for the backend. |
-| `frontend/.env` | Set a separate browser-consumed `VITE_ARCGIS_API_KEY`. Keep optional Home coordinates empty in shared builds. |
+| File            | Required values                                                                                                                                                                                           |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.env`          | `DGI_MONGO_ROOT_USERNAME` and a private `DGI_MONGO_ROOT_PASSWORD` for Compose.                                                                                                                            |
+| `backend/.env`  | `MONGODB_URI` using those credentials, loopback port 27017, database `delivery_geo_intelligence`, and `authSource=admin`; URL-encode password characters. Set `ARCGIS_GEOCODING_API_KEY` for the backend. |
+| `frontend/.env` | Set a separate browser-consumed `VITE_ARCGIS_API_KEY`. Keep optional Home coordinates empty in shared builds.                                                                                             |
 
 `OPENAI_API_KEY` is optional in `backend/.env`; `OPENAI_MODEL` defaults to `gpt-4.1-mini`. The backend needs its geocoding credential at startup. Browser `VITE_` variables are visible to clients, so never place the backend key there. Default backend port is 3000; the frontend uses 5173.
 
@@ -215,14 +215,14 @@ The E2E command uses disposable MongoDB data and injected provider responses. Pa
 
 ## Engineering docs
 
-| Topic | Deep dive |
-| --- | --- |
-| MERN architecture and data | [System/API](docs/architecture.md) · [Collections and endpoints](docs/data-model.md) |
-| Analytics and GIS | [Dashboard](docs/dashboard.md) · [Accounting and completeness](docs/analytics-model.md) · [Geocoding](docs/geocoding.md) |
-| Privacy and operations | [Privacy model](docs/privacy-model.md) · [Provider observations](docs/observability.md) · [Data & Settings](docs/data-settings.md) |
-| AI | [Tools and API](docs/architecture.md#ai-tool-and-http-reference) · [Offline evaluation](docs/ai-evaluation.md) |
-| Quality and CI | [Quality baseline](docs/quality-engineering.md) · [Reliability tests](docs/reliability-testing.md) · [CI gate](docs/ci.md) · [Gate failure demo](docs/quality-gate-demo.md) |
-| Reporting | [Allure 3](docs/allure-reporting.md) · [Cloudflare static report/history](docs/cloudflare-allure-deployment.md) |
+| Topic                      | Deep dive                                                                                                                                                                   |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MERN architecture and data | [System/API](docs/architecture.md) · [Collections and endpoints](docs/data-model.md)                                                                                        |
+| Analytics and GIS          | [Dashboard](docs/dashboard.md) · [Accounting and completeness](docs/analytics-model.md) · [Geocoding](docs/geocoding.md)                                                    |
+| Privacy and operations     | [Privacy model](docs/privacy-model.md) · [Provider observations](docs/observability.md) · [Data & Settings](docs/data-settings.md)                                          |
+| AI                         | [Tools and API](docs/architecture.md#ai-tool-and-http-reference) · [Offline evaluation](docs/ai-evaluation.md)                                                              |
+| Quality and CI             | [Quality baseline](docs/quality-engineering.md) · [Reliability tests](docs/reliability-testing.md) · [CI gate](docs/ci.md) · [Gate failure demo](docs/quality-gate-demo.md) |
+| Reporting                  | [Allure 3](docs/allure-reporting.md) · [Cloudflare static report/history](docs/cloudflare-allure-deployment.md)                                                             |
 
 ## Scope and limits
 
