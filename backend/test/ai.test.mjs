@@ -6,7 +6,8 @@ import { once } from "node:events";
 import { ObjectId } from "mongodb";
 import { createToolRegistry, toolDefinitions } from "../dist/ai/tools.js";
 import { createAnalyst, askSchema } from "../dist/ai/agent.js";
-import { requiresComparisonBoundary } from "../dist/ai/evidence.js";
+import { requiresComparisonBoundary, createEvidenceCollector } from "../dist/ai/evidence.js";
+import { projectAggregate } from "../dist/ai/projection.js";
 import { createResponsesClient } from "../dist/ai/provider.js";
 import { createApp } from "../dist/app.js";
 import { calculateDeliveryEfficiency, aggregateSessionEfficiency, calculateSessionEfficiency } from "../dist/efficiency.js";
@@ -16,8 +17,8 @@ import { ensureIndexes } from "../dist/db.js";
 
 const now = new Date("2026-03-08T20:00:00Z"), sessionId = new ObjectId(), merchantId = new ObjectId();
 const session = { _id: sessionId, startedAt: new Date("2026-03-08T09:00:00Z"), endedAt: new Date("2026-03-08T10:00:00Z"), totalDrivenMiles: 10, strategy: "eastvale_local_only" };
-const delivery = { _id: new ObjectId(), merchantId, pickedUpAt: session.startedAt, sessionId, payout: 0, distanceMiles: 1, deliveryDurationSeconds: 3600 };
-const payment = { _id: new ObjectId(), type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 20,
+const delivery = { platform: "uber_eats", _id: new ObjectId(), merchantId, pickedUpAt: session.startedAt, sessionId, payout: 0, distanceMiles: 1, deliveryDurationSeconds: 3600 };
+const payment = { platform: "uber_eats", _id: new ObjectId(), type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 20,
   coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: false };
 const args = { period: "month", asOf: "2026-03-08", year: null };
 const defaultArgs = (name) => name === "get_annual_uber_summary" ? { years: [2022], includeMonthly: false } : name === "get_settlement_efficiency" ? { settlementId: null, limit: 1 }
@@ -86,6 +87,22 @@ test("all seven typed tools reuse existing analytics, preserve unknown/zero/coho
   const deliveryData = await tools.execute("get_delivery_efficiency", { ...args, category: "grocery" });
   assert.equal(deliveryData.metrics.payoutPerRecordedHour.value, 0);
   assert.equal(tools.calls.at(-1).inputs[1].category, "grocery");
+});
+test("settlement AI projection bounds platforms/reasons and evidence keeps platform provenance", async () => {
+  const tools = registry();
+  const uber = tools.data.settlements.data[0];
+  const door = { ...uber, platform: "doordash", reasons: ["mixed_platform_session", "unknown_session_platform", "unknown_delivery_platform"] };
+  tools.data.settlements.data.push(door);
+  const data = await tools.execute("get_settlement_efficiency", { settlementId: null, limit: 2 });
+  assert.equal(data.settlements[0].platform, "uber_eats"); assert.equal(data.settlements[1].platform, "doordash");
+  assert.deepEqual(data.settlements[1].reasons, door.reasons);
+  const evidence = createEvidenceCollector().collect(data, "get_settlement_efficiency", 1);
+  const amounts = evidence.filter((fact) => fact.label.includes("Actual received adjustment"));
+  assert.equal(amounts.length, 2); assert.match(amounts[0].source.scope, /platform uber_eats/); assert.match(amounts[1].source.scope, /platform doordash/);
+  assert.equal(requiresComparisonBoundary(amounts), true);
+  for (const platform of ["unknown", "month", "PRIVATE_NOTE", "invalid", 1, true, ["uber_eats"], {}]) assert.throws(() => projectAggregate({ platform }), { code: "invalid_tool_result" });
+  assert.deepEqual(projectAggregate({ platform: null, reasons: ["unknown_payment_platform"], notes: "PRIVATE", coordinates: [0, 0] }), { platform: null, reasons: ["unknown_payment_platform"] });
+  assert.throws(() => projectAggregate({ reasons: ["PRIVATE_NOTE"] }), { code: "invalid_tool_result" });
 });
 test("multiple tools ground a final answer using exact server-rendered evidence and redacted usage diagnostics", async () => {
   const requests = [], diagnostics = [], tools = registry();

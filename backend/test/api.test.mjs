@@ -10,7 +10,7 @@ import { ensureIndexes } from "../dist/db.js";
 import { GeocodingError, generalizeCoordinates } from "../dist/geocoding.js";
 
 test("duration schemas reject nonpositive, fractional, malformed, and nonfinite values", () => {
-  const base = { merchantId: new ObjectId().toHexString(), pickedUpAt: "2026-04-01T10:00:00Z" };
+  const base = { platform: "uber_eats", merchantId: new ObjectId().toHexString(), pickedUpAt: "2026-04-01T10:00:00Z" };
   for (const value of [-1, 0, 1.5, NaN, Infinity, -Infinity, "41", {}, true]) {
     assert.equal(deliveryInputSchema.safeParse({ ...base, deliveryDurationSeconds: value }).success, false);
     assert.equal(deliveryPatchSchema.safeParse({ deliveryDurationSeconds: value }).success, false);
@@ -136,7 +136,7 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
     });
 
     await t.test("delivery validation, optional payout, and CRUD", async () => {
-      const baseDelivery = { merchantId: merchantAId, pickedUpAt: "2026-04-01T10:00:00-07:00" };
+      const baseDelivery = { platform: "uber_eats", merchantId: merchantAId, pickedUpAt: "2026-04-01T10:00:00-07:00" };
       assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, payout: -1 })).status, 400);
       assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, distanceMiles: -1 })).status, 400);
       assert.equal((await api("POST", "/api/deliveries", { ...baseDelivery, pickedUpAt: "not-a-date" })).status, 400);
@@ -155,7 +155,7 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
       assert.equal(Object.hasOwn(stored, "destinationAddress"), false);
 
       const second = await api("POST", "/api/deliveries", {
-        merchantId: merchantBId, pickedUpAt: "2026-04-03T12:00:00-07:00", payout: 0, distanceMiles: 2.5
+        platform: "uber_eats", merchantId: merchantBId, pickedUpAt: "2026-04-03T12:00:00-07:00", payout: 0, distanceMiles: 2.5
       });
       assert.equal(second.status, 201);
       deliveryBId = second.body.data.id;
@@ -174,7 +174,7 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
 
     await t.test("filters, sort, pagination, and malformed IDs", async () => {
       const third = await api("POST", "/api/deliveries", {
-        merchantId: merchantAId, pickedUpAt: "2026-04-05T09:00:00-07:00", payout: 7
+        platform: "uber_eats", merchantId: merchantAId, pickedUpAt: "2026-04-05T09:00:00-07:00", payout: 7
       });
       assert.equal(third.status, 201);
       const page = await api("GET", "/api/deliveries?page=2&pageSize=2&sort=oldest");
@@ -242,7 +242,7 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
       pauseConcurrentGeocode = new Promise((resolve) => { resume = resolve; });
       const started = new Promise((resolve) => { notifyConcurrentGeocode = resolve; });
       const pendingDelivery = api("POST", "/api/deliveries", {
-        merchantId: temporary.body.data.id, pickedUpAt: "2026-04-08T10:00:00-07:00",
+        platform: "uber_eats", merchantId: temporary.body.data.id, pickedUpAt: "2026-04-08T10:00:00-07:00",
         destinationAddress: "synthetic-concurrent-geocode"
       });
       await started;
@@ -253,7 +253,7 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
     });
 
     await t.test("transient destination is generalized, replaced, and never returned", async () => {
-      const body = { merchantId: merchantAId, pickedUpAt: "2026-04-06T09:00:00-07:00", destinationAddress: transientInputA };
+      const body = { platform: "uber_eats", merchantId: merchantAId, pickedUpAt: "2026-04-06T09:00:00-07:00", destinationAddress: transientInputA };
       const before = await db.collection("deliveries").countDocuments();
       const noMatch = await api("POST", "/api/deliveries", { ...body, destinationAddress: "synthetic-no-match" });
       assert.equal(noMatch.status, 422);
@@ -292,7 +292,7 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
     });
 
     await t.test("duration capture, legacy backfill, replacement, preservation, and clearing", async () => {
-      const base = { merchantId: merchantAId, pickedUpAt: "2026-04-09T10:00:00Z" };
+      const base = { platform: "uber_eats", merchantId: merchantAId, pickedUpAt: "2026-04-09T10:00:00Z" };
       const created = await api("POST", "/api/deliveries", { ...base, deliveryDurationSeconds: 4355,
         destinationAddress: transientInputA });
       assert.equal(created.status, 201);
@@ -333,7 +333,7 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
     });
 
     await t.test("Prop 22 independent CRUD, currency, date, coverage validation, and index", async () => {
-      const base = { type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
+      const base = { platform: "uber_eats", type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
       for (const bad of [{ amount: 0 }, { amount: -1 }, { amount: 1.001 }, { amount: "5" },
         { type: "other" }, { paymentDate: "2026-02-30" }, { paymentDate: "2026-10-08T00:00:00Z" },
         { coverageStartDate: "2026-09-21" }, { coverageEndDate: "2026-10-04" },
@@ -373,7 +373,7 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
     });
 
     await t.test("settlement backfill, nested partial updates, explicit clearing, identity, and derived detail output", async () => {
-      const base = { type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
+      const base = { platform: "uber_eats", type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
       const legacy = await api("POST", "/api/earnings-adjustments", base);
       const id = legacy.body.data.id;
       const path = `/api/earnings-adjustments/${id}`;
@@ -412,6 +412,87 @@ test.integration("Merchant and Delivery API against an isolated DGI MongoDB test
         assert.equal((await api("PATCH", path, { settlementDetails: bad })).status, 400);
       }
       for (const paymentId of [id, other.body.data.id]) await api("DELETE", `/api/earnings-adjustments/${paymentId}`);
+    });
+
+    await t.test("platform Delivery contract, legacy edits and combined filter pagination", async () => {
+      const base = { merchantId: merchantAId, pickedUpAt: "2026-06-01T10:00:00Z", payout: 0, notes: "Synthetic preserved delivery note" };
+      for (const platform of [undefined, null, "", "unknown", "Uber Eats", "other", ["uber_eats"]]) {
+        assert.equal((await api("POST", "/api/deliveries", { ...base, platform })).status, 400);
+      }
+      const ids = [];
+      for (const platform of ["uber_eats", "doordash"]) {
+        for (let i = 0; i < 3; i++) {
+          const created = await api("POST", "/api/deliveries", { ...base, platform });
+          assert.equal(created.status, 201); ids.push(created.body.data.id);
+          assert.equal(created.body.data.platform, platform);
+          const path = `/api/deliveries/${created.body.data.id}`;
+          assert.equal((await api("GET", path)).body.data.platform, platform);
+          assert.equal((await api("PATCH", path, { distanceMiles: 0 })).body.data.platform, platform);
+          assert.equal((await db.collection("deliveries").findOne({ _id: new ObjectId(created.body.data.id) })).platform, platform);
+        }
+        const query = `platform=${platform}&search=pickup&category=restaurant&from=2026-06-01T00:00:00Z&to=2026-06-02T00:00:00Z&sort=oldest&page=2&pageSize=2`;
+        const list = await api("GET", `/api/deliveries?${query}`);
+        assert.equal(list.status, 200);
+        assert.deepEqual(list.body.pagination, { page: 2, pageSize: 2, total: 3, totalPages: 2 });
+        assert.equal(list.body.data.length, 1); assert.equal(list.body.data[0].platform, platform);
+        assert.equal((await api("GET", `/api/deliveries?${query.replace("category=restaurant", "category=grocery")}`)).body.pagination.total, 0);
+      }
+      const path = `/api/deliveries/${ids[0]}`;
+      assert.equal((await api("PATCH", path, { platform: "doordash" })).body.data.platform, "doordash");
+      for (const platform of [null, "", "unknown", "invalid"]) assert.equal((await api("PATCH", path, { platform })).status, 400);
+      const legacy = { _id: new ObjectId(), merchantId: new ObjectId(merchantAId), pickedUpAt: new Date(base.pickedUpAt), notes: base.notes };
+      // Corrupt explicit null is deliberately distinct from a genuinely absent field.
+      const corrupt = { ...legacy, _id: new ObjectId(), platform: null };
+      await db.collection("deliveries").insertMany([legacy, corrupt]);
+      const legacyPath = `/api/deliveries/${legacy._id}`;
+      const edited = await api("PATCH", legacyPath, { payout: 1 });
+      assert.equal(edited.status, 200); assert.equal(Object.hasOwn(edited.body.data, "platform"), false);
+      assert.equal(edited.body.data.notes, base.notes);
+      assert.equal(Object.hasOwn((await api("GET", legacyPath)).body.data, "platform"), false);
+      assert.equal(Object.hasOwn(await db.collection("deliveries").findOne({ _id: legacy._id }), "platform"), false);
+      const unknown = await api("GET", "/api/deliveries?platform=unknown&from=2026-06-01T00:00:00Z&to=2026-06-02T00:00:00Z");
+      assert.equal(unknown.body.pagination.total, 1); assert.equal(unknown.body.data[0].id, legacy._id.toHexString());
+      assert.equal((await api("GET", "/api/deliveries?from=2026-06-01T00:00:00Z&to=2026-06-02T00:00:00Z")).body.pagination.total, 8);
+      assert.equal((await api("PATCH", legacyPath, { platform: "uber_eats" })).body.data.platform, "uber_eats");
+      for (const value of ["", "invalid", "null", "uber_eats&platform=doordash"]) assert.equal((await api("GET", `/api/deliveries?platform=${value}`)).status, 400);
+      await db.collection("deliveries").deleteMany({ _id: { $in: [...ids.map((id) => new ObjectId(id)), legacy._id, corrupt._id] } });
+    });
+
+    await t.test("platform Payment contract preserves legacy facts and invalidates reassigned confirmation", async () => {
+      const base = { type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17,
+        coverageStartDate: "2026-09-21", coverageEndDate: "2026-10-04", sessionCoverageConfirmed: true,
+        settlementDetails: { engagedSeconds: 0, engagedMiles: 0, reportedGuaranteedAmount: 124.17, eligibleEarningsExcludingTips: 100 }, notes: "Synthetic payment note" };
+      for (const platform of [undefined, null, "", "unknown", "invalid"]) assert.equal((await api("POST", "/api/earnings-adjustments", { ...base, platform })).status, 400);
+      const ids = [];
+      for (const platform of ["uber_eats", "doordash"]) {
+        const created = await api("POST", "/api/earnings-adjustments", { ...base, platform });
+        assert.equal(created.status, 201); ids.push(created.body.data.id);
+        const path = `/api/earnings-adjustments/${created.body.data.id}`;
+        assert.equal((await api("GET", path)).body.data.platform, platform);
+        assert.equal((await api("PATCH", path, { notes: base.notes })).body.data.platform, platform);
+        assert.equal((await api("PATCH", path, { platform })).body.data.sessionCoverageConfirmed, true);
+        const list = (await api("GET", `/api/earnings-adjustments?platform=${platform}`)).body.data;
+        assert.equal(list.length, 1); assert.equal(list[0].platform, platform);
+        for (const value of [null, "", "unknown", "invalid"]) assert.equal((await api("PATCH", path, { platform: value })).status, 400);
+      }
+      const path = `/api/earnings-adjustments/${ids[0]}`;
+      const reassigned = await api("PATCH", path, { platform: "doordash", sessionCoverageConfirmed: true });
+      assert.equal(reassigned.status, 200); assert.deepEqual(reassigned.body.data, { id: ids[0], ...base, platform: "doordash", sessionCoverageConfirmed: false });
+      assert.equal(reassigned.body.reconciliation.status, "matched");
+      assert.equal((await db.collection("earningsAdjustments").findOne({ _id: new ObjectId(ids[0]) })).sessionCoverageConfirmed, false);
+      assert.equal((await api("PATCH", path, { sessionCoverageConfirmed: true })).body.data.sessionCoverageConfirmed, true);
+      const legacy = { _id: new ObjectId(), ...base };
+      await db.collection("earningsAdjustments").insertOne(legacy);
+      const legacyPath = `/api/earnings-adjustments/${legacy._id}`;
+      const edited = await api("PATCH", legacyPath, { settlementDetails: { engagedMiles: 2 } });
+      assert.equal(edited.status, 200);
+      assert.deepEqual(edited.body.data, { id: legacy._id.toHexString(), ...base, settlementDetails: { ...base.settlementDetails, engagedMiles: 2 } });
+      assert.equal(Object.hasOwn((await api("GET", legacyPath)).body.data, "platform"), false);
+      assert.equal(Object.hasOwn(await db.collection("earningsAdjustments").findOne({ _id: legacy._id }), "platform"), false);
+      assert.equal((await api("GET", "/api/earnings-adjustments?platform=unknown")).body.data[0].id, legacy._id.toHexString());
+      assert.equal((await api("PATCH", legacyPath, { platform: "uber_eats" })).body.data.sessionCoverageConfirmed, false);
+      for (const value of ["", "invalid", "uber_eats&platform=doordash"]) assert.equal((await api("GET", `/api/earnings-adjustments?platform=${value}`)).status, 400);
+      await db.collection("earningsAdjustments").deleteMany({ _id: { $in: [...ids.map((id) => new ObjectId(id)), legacy._id] } });
     });
 
     await t.test("History and Dashboard resolve current merchant metadata by ID", async () => {

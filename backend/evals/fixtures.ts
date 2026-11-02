@@ -22,9 +22,9 @@ export function syntheticRegistry(completeCosts = false, reference = now) {
   // aggregate boundary, never real locations, records or credentials.
   const sessionId = new ObjectId("000000000000000000000001"), merchantId = new ObjectId("000000000000000000000002");
   const session = { _id: sessionId, startedAt: new Date("2026-03-08T09:00:00Z"), endedAt: new Date("2026-03-08T10:00:00Z"), totalDrivenMiles: 10, strategy: "eastvale_local_only" as const };
-  const delivery = { _id: new ObjectId("000000000000000000000003"), merchantId, pickedUpAt: session.startedAt, sessionId, payout: 0, distanceMiles: 1, deliveryDurationSeconds: 3600 };
+  const delivery = { platform: "uber_eats" as const, _id: new ObjectId("000000000000000000000003"), merchantId, pickedUpAt: session.startedAt, sessionId, payout: 0, distanceMiles: 1, deliveryDurationSeconds: 3600 };
   const unknown = { ...delivery, _id: new ObjectId("000000000000000000000004"), payout: undefined };
-  const payment = { _id: new ObjectId("000000000000000000000005"), type: "prop22_guarantee" as const, paymentDate: "2026-03-20", amount: 20,
+  const payment = { platform: "uber_eats" as const, _id: new ObjectId("000000000000000000000005"), type: "prop22_guarantee" as const, paymentDate: "2026-03-20", amount: 20,
     coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: completeCosts };
   const profile = completeCosts ? { vehicleName: "2022 Tesla Model Y Long Range" as const, energyCashCostPerMile: 1, tireReplacementSetCost: 100, expectedTireSetLifeMiles: 100, marginalDepreciationCostPerMile: 1 } : null;
   const row = calculateSessionEfficiency(session, [delivery], profile);

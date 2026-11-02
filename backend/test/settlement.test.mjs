@@ -1,7 +1,30 @@
 import assert from "node:assert/strict";
 import test from "./support/scoped-test.mjs";
 import { reconcileSettlement } from "../dist/settlement.js";
-import { earningsAdjustmentInputSchema, earningsAdjustmentPatchSchema } from "../dist/model.js";
+import { earningsAdjustmentInputSchema, earningsAdjustmentPatchSchema, earningsAdjustmentPersistedSchema,
+  deliveryInputSchema, deliveryPatchSchema, deliveryPlatformSchema } from "../dist/model.js";
+
+test("one platform domain requires explicit new records but keeps persisted legacy validation optional", () => {
+  assert.deepEqual(deliveryPlatformSchema.options, ["uber_eats", "doordash"]);
+  const payment = { type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
+  const delivery = { merchantId: "000000000000000000000001", pickedUpAt: "2026-10-08T00:00:00Z" };
+  assert.equal(earningsAdjustmentPersistedSchema.safeParse(payment).success, true);
+  for (const platform of [undefined, null, "", "unknown", "invalid", 1, {}]) {
+    assert.equal(earningsAdjustmentInputSchema.safeParse({ ...payment, platform }).success, false);
+    assert.equal(deliveryInputSchema.safeParse({ ...delivery, platform }).success, false);
+    if (platform !== undefined) {
+      assert.equal(earningsAdjustmentPatchSchema.safeParse({ platform }).success, false);
+      assert.equal(deliveryPatchSchema.safeParse({ platform }).success, false);
+      assert.equal(earningsAdjustmentPersistedSchema.safeParse({ ...payment, platform }).success, false);
+    }
+  }
+  for (const platform of deliveryPlatformSchema.options) {
+    assert.equal(earningsAdjustmentInputSchema.parse({ ...payment, platform }).platform, platform);
+    assert.equal(deliveryInputSchema.parse({ ...delivery, platform }).platform, platform);
+    assert.equal(earningsAdjustmentPatchSchema.parse({ platform }).platform, platform);
+    assert.equal(deliveryPatchSchema.parse({ platform }).platform, platform);
+  }
+});
 
 const payment = (amount, guarantee, eligible) => ({ amount, settlementDetails: {
   reportedGuaranteedAmount: guarantee, eligibleEarningsExcludingTips: eligible
@@ -26,7 +49,7 @@ test("reported guarantee reconciliation uses cents, missing values, floor, and i
   }
 });
 test("settlement observations validate without rounding or inferring missing fields", () => {
-  const base = { type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
+  const base = { platform: "uber_eats", type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17 };
   const details = { engagedSeconds: 0, engagedMiles: 12.3456789, eligibleEarningsExcludingTips: 0, reportedGuaranteedAmount: 24.17 };
   assert.deepEqual(earningsAdjustmentInputSchema.parse({ ...base, settlementDetails: details }).settlementDetails, details);
   for (const bad of [{ engagedSeconds: -1 }, { engagedSeconds: 1.5 }, { engagedSeconds: "5" },

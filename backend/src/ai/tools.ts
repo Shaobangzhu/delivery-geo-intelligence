@@ -91,12 +91,13 @@ export function createToolRegistry(db: Db, coordinate: ReadCoordinator, domain: 
         settlements: selected.map(({ settlementId: _id, ...row }) => row), recentResultLimit: data.limit, totalSettlements: data.totalSettlements, hasMore: data.hasMore,
         units: { revenueAndCost: "USD", hourlyRates: "USD/hour", mileageRates: "USD/mile", time: "hours", distance: "miles" },
         limitations: [...limitations, "No unrestricted ID lookup. IDs outside the recent result are unavailable.",
-          "Cash receipt dates differ from work-period coverage. These income views are not additive.", "Confirmation cannot prove all activity was recorded or override structural issues."] };
+          "Cash receipt dates differ from work-period coverage. These income views are not additive.", "Confirmation cannot prove all activity was recorded or override structural issues.",
+          "Settlement metrics require known platform and exclusive complete Delivery links for Sessions. Mixed or unknown attribution blocks complete metrics; partial observations are not full coverage."] };
     },
     async get_data_quality(args: z.infer<typeof periodArgs>) {
       const data = await domain.efficiency(db, filters(args), now), settlements = await domain.settlements(db);
       return { scope: data.filters, dataQuality: data.dataQuality,
-        recentSettlements: settlements.data.slice(0, 5).map((row) => ({ paymentDate: row.paymentDate,
+        recentSettlements: settlements.data.slice(0, 5).map((row) => ({ paymentDate: row.paymentDate, platform: row.platform,
           coverageStartDate: row.coverageStartDate, coverageEndDate: row.coverageEndDate, status: row.status,
           completenessConfirmed: row.sessionCoverage.completenessConfirmed, structurallyComplete: row.sessionCoverage.structurallyComplete, reasons: row.reasons })),
         backfillWorkflows: ["History Delivery: payout, duration, distance.", "History Session: times, total driven miles, explicit links, strategy; review pending associations.",
