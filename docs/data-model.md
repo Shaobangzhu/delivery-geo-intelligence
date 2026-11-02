@@ -9,7 +9,7 @@ The application uses the native MongoDB Node.js driver. The application database
 | `merchants` | `_id`, `name`, `category`, `publicAddress`, `location`, `city` | `location` 2dsphere |
 | `earningsAdjustments` | `_id`, `type`, `paymentDate`, `amount`, optional `platform`, `coverageStartDate`, `coverageEndDate`, `notes`, `settlementDetails`, `sessionCoverageConfirmed` | `paymentDate` descending |
 | `deliveries` | `_id`, `merchantId`, `pickedUpAt`, optional `platform`, `sessionId`, `payout`, `distanceMiles`, `deliveryDurationSeconds`, `destinationLocation`, `notes` | `destinationLocation` 2dsphere; `pickedUpAt` plus `_id`; `merchantId` plus `pickedUpAt`; sparse `sessionId` |
-| `deliverySessions` | `_id`, `startedAt`, `endedAt`, optional `strategy`, `totalDrivenMiles`, `taxEligibleBusinessMiles`, `notes`, server-owned `associationIntegrity` | `startedAt` descending plus `_id` |
+| `deliverySessions` | `_id`, `startedAt`, `endedAt`, optional `strategy`, `totalDrivenMiles`, `taxEligibleBusinessMiles`, `tripsOfferedByPlatform`, `notes`, server-owned `associationIntegrity` | `startedAt` descending plus `_id` |
 | `vehicleEconomics` | `_id: "primary"`, vehicle name, energy/tire costs, optional tire life and marginal depreciation | built-in unique `_id` only |
 | `uberAnnualSummaries` | `_id: year`, `year`, `sources`, `annual`, `taxForms`, `monthlyActivity`, `importedAt` | built-in unique numeric `_id` only |
 | `vehicleTaxYears` | `_id: taxYear`, `taxYear`, annual vehicle miles and miles by purpose, `taxMethod` | built-in unique `_id` only |
@@ -79,6 +79,7 @@ interface DeliverySessionDocument {
   strategy?: "wide_area_marathon" | "home_based_multi_order" | "eastvale_local_only" | "other";
   totalDrivenMiles?: number;
   taxEligibleBusinessMiles?: number;
+  tripsOfferedByPlatform?: { uber_eats?: number; doordash?: number };
   notes?: string;
   associationIntegrity?: "pending"; // server-owned write/recovery guard
 }
@@ -102,6 +103,10 @@ interface VehicleTaxYearRecord {
 ```
 
 Session input requires offset-aware ISO timestamps and `endedAt > startedAt`; UTC instants are stored as BSON Dates. `sessionDurationSeconds` is returned as `(end-start)/1000`, never persisted. Miles are optional finite nonnegative observations, with explicit zero valid. If both are provided, IRS eligible business miles cannot exceed total session miles. Missing miles remain absent. Strategy is optional per session; no year-based assignment or automatic reconstruction from Delivery timestamps occurs. Notes are trimmed and limited to 2000 characters.
+
+Session POST/PATCH and GET list/detail support optional `tripsOfferedByPlatform`, manually observed Trips Offered counts keyed by the existing `uber_eats` and `doordash` platform identifiers. Each count must be a finite, nonnegative safe integer; strings, fractions, negatives, unsafe integers, and unknown keys are rejected. Zero is an observation, while an omitted platform is unknown. Both platforms may be recorded on the same Session, including Sessions with no linked Deliveries. Empty objects are omitted from persistence and responses. Legacy Sessions require no migration, and stored Session notes remain compatible with merged PATCH validation and are preserved when omitted.
+
+For example, POST with the required timestamps and `"tripsOfferedByPlatform": { "uber_eats": 3, "doordash": 5 }` records both observations. PATCH `{"tripsOfferedByPlatform":{"uber_eats":0}}` updates only Uber Eats and preserves DoorDash; `{"tripsOfferedByPlatform":{"uber_eats":null}}` removes only Uber Eats; `{"tripsOfferedByPlatform":null}` removes all offer counts. PATCH omission preserves counts, and an empty nested PATCH object changes no observations. Removing the final count removes the entire field. POST does not accept null counts. These observations are independent of `deliveryIds` and are never inferred from completed work, payouts, duration, or settlements; they do not change efficiency, costs, taxes, or Prop 22 platform attribution.
 
 `DeliveryDocument.sessionId?: ObjectId` is the sole persisted association and has a sparse query index. Existing unassociated deliveries remain valid. Session requests may supply distinct `deliveryIds` (maximum 500) to explicitly replace membership. Omission preserves links; `[]` unlinks all. Responses derive `deliveryIds` and safe `linkedDeliveries` summaries (ID, merchant ID, pickup instant) from Delivery references; they do not expose destination coordinates. A normal time/mileage edit preserves links even outside the edited interval. Deletion unlinks and retains Deliveries; deleted Deliveries cannot leave stale reverse arrays. Direct client assignment through Delivery POST/PATCH remains unsupported.
 

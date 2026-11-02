@@ -29,6 +29,32 @@ test("session schemas validate offset instants, order, strategies, independent u
   }
 });
 
+test("session offer schemas accept only known platforms with finite nonnegative safe integer counts", () => {
+  const base = { startedAt: "2026-03-08T08:00:00Z", endedAt: "2026-03-08T09:00:00Z" };
+  for (const platform of ["uber_eats", "doordash"]) {
+    for (const count of [0, 3, Number.MAX_SAFE_INTEGER]) {
+      const tripsOfferedByPlatform = { [platform]: count };
+      assert.deepEqual(sessionCreateSchema.parse({ ...base, tripsOfferedByPlatform }).tripsOfferedByPlatform, tripsOfferedByPlatform);
+      assert.deepEqual(sessionPatchSchema.parse({ tripsOfferedByPlatform }).tripsOfferedByPlatform, tripsOfferedByPlatform);
+    }
+    for (const count of ["3", 1.5, -1, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity, -Infinity, true, {}, []]) {
+      const tripsOfferedByPlatform = { [platform]: count };
+      assert.equal(sessionCreateSchema.safeParse({ ...base, tripsOfferedByPlatform }).success, false);
+      assert.equal(sessionPatchSchema.safeParse({ tripsOfferedByPlatform }).success, false);
+    }
+    assert.equal(sessionCreateSchema.safeParse({ ...base, tripsOfferedByPlatform: { [platform]: null } }).success, false);
+    assert.equal(sessionPatchSchema.safeParse({ tripsOfferedByPlatform: { [platform]: null } }).success, true);
+  }
+  for (const tripsOfferedByPlatform of [{ unknown: 1 }, { uber_eats: 3, unknown: null }, { UberEats: 3 }, [], "3", 3]) {
+    assert.equal(sessionCreateSchema.safeParse({ ...base, tripsOfferedByPlatform }).success, false);
+    assert.equal(sessionPatchSchema.safeParse({ tripsOfferedByPlatform }).success, false);
+  }
+  assert.equal(sessionCreateSchema.safeParse({ ...base, tripsOfferedByPlatform: null }).success, false);
+  assert.equal(sessionPatchSchema.safeParse({ tripsOfferedByPlatform: null }).success, true);
+  assert.equal(sessionCreateSchema.safeParse({ ...base, tripsOfferedByPlatform: {}, unknown: 1 }).success, false);
+  assert.equal(sessionPatchSchema.safeParse({ tripsOfferedByPlatform: {}, unknown: 1 }).success, false);
+});
+
 test("vehicle cost separates known zero from unknown estimates, and handles partial/complete costs safely", () => {
   const base = { vehicleName: "2022 Tesla Model Y Long Range", energyCashCostPerMile: 0, tireReplacementSetCost: 800 };
   const missing = calculateVehicleCost(base, 8.4);
@@ -184,6 +210,170 @@ test.integration("sessions, associations, vehicle settings, and annual mileage a
     assert.deepEqual((await api("GET", `/api/earnings-adjustments/${propId}`)).body, propBefore);
     assert.deepEqual(await db.collection("deliveries").findOne({ _id: delivery._id }), delivery);
     assert.ok((await db.collection("deliveries").indexes()).some((index) => index.key.sessionId === 1));
+  } finally {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    if (connected) await client.db(name).dropDatabase();
+    await client.close();
+  }
+});
+
+test.integration("manual Session platform offers persist independently of associations and calculations", async (t) => {
+  const client = new MongoClient(testMongoUri);
+  const name = `delivery_geo_intelligence_session_offers_test_${process.pid}_${randomBytes(5).toString("hex")}`;
+  let server; let connected = false;
+  try {
+    await client.connect(); connected = true;
+    const db = client.db(name); await ensureIndexes(db);
+    const fail = async () => { throw new Error("External geocoding must not run in this test"); };
+    server = createApp(db, fail, fail).listen(0, "127.0.0.1"); await once(server, "listening");
+    async function api(method, path, body) {
+      const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, { method,
+        ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) });
+      return { status: response.status, body: response.status === 204 ? null : await response.json() };
+    }
+    const sessions = db.collection("deliverySessions");
+    const base = { startedAt: "2026-03-08T08:00:00Z", endedAt: "2026-03-08T09:00:00Z" };
+    const path = (id) => `/api/delivery-sessions/${id}`;
+    const stored = (id) => sessions.findOne({ _id: new ObjectId(id) });
+    async function create(fields = {}) {
+      const result = await api("POST", "/api/delivery-sessions", { ...base, ...fields });
+      assert.equal(result.status, 201);
+      return result.body.data;
+    }
+    async function assertCounts(id, expected) {
+      const detail = await api("GET", path(id));
+      const list = await api("GET", "/api/delivery-sessions");
+      assert.equal(detail.status, 200); assert.equal(list.status, 200);
+      for (const row of [detail.body.data, list.body.data.find((row) => row.id === String(id)), await stored(id)]) {
+        if (expected === undefined) assert.equal(Object.hasOwn(row, "tripsOfferedByPlatform"), false);
+        else assert.deepEqual(row.tripsOfferedByPlatform, expected);
+      }
+    }
+    await t.test("POST and GET detail/list round trip each platform independently", async () => {
+      for (const tripsOfferedByPlatform of [{ uber_eats: 3 }, { doordash: 4 }]) {
+        const row = await create({ tripsOfferedByPlatform });
+        assert.deepEqual(row.tripsOfferedByPlatform, tripsOfferedByPlatform);
+        await assertCounts(row.id, tripsOfferedByPlatform);
+      }
+    });
+    await t.test("both-platform counts and nonzero offers are valid with zero linked deliveries", async () => {
+      const counts = { uber_eats: 3, doordash: 5 };
+      const row = await create({ tripsOfferedByPlatform: counts, deliveryIds: [] });
+      assert.deepEqual(row.deliveryIds, []); assert.deepEqual(row.linkedDeliveries, []);
+      await assertCounts(row.id, counts);
+      assert.equal(await db.collection("deliveries").countDocuments(), 0);
+    });
+    await t.test("zero is retained while missing counts and empty objects remain absent", async () => {
+      for (const counts of [undefined, {}, { uber_eats: 0 }, { doordash: 0 }, { uber_eats: 0, doordash: 0 }]) {
+        const row = await create(counts === undefined ? {} : { tripsOfferedByPlatform: counts });
+        await assertCounts(row.id, counts && Object.keys(counts).length ? counts : undefined);
+        assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: {} })).status, 200);
+        await assertCounts(row.id, counts && Object.keys(counts).length ? counts : undefined);
+      }
+    });
+    await t.test("PATCH merges platform keys, preserves omission, and serializes concurrent partial edits", async () => {
+      const row = await create({ tripsOfferedByPlatform: { uber_eats: 3, doordash: 5 } });
+      const zero = await api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: 0 } });
+      assert.equal(zero.status, 200); assert.deepEqual(zero.body.data.tripsOfferedByPlatform, { uber_eats: 0, doordash: 5 });
+      assert.equal((await api("PATCH", path(row.id), { totalDrivenMiles: 8, strategy: "other" })).status, 200);
+      await assertCounts(row.id, { uber_eats: 0, doordash: 5 });
+      const results = await Promise.all([
+        api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: 7 } }),
+        api("PATCH", path(row.id), { tripsOfferedByPlatform: { doordash: 9 } })
+      ]);
+      assert.deepEqual(results.map((result) => result.status), [200, 200]);
+      await assertCounts(row.id, { uber_eats: 7, doordash: 9 });
+    });
+    await t.test("PATCH clears one observation, the final observation, or the whole field without empty storage", async () => {
+      const row = await create({ tripsOfferedByPlatform: { uber_eats: 3, doordash: 0 } });
+      const cleared = await api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: null } });
+      assert.equal(cleared.status, 200); assert.deepEqual(cleared.body.data.tripsOfferedByPlatform, { doordash: 0 });
+      await assertCounts(row.id, { doordash: 0 });
+      assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: { doordash: null } })).status, 200);
+      await assertCounts(row.id, undefined);
+      assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: null } })).status, 200);
+      await assertCounts(row.id, undefined);
+      assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: 0, doordash: 8 } })).status, 200);
+      assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: null })).status, 200);
+      await assertCounts(row.id, undefined);
+      assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: 2, doordash: 3 } })).status, 200);
+      assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: null, doordash: null } })).status, 200);
+      await assertCounts(row.id, undefined);
+    });
+    await t.test("invalid POST/PATCH offers return 400 and leave persisted Sessions unchanged", async () => {
+      const row = await create({ tripsOfferedByPlatform: { uber_eats: 3, doordash: 5 } });
+      const before = await stored(row.id), count = await sessions.countDocuments();
+      const badCounts = ["3", 1.5, -1, Number.MAX_SAFE_INTEGER + 1, true, {}, []];
+      const invalid = ["3", 3, [], { unknown: 1 }, { uber_eats: 2, unknown: null }, { UberEats: 3 },
+        ...["uber_eats", "doordash"].flatMap((platform) => badCounts.map((value) => ({ [platform]: value })))];
+      for (const tripsOfferedByPlatform of invalid) {
+        assert.equal((await api("POST", "/api/delivery-sessions", { ...base, tripsOfferedByPlatform })).status, 400);
+        assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform })).status, 400);
+      }
+      for (const tripsOfferedByPlatform of [null, { uber_eats: null }, { doordash: null }]) {
+        assert.equal((await api("POST", "/api/delivery-sessions", { ...base, tripsOfferedByPlatform })).status, 400);
+      }
+      assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: 1 }, associationIntegrity: "pending" })).status, 400);
+      assert.equal(await sessions.countDocuments(), count);
+      assert.deepEqual(await stored(row.id), before);
+    });
+    await t.test("legacy Sessions without offers stay valid without migration", async () => {
+      const legacy = { _id: new ObjectId(), startedAt: new Date(base.startedAt), endedAt: new Date(base.endedAt), totalDrivenMiles: 8 };
+      await sessions.insertOne(legacy);
+      await assertCounts(legacy._id, undefined);
+      assert.equal((await api("PATCH", path(legacy._id), { taxEligibleBusinessMiles: 0 })).status, 200);
+      await assertCounts(legacy._id, undefined);
+      assert.deepEqual(await stored(legacy._id), { ...legacy, taxEligibleBusinessMiles: 0 });
+    });
+    await t.test("legacy stored notes and all Session observations survive offer edits and clearing", async () => {
+      const legacy = { _id: new ObjectId(), startedAt: new Date(base.startedAt), endedAt: new Date(base.endedAt),
+        notes: "Historical Session notes\nKeep  internal spacing.", strategy: "other", totalDrivenMiles: 8, taxEligibleBusinessMiles: 0 };
+      await sessions.insertOne(legacy);
+      for (const tripsOfferedByPlatform of [{ uber_eats: 3 }, { doordash: 0 }, { uber_eats: null }, null]) {
+        const result = await api("PATCH", path(legacy._id), { tripsOfferedByPlatform });
+        assert.equal(result.status, 200); assert.equal(result.body.data.notes, legacy.notes);
+        const { tripsOfferedByPlatform: _offers, ...fields } = await stored(legacy._id);
+        assert.deepEqual(fields, legacy);
+      }
+      await assertCounts(legacy._id, undefined);
+    });
+    await t.test("offer edits preserve explicit links, mixed platform attribution, efficiency, and settlement results", async () => {
+      const merchantId = new ObjectId();
+      await db.collection("merchants").insertOne({ _id: merchantId, name: "Synthetic Offer Pickup", category: "restaurant", city: "Test City",
+        location: { type: "Point", coordinates: [0, 0] } });
+      const deliveries = ["uber_eats", "doordash"].map((platform) => ({ _id: new ObjectId(), merchantId, platform,
+        pickedUpAt: new Date("2026-03-08T08:30:00Z"), payout: 10, distanceMiles: 2, deliveryDurationSeconds: 900, notes: "Keep Delivery notes" }));
+      await db.collection("deliveries").insertMany(deliveries);
+      const payment = { _id: new ObjectId(), platform: "uber_eats", type: "prop22_guarantee", paymentDate: "2026-03-10", amount: 5,
+        coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: true, notes: "Keep Payment notes" };
+      await db.collection("earningsAdjustments").insertOne(payment);
+      const row = await create({ deliveryIds: deliveries.map((delivery) => delivery._id.toHexString()), totalDrivenMiles: 8 });
+      await assertCounts(row.id, undefined); // Linked/completed work never supplies offers.
+      const linkedBefore = await db.collection("deliveries").find().sort({ _id: 1 }).toArray();
+      const routes = ["/api/efficiency?period=month&asOf=2026-03-08", "/api/efficiency/settlements", "/api/dashboard?period=month&asOf=2026-03-08"];
+      const before = await Promise.all(routes.map((route) => api("GET", route)));
+      assert.ok(before.every((result) => result.status === 200));
+      assert.ok(before[1].body.data[0].reasons.includes("mixed_platform_session"));
+      const updated = await api("PATCH", path(row.id), { tripsOfferedByPlatform: { uber_eats: 0, doordash: 99 } });
+      assert.equal(updated.status, 200); assert.deepEqual(updated.body.data.deliveryIds.sort(), row.deliveryIds.sort());
+      await assertCounts(row.id, { uber_eats: 0, doordash: 99 });
+      assert.deepEqual(await Promise.all(routes.map((route) => api("GET", route))), before);
+      assert.deepEqual(await db.collection("deliveries").find().sort({ _id: 1 }).toArray(), linkedBefore);
+      assert.deepEqual(await db.collection("earningsAdjustments").findOne({ _id: payment._id }), payment);
+      const unlinked = await api("PATCH", path(row.id), { deliveryIds: [] });
+      assert.equal(unlinked.status, 200); assert.deepEqual(unlinked.body.data.deliveryIds, []);
+      await assertCounts(row.id, { uber_eats: 0, doordash: 99 });
+    });
+    await t.test("pending association recovery still requires reviewed links when editing offers", async () => {
+      const row = await create({ tripsOfferedByPlatform: { uber_eats: 3 } });
+      await sessions.updateOne({ _id: new ObjectId(row.id) }, { $set: { associationIntegrity: "pending" } });
+      const before = await stored(row.id);
+      assert.equal((await api("PATCH", path(row.id), { tripsOfferedByPlatform: { doordash: 5 } })).status, 409);
+      assert.deepEqual(await stored(row.id), before);
+      const repaired = await api("PATCH", path(row.id), { deliveryIds: [], tripsOfferedByPlatform: { doordash: 5 } });
+      assert.equal(repaired.status, 200); assert.equal(Object.hasOwn(repaired.body.data, "associationIntegrity"), false);
+      await assertCounts(row.id, { uber_eats: 3, doordash: 5 });
+    });
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     if (connected) await client.db(name).dropDatabase();

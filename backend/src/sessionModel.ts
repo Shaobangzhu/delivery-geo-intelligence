@@ -1,16 +1,20 @@
 import { ObjectId } from "mongodb";
 import { z } from "zod";
-import { objectIdSchema } from "./model.js";
+import { deliveryPlatformSchema, objectIdSchema } from "./model.js";
 
 export const strategySchema = z.enum(["wide_area_marathon", "home_based_multi_order", "eastvale_local_only", "other"]);
 const milesSchema = z.number().finite().nonnegative();
 const instantSchema = z.iso.datetime({ offset: true }).refine((value) => Number.isFinite(Date.parse(value)), "Invalid instant");
+const offerCountSchema = z.number().finite().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const tripsOfferedByPlatformSchema = z.partialRecord(deliveryPlatformSchema, offerCountSchema);
 const fields = {
   startedAt: instantSchema,
   endedAt: instantSchema,
   strategy: strategySchema.optional(),
   totalDrivenMiles: milesSchema.optional(),
   taxEligibleBusinessMiles: milesSchema.optional(),
+  tripsOfferedByPlatform: tripsOfferedByPlatformSchema.optional(),
+  // Retain legacy Session notes in full-document PATCH validation.
   notes: z.string().trim().max(2000).optional()
 };
 export const sessionInputSchema = z.strictObject(fields)
@@ -24,6 +28,7 @@ export const sessionPatchSchema = z.strictObject({
   strategy: strategySchema.nullable().optional(),
   totalDrivenMiles: milesSchema.nullable().optional(),
   taxEligibleBusinessMiles: milesSchema.nullable().optional(),
+  tripsOfferedByPlatform: z.partialRecord(deliveryPlatformSchema, offerCountSchema.nullable()).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
   deliveryIds: deliveryIdsSchema.optional()
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required");
@@ -34,6 +39,7 @@ export interface DeliverySessionDocument {
   strategy?: z.infer<typeof strategySchema>;
   totalDrivenMiles?: number;
   taxEligibleBusinessMiles?: number;
+  tripsOfferedByPlatform?: z.infer<typeof tripsOfferedByPlatformSchema>;
   notes?: string;
   // Durable fail-closed marker for an unfinished multi-document association write.
   associationIntegrity?: "pending";
