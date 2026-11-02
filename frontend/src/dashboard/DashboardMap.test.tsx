@@ -1,4 +1,5 @@
-import { getBrowserMapStatus } from "../settings/browserStatus";
+import { StrictMode } from "react";
+import { getBrowserMapStatus, resetBrowserMapStatus } from "../settings/browserStatus";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { DashboardMap } from "./DashboardMap";
@@ -99,6 +100,7 @@ const destinationCells: DestinationCell[] = [
 ];
 
 beforeEach(() => {
+  resetBrowserMapStatus();
   FakeMap.instances = [];
   FakeMapView.instances = [];
   FakeMapView.whenPromise = null;
@@ -444,4 +446,65 @@ it.each([
   expect(screen.queryByText("🏠 Home")).not.toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(FakeFeatureLayer.instances).toHaveLength(2);
+});
+
+// These tests exercise failure boundaries with synthetic promises, never live SDK requests.
+it("shows the load-chain message for SDK import rejection and recovers on remount", async () => {
+  const original = new TypeError("Synthetic SDK import rejected", { cause: new Error("Synthetic dependency unavailable") });
+  loadArcgisMock.mockRejectedValueOnce(original);
+  const props = { pickupRows: [], diversityRows: [], destinationCells: [], metric: "pickupVolume" as const };
+  const failed = render(<DashboardMap {...props} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("The map could not be loaded.");
+  expect(FakeMapView.instances).toHaveLength(0);
+  failed.unmount();
+  render(<DashboardMap {...props} />);
+  await waitFor(() => expect(getBrowserMapStatus().event).toBe("map_initialized"));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(FakeMapView.instances).toHaveLength(1);
+});
+
+it("also routes a synchronous MapView constructor exception through the load-chain message", async () => {
+  loadArcgisMock.mockResolvedValue({ ...runtime, MapView: class {
+    constructor() { throw new Error("Synthetic MapView construction rejected"); }
+  } } as unknown as ArcgisRuntime);
+  render(<DashboardMap pickupRows={[]} diversityRows={[]} destinationCells={[]} metric="pickupVolume" />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("The map could not be loaded.");
+  expect(FakeMap.instances).toHaveLength(1);
+  expect(FakeMapView.instances).toHaveLength(0);
+});
+
+it("distinguishes an asynchronous view readiness rejection from the load-chain message", async () => {
+  let rejectReady!: (reason: Error) => void;
+  FakeMapView.whenPromise = new Promise<void>((_resolve, reject) => { rejectReady = reject; });
+  render(<DashboardMap pickupRows={[]} diversityRows={[]} destinationCells={[]} metric="pickupVolume" />);
+  await waitFor(() => expect(FakeMapView.instances).toHaveLength(1));
+  rejectReady(new Error("Synthetic view readiness rejected"));
+  expect(await screen.findByRole("alert")).toHaveTextContent("The map could not be initialized.");
+  expect(getBrowserMapStatus().event).toBe("map_initialization_failure");
+});
+
+it("keeps pending view readiness pending until it resolves, without a failure observation", async () => {
+  let resolveReady!: () => void;
+  FakeMapView.whenPromise = new Promise<void>((resolve) => { resolveReady = resolve; });
+  render(<DashboardMap pickupRows={[]} diversityRows={[]} destinationCells={[]} metric="pickupVolume" />);
+  await waitFor(() => expect(FakeMapView.instances).toHaveLength(1));
+  expect(getBrowserMapStatus().event).toBeNull();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  resolveReady();
+  await waitFor(() => expect(getBrowserMapStatus().event).toBe("map_initialized"));
+});
+
+it("ignores a cancelled StrictMode import rejection while the active mount initializes", async () => {
+  let rejectCancelled!: (reason: Error) => void;
+  loadArcgisMock.mockReturnValueOnce(new Promise<ArcgisRuntime>((_resolve, reject) => { rejectCancelled = reject; }));
+  const { unmount } = render(<StrictMode><DashboardMap pickupRows={[]} diversityRows={[]}
+    destinationCells={[]} metric="pickupVolume" /></StrictMode>);
+  await waitFor(() => expect(getBrowserMapStatus().event).toBe("map_initialized"));
+  rejectCancelled(new Error("Synthetic cancelled import rejected"));
+  await waitFor(() => expect(loadArcgisMock).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(getBrowserMapStatus().event).toBe("map_initialized");
+  expect(FakeMapView.instances).toHaveLength(1);
+  unmount();
+  expect(FakeMapView.instances[0].destroy).toHaveBeenCalledTimes(1);
 });

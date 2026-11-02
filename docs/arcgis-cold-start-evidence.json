@@ -1,0 +1,330 @@
+{
+  "date": "2026-11-02",
+  "sdk": "@arcgis/core 5.1.25",
+  "vite": "8.3.5",
+  "method": "Real Chromium, real SDK, existing read-only backend. Ten isolated Vite server restarts with optimizeDeps.force=true and a dedicated workspace cache; each uses a fresh browser context followed by a reload. Local HTTP requests forwarded from browser origin 127.0.0.1:5173 to isolated server 127.0.0.1:5174 to preserve the working ArcGIS origin. Playwright routing disables browser HTTP caching in these pairs.",
+  "cold": {
+    "attempts": 10,
+    "initialized": 10,
+    "failed": 0,
+    "incomplete": 0
+  },
+  "warm": {
+    "attempts": 10,
+    "initialized": 10,
+    "failed": 0,
+    "incomplete": 0
+  },
+  "cycles": [
+    {
+      "cycle": 1,
+      "coldInitializedMs": 2285,
+      "warmInitializedMs": 819,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 2,
+      "coldInitializedMs": 1944,
+      "warmInitializedMs": 822,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 3,
+      "coldInitializedMs": 1853,
+      "warmInitializedMs": 785,
+      "font403CountAcrossPair": 3,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 4,
+      "coldInitializedMs": 1910,
+      "warmInitializedMs": 802,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 5,
+      "coldInitializedMs": 1837,
+      "warmInitializedMs": 805,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 6,
+      "coldInitializedMs": 1949,
+      "warmInitializedMs": 852,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 7,
+      "coldInitializedMs": 1870,
+      "warmInitializedMs": 828,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 8,
+      "coldInitializedMs": 1838,
+      "warmInitializedMs": 802,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 9,
+      "coldInitializedMs": 1905,
+      "warmInitializedMs": 803,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    },
+    {
+      "cycle": 10,
+      "coldInitializedMs": 2013,
+      "warmInitializedMs": 796,
+      "font403CountAcrossPair": 4,
+      "coldLayerViewsReady": true
+    }
+  ],
+  "experiments": [
+    {
+      "name": "direct-warm-server",
+      "results": {
+        "result": {
+          "status": "status:map_initialized",
+          "error": []
+        },
+        "warm": {
+          "status": "status:map_initialized",
+          "error": []
+        },
+        "remount": {
+          "status": "status:map_initialized",
+          "error": []
+        }
+      },
+      "initializedMs": [
+        673,
+        200,
+        658
+      ],
+      "failureStages": []
+    },
+    {
+      "name": "cache-disabled",
+      "results": {
+        "result": {
+          "status": "status:map_initialized",
+          "error": []
+        }
+      },
+      "initializedMs": [
+        722
+      ],
+      "failureStages": []
+    },
+    {
+      "name": "route-navigation",
+      "results": {
+        "result": {
+          "status": "status:map_initialized",
+          "error": []
+        }
+      },
+      "initializedMs": [
+        760
+      ],
+      "failureStages": []
+    },
+    {
+      "name": "delayed-basemap",
+      "results": {
+        "result": {
+          "status": "status:map_initialized",
+          "error": []
+        }
+      },
+      "initializedMs": [
+        8110
+      ],
+      "failureStages": []
+    },
+    {
+      "name": "injected-module-fetch-503",
+      "results": {
+        "first": {
+          "status": "status:map_initialization_failure",
+          "error": [
+            "The map could not be loaded."
+          ]
+        },
+        "blocked": true,
+        "remount": {
+          "status": "status:map_initialized",
+          "error": []
+        },
+        "reload": {
+          "status": "status:map_initialized",
+          "error": []
+        }
+      },
+      "initializedMs": [
+        896,
+        271
+      ],
+      "failureStages": [
+        {
+          "stage": "load-chain:failure",
+          "name": "TypeError",
+          "message": "Failed to fetch dynamically imported module: <optimized-MapView-module>",
+          "stackCaptured": true,
+          "causePresent": false
+        },
+        {
+          "stage": "load-chain:failure",
+          "name": "TypeError",
+          "message": "Failed to fetch dynamically imported module: <optimized-MapView-module>",
+          "stackCaptured": true,
+          "causePresent": false
+        }
+      ]
+    }
+  ],
+  "temporaryExactFontAllowlist": {
+    "initialized": true,
+    "httpFailures": 0,
+    "filesAllowed": 2,
+    "productionConfigurationChanged": false
+  },
+  "excludedAlternateOriginControl": {
+    "completedColdWarmPairs": 4,
+    "mapInitialized": 0,
+    "applicationFailureMessages": 0,
+    "incompletePairs": 4,
+    "stage": "MapView.when pending, basemap failed",
+    "httpStatus": 401,
+    "sdkErrorCode": 498,
+    "sameApiKeyAsWorkingOrigin": true,
+    "interpretation": "Origin-dependent remote rejection in this experiment, not reproduction of reported load-chain failure; provider referrer configuration was not inspected."
+  },
+  "sampleColdTrace": [
+    {
+      "stage": "import:start",
+      "elapsedMs": 1220
+    },
+    {
+      "stage": "sdk-imports:start",
+      "elapsedMs": 1220
+    },
+    {
+      "stage": "effect:cleanup",
+      "elapsedMs": 1223
+    },
+    {
+      "stage": "import:start",
+      "elapsedMs": 1223
+    },
+    {
+      "stage": "sdk-imports:start",
+      "elapsedMs": 1223
+    },
+    {
+      "stage": "sdk-imports:complete",
+      "elapsedMs": 1637
+    },
+    {
+      "stage": "import:cancelled",
+      "elapsedMs": 1637
+    },
+    {
+      "stage": "sdk-imports:complete",
+      "elapsedMs": 1637
+    },
+    {
+      "stage": "import:complete",
+      "elapsedMs": 1637
+    },
+    {
+      "stage": "config:start",
+      "elapsedMs": 1637
+    },
+    {
+      "stage": "controller:start",
+      "elapsedMs": 1637
+    },
+    {
+      "stage": "map:construct",
+      "elapsedMs": 1637
+    },
+    {
+      "stage": "merchant:construct",
+      "elapsedMs": 1638
+    },
+    {
+      "stage": "destination:construct",
+      "elapsedMs": 1639
+    },
+    {
+      "stage": "view:construct",
+      "elapsedMs": 1640
+    },
+    {
+      "stage": "view:ready:start",
+      "elapsedMs": 1652
+    },
+    {
+      "stage": "merchant:ready:start",
+      "elapsedMs": 1652
+    },
+    {
+      "stage": "destination:ready:start",
+      "elapsedMs": 1652
+    },
+    {
+      "stage": "controller:complete",
+      "elapsedMs": 1652
+    },
+    {
+      "stage": "initial-features:start",
+      "elapsedMs": 1652
+    },
+    {
+      "stage": "initial-features:complete",
+      "elapsedMs": 1653
+    },
+    {
+      "stage": "view:ready:complete",
+      "elapsedMs": 2069
+    },
+    {
+      "stage": "merchant:ready:complete",
+      "elapsedMs": 2282
+    },
+    {
+      "stage": "destination:ready:complete",
+      "elapsedMs": 2284
+    },
+    {
+      "stage": "status:map_initialized",
+      "elapsedMs": 2285
+    },
+    {
+      "stage": "merchant:layer-view:start",
+      "elapsedMs": 2285
+    },
+    {
+      "stage": "destination:layer-view:start",
+      "elapsedMs": 2285
+    },
+    {
+      "stage": "merchant:layer-view:complete",
+      "elapsedMs": 2892
+    },
+    {
+      "stage": "destination:layer-view:complete",
+      "elapsedMs": 2893
+    }
+  ],
+  "privacy": "Only stage names, durations, public package filenames, and counts retained. No keys, token query strings, personal data, or absolute dependency paths."
+}
