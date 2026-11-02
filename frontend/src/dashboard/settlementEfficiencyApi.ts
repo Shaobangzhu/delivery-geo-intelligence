@@ -1,8 +1,10 @@
+import type { DeliveryPlatform } from "../history/platform";
 export interface SettlementEfficiency {
+  platform?: DeliveryPlatform | null;
   settlementId: string; paymentDate: string; coverageStartDate: string | null; coverageEndDate: string | null;
   actualAdjustment: number | null;
-  deliveryRevenue: { knownTotal: number | null; deliveryCount: number; knownPayoutCount: number; missingPayoutCount: number };
-  sessionCoverage: { includedSessionCount: number; excludedBoundarySessionCount: number; totalHours: number | null; totalMiles: number | null; completenessConfirmed: boolean; structurallyComplete: boolean; issues: string[] };
+  deliveryRevenue: { attributionComplete?: boolean; unknownPlatformDeliveryCount?: number; excludedOtherPlatformDeliveryCount?: number; knownTotal: number | null; deliveryCount: number; knownPayoutCount: number; missingPayoutCount: number };
+  sessionCoverage: { excludedOtherPlatformSessionCount?: number; unattributedSessionCount?: number; mixedPlatformSessionCount?: number; includedSessionCount: number; excludedBoundarySessionCount: number; totalHours: number | null; totalMiles: number | null; completenessConfirmed: boolean; structurallyComplete: boolean; issues: string[] };
   vehicleCost: { basis: "current_profile"; knownAndEstimatedTotal: number | null; fullTotal: number | null;
     componentTotals: Record<"energy" | "tireWear" | "depreciation", { value: number | null; sampleCount: number; excludedCount: number }>;
     completeSessionCount: number; sessionCount: number };

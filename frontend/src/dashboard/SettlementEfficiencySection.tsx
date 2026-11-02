@@ -1,9 +1,14 @@
+import { platformLabel } from "../history/platform";
 import { useEffect, useId, useState } from "react";
 import { loadSettlementEfficiency, type SettlementEfficiencyPage } from "./settlementEfficiencyApi";
 
 const reasonLabels: Record<string, string> = {
+  mixed_platform_session: "Mixed-platform sessions cannot be allocated. Review explicit delivery links.",
+  unknown_delivery_platform: "Legacy delivery platform is unknown. Review its platform in History.",
+  unknown_session_platform: "Session attribution is incomplete because linked delivery platforms are unknown.",
+  unknown_payment_platform: "Payment platform attribution is missing. Correct the platform and reconfirm coverage.",
   missing_coverage_dates: "Enter both settlement coverage dates in History.",
-  unconfirmed_session_coverage: "Review the period and confirm that all deliveries and sessions are recorded in the Payment modal.",
+  unconfirmed_session_coverage: "Platform coverage requires reconfirmation. Review the period and confirm that all deliveries and sessions are recorded in the Payment modal.",
   missing_delivery_payout: "Backfill every covered delivery payout.", unlinked_delivery: "Explicitly link every covered delivery to its complete session.",
   missing_linked_session: "Repair a delivery link to a missing session.", covered_delivery_session_outside_coverage: "Review a covered delivery linked to a session outside this interval.",
   incomplete_session_associations: "An earlier session update did not complete. Review delivery links in History and save the session again.",
@@ -47,12 +52,12 @@ export function SettlementEfficiencySection() {
     {page && !page.data.length && <p>No Prop 22 settlements recorded.</p>}
     {page && page.data.length > 0 && <div className="form-field"><label htmlFor={`${id}-select`}>Settlement</label>
       <select id={`${id}-select`} value={selected} onChange={(event) => setSelected(event.target.value)}>{page.data.map((item) =>
-        <option key={item.settlementId} value={item.settlementId}>{coverageLabel(item)} · paid {item.paymentDate} · {item.settlementId.slice(-6)}</option>)}</select>
+        <option key={item.settlementId} value={item.settlementId}>{platformLabel(item.platform)} · {coverageLabel(item)} · paid {item.paymentDate} · {item.settlementId.slice(-6)}</option>)}</select>
       {page.hasMore && <small>Showing the {page.limit} most recent payments of {page.totalSettlements}.</small>}
     </div>}
     {row && <>
-      <p>Coverage: {coverageLabel(row)} · Payment date: {row.paymentDate} · Status: <strong>{row.status}</strong></p>
-      <p>Coverage confirmation: {row.sessionCoverage.completenessConfirmed ? "User confirmed" : "Not confirmed"}. Confirmation is a user declaration, not independent proof of complete records.</p>
+      <p>Platform: <strong>{platformLabel(row.platform)}</strong> · Coverage: {coverageLabel(row)} · Payment date: {row.paymentDate} · Status: <strong>{row.status}</strong></p>
+      <p>Coverage confirmation: {!row.platform ? "Platform attribution missing; prior confirmation is unverified" : row.sessionCoverage.completenessConfirmed ? "User confirmed" : "Not confirmed"}. Confirmation is a user declaration, not independent proof of complete records.</p>
       <p>Structural checks: {row.sessionCoverage.structurallyComplete ? "Passed" : "Blocked — review the reasons below"}.</p>
       <dl className="efficiency-quality">
         <div><dt>Actual Prop 22 Adjustment</dt><dd>{money(row.actualAdjustment)}</dd></div>
@@ -73,7 +78,7 @@ export function SettlementEfficiencySection() {
         <div key={key}><dt>{label}</dt><dd>{money(row.vehicleCost.componentTotals[key].value)} · {row.vehicleCost.componentTotals[key].sampleCount} known / {row.vehicleCost.sessionCount} sessions</dd></div>)}</dl></details>
       {!!row.reasons.length && <ul>{row.reasons.map((reason) => <li key={reason}>{reasonLabels[reason] ?? "Review recorded period data."}</li>)}</ul>}
       <p>Pre-tax modeled profit uses current A.1 vehicle assumptions, including configured zero energy cash cost. No IRS deductions or taxes are included. Adjustment income is never allocated to deliveries, sessions, merchants, or strategies.</p>
-      <p>Coverage uses Los Angeles midnight boundaries and delivery pickup timestamps as an approximation of Uber attribution. Date-only records may differ from statement cutoffs.</p>
+      <p>Coverage uses Los Angeles midnight boundaries and delivery pickup timestamps as an approximation of platform attribution. Date-only records may differ from statement cutoffs.</p>
     </>}
   </section>;
 }

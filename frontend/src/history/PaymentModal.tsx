@@ -1,3 +1,4 @@
+import { PlatformOptions, platformLabel, type DeliveryPlatform } from "./platform";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { DialogFrame } from "./DialogFrame";
 import { getPayment, savePayment, paymentError, type EarningsAdjustment, type SettlementDetails, type Reconciliation } from "./earningsApi";
@@ -6,12 +7,15 @@ export function PaymentModal({ payment, onClose, onSaved }: {
   payment: EarningsAdjustment | null; onClose: () => void; onSaved: () => void;
 }) {
   const id = useId();
+  const [platform, setPlatform] = useState<DeliveryPlatform | "">(payment?.platform ?? "");
+  const [platformReviewed, setPlatformReviewed] = useState(false);
+  const platformChanged = !!payment && platform !== (payment.platform ?? "");
   const [date, setDate] = useState(payment?.paymentDate ?? "");
   const [amount, setAmount] = useState(payment ? String(payment.amount) : "");
   const [start, setStart] = useState(payment?.coverageStartDate ?? "");
   const [end, setEnd] = useState(payment?.coverageEndDate ?? "");
   const [notes, setNotes] = useState(payment?.notes ?? "");
-  const [coverageConfirmed, setCoverageConfirmed] = useState(payment?.sessionCoverageConfirmed === true);
+  const [coverageConfirmed, setCoverageConfirmed] = useState(!!payment?.platform && payment.sessionCoverageConfirmed === true);
   const details = payment?.settlementDetails;
   const [hours, setHours] = useState(details?.engagedSeconds === undefined ? "" : String(Math.floor(details.engagedSeconds / 3600)));
   const [minutes, setMinutes] = useState(details?.engagedSeconds === undefined ? "" : String(Math.floor(details.engagedSeconds % 3600 / 60)));
@@ -41,6 +45,7 @@ export function PaymentModal({ payment, onClose, onSaved }: {
     if (!date || !amount.trim() || !Number.isFinite(value) || value <= 0 || Math.abs(value * 100 - Math.round(value * 100)) > 1e-7) {
       setError("Enter a payment date and a positive amount with up to two decimal places."); return;
     }
+    if (!payment && !platform) { setError("Select a platform before saving."); return; }
     if (Boolean(start) !== Boolean(end) || (start && start > end)) {
       setError("Supply both coverage dates with start on or before end."); return;
     }
@@ -72,11 +77,11 @@ export function PaymentModal({ payment, onClose, onSaved }: {
       : Object.keys(entered).length ? { settlementDetails: entered } : {};
     pending.current = true; setBusy(true);
     try {
-      await savePayment({ type: "prop22_guarantee", paymentDate: date, amount: value,
+      await savePayment({ ...(platform ? { platform } : {}), type: "prop22_guarantee", paymentDate: date, amount: value,
         ...(start ? { coverageStartDate: start, coverageEndDate: end } : payment ? { coverageStartDate: null, coverageEndDate: null } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : payment ? { notes: null } : {}),
         ...settlementPayload,
-        ...(coverageConfirmed !== (payment?.sessionCoverageConfirmed === true) ? { sessionCoverageConfirmed: coverageConfirmed } : {})
+        ...(platformChanged ? { sessionCoverageConfirmed: false } : platform && coverageConfirmed !== (payment?.sessionCoverageConfirmed === true) ? { sessionCoverageConfirmed: coverageConfirmed } : {})
       }, payment?.id);
       onSaved();
     } catch { setError(paymentError()); }
@@ -87,6 +92,11 @@ export function PaymentModal({ payment, onClose, onSaved }: {
     <button type="button" className="dialog-close" aria-label="Close dialog" onClick={onClose} disabled={busy}>×</button>
     <form onSubmit={submit} noValidate aria-busy={busy} onChange={() => setReconciliationChanged(true)}>
       <div className="form-grid">
+        <div className="form-field"><label htmlFor={`${id}-platform`}>Payment Platform{!payment && " *"}</label>
+          <select id={`${id}-platform`} value={platform} disabled={busy} required={!payment} onChange={(event) => { setPlatform(event.target.value as DeliveryPlatform | ""); setCoverageConfirmed(false); setPlatformReviewed(true); }}>
+            <PlatformOptions legacy={!!payment && !payment.platform} />
+          </select>
+        </div>
         <div className="form-field"><label htmlFor={`${id}-date`}>Payment Date *</label><input id={`${id}-date`} type="date" required value={date} onChange={(e) => setDate(e.target.value)} disabled={busy} data-autofocus /></div>
         <div className="form-field"><label htmlFor={`${id}-amount`}>Amount Received *</label><input id={`${id}-amount`} type="number" min="0.01" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} /></div>
         <div className="form-field"><label htmlFor={`${id}-start`}>Coverage Start Date</label><input id={`${id}-start`} type="date" value={start} onChange={(e) => setStart(e.target.value)} disabled={busy} /></div>
@@ -94,12 +104,14 @@ export function PaymentModal({ payment, onClose, onSaved }: {
         <div className="form-field form-wide"><label htmlFor={`${id}-notes`}>Optional Notes</label><textarea id={`${id}-notes`} rows={3} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} /></div>
       </div>
       <div className="form-field coverage-confirmation">
-        <label><input type="checkbox" checked={coverageConfirmed} onChange={(e) => setCoverageConfirmed(e.target.checked)} disabled={busy} /> I have recorded all Uber Eats deliveries and sessions for this settlement period.</label>
+        <label><input type="checkbox" checked={coverageConfirmed} onChange={(e) => setCoverageConfirmed(e.target.checked)} disabled={busy || !platform || platformChanged} /> I have recorded all {platform ? platformLabel(platform) : "platform"} deliveries and sessions for this settlement period.</label>
         <p className="duration-help">This manual confirmation enables full-period efficiency when coverage dates and consistency checks pass. It does not change received income or prove that no activity is missing.</p>
       </div>
+      {!platform && <p className="duration-help">Platform attribution is missing. Previous confirmation does not verify platform-specific coverage.</p>}
+      {payment && platformReviewed && <p role="status" className="duration-help">Review coverage again after changing platform. Existing statement values are preserved and require review. Save the platform correction, then reopen to confirm coverage.</p>}
       <details className="settlement-details">
         <summary>Settlement Details (Optional)</summary>
-        <p className="duration-help">Enter official Uber statement observations, not totals inferred from deliveries. Leave unknown values blank.</p>
+        <p className="duration-help">Enter official platform statement observations, not totals inferred from deliveries. Leave unknown values blank.</p>
         <div className="form-grid">
           <fieldset className="duration-group form-wide" disabled={busy}>
             <legend>Engaged Time</legend>
@@ -111,7 +123,7 @@ export function PaymentModal({ payment, onClose, onSaved }: {
           </fieldset>
           <div className="form-field"><label htmlFor={`${id}-miles`}>Engaged Miles</label><input id={`${id}-miles`} type="number" min="0" step="any" value={miles} onChange={(e) => setMiles(e.target.value)} disabled={busy} /></div>
           <div className="form-field"><label htmlFor={`${id}-eligible`}>Eligible Earnings (Excluding Tips)</label><input id={`${id}-eligible`} type="number" min="0" step="0.01" value={eligible} onChange={(e) => setEligible(e.target.value)} disabled={busy} /></div>
-          <div className="form-field form-wide"><label htmlFor={`${id}-guarantee`}>Uber Reported Guaranteed Amount</label><input id={`${id}-guarantee`} type="number" min="0" step="0.01" value={guarantee} onChange={(e) => setGuarantee(e.target.value)} disabled={busy} /></div>
+          <div className="form-field form-wide"><label htmlFor={`${id}-guarantee`}>{platform ? platformLabel(platform) : "Platform"} Reported Guaranteed Amount</label><input id={`${id}-guarantee`} type="number" min="0" step="0.01" value={guarantee} onChange={(e) => setGuarantee(e.target.value)} disabled={busy} /></div>
         </div>
         <section className="settlement-reconciliation" aria-label="Saved settlement reconciliation" aria-live="polite">
           {reconciliationChanged ? <p>Save changes, then reopen to view updated reconciliation.</p>

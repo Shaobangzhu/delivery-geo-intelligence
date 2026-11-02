@@ -1,3 +1,4 @@
+import { PlatformOptions, type DeliveryPlatform } from "./platform";
 import { useId, useRef, useState, type FormEvent } from "react";
 import { createDelivery, updateDelivery, userFacingError, type Delivery, type DeliveryPayload, type Merchant } from "./api";
 import { DialogFrame } from "./DialogFrame";
@@ -26,7 +27,7 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
   const [hours, setHours] = useState(duration === undefined ? "" : String(Math.floor(duration / 3600)));
   const [minutes, setMinutes] = useState(duration === undefined ? "" : String(Math.floor(duration % 3600 / 60)));
   const [seconds, setSeconds] = useState(duration === undefined ? "" : String(duration % 60));
-  const [notes, setNotes] = useState(delivery?.notes ?? "");
+  const [platform, setPlatform] = useState<DeliveryPlatform | "">(delivery?.platform ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const savingRef = useRef(false);
@@ -36,7 +37,7 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
     event.preventDefault();
     if (savingRef.current) return;
     setError("");
-    if (!merchantId || !pickedUpAt || (needsAddress && !destinationAddress.trim())) {
+    if ((!delivery && !platform) || !merchantId || !pickedUpAt || (needsAddress && !destinationAddress.trim())) {
       setError("Complete the required fields before saving.");
       return;
     }
@@ -63,13 +64,13 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
 
     const payload: DeliveryPayload = {
       merchantId,
+      ...(platform ? { platform } : {}),
       ...(!durationEmpty ? { deliveryDurationSeconds: totalSeconds }
         : duration !== undefined ? { deliveryDurationSeconds: null } : {}),
       pickedUpAt: pickupDate.toISOString(),
-      ...(delivery ? { payout: payoutValue, distanceMiles: distanceValue, notes: notes.trim() || null } : {
+      ...(delivery ? { payout: payoutValue, distanceMiles: distanceValue } : {
         ...(payoutValue === null ? {} : { payout: payoutValue }),
-        ...(distanceValue === null ? {} : { distanceMiles: distanceValue }),
-        ...(notes.trim() ? { notes: notes.trim() } : {})
+        ...(distanceValue === null ? {} : { distanceMiles: distanceValue })
       }),
       ...(needsAddress ? { destinationAddress: destinationAddress.trim() } : {})
     };
@@ -95,6 +96,11 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
       <button type="button" className="dialog-close" aria-label="Close dialog" onClick={onClose} disabled={saving}>×</button>
       <form onSubmit={submit} aria-busy={saving} noValidate>
         <div className="form-grid">
+          <div className="form-field"><label htmlFor={`${id}-platform`}>Delivery Platform{!delivery && " *"}</label>
+            <select id={`${id}-platform`} value={platform} onChange={(event) => setPlatform(event.target.value as DeliveryPlatform | "")} required={!delivery} disabled={saving}>
+              <PlatformOptions legacy={!!delivery && !delivery.platform} />
+            </select>
+          </div>
           <div className="form-field">
             <label htmlFor={`${id}-merchant`}>Merchant <span aria-hidden="true">*</span></label>
             <select id={`${id}-merchant`} value={merchantId} onChange={(event) => setMerchantId(event.target.value)} required data-autofocus disabled={saving}>
@@ -150,10 +156,7 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
             </div>
             <p className="duration-help">Observed elapsed time from your delivery record. Leave all fields blank for unknown duration.</p>
           </fieldset>
-          <div className="form-field form-wide">
-            <label htmlFor={`${id}-notes`}>Optional Notes</label>
-            <textarea id={`${id}-notes`} rows={3} maxLength={2000} value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} />
-          </div>
+
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="dialog-actions">

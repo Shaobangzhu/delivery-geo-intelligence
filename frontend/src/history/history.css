@@ -13,7 +13,7 @@
 .add-delivery { flex-shrink: 0; }
 .add-delivery span { font-size: 20px; line-height: 10px; font-weight: 400; }
 
-.history-filters { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: end; margin-bottom: 14px; }
+.history-filters { display: grid; grid-template-columns: 1.4fr repeat(5, minmax(0, 1fr)); gap: 10px; align-items: end; margin-bottom: 14px; }
 .filter-field, .form-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .filter-field label, .form-field label { color: #304c76; font-size: 11px; font-weight: 700; }
 .filter-field input, .filter-field select, .form-field input, .form-field select, .form-field textarea { width: 100%; min-height: 37px; padding: 8px 10px; border: 1px solid #cbdbf0; border-radius: 5px; background: #fff; color: #142e5a; font: inherit; font-size: 12px; box-shadow: 0 1px 4px #4975a90d; }
@@ -25,7 +25,7 @@
 
 .history-table-card { overflow: hidden; border: 1px solid #d8e5f5; border-radius: 8px; background: white; box-shadow: 0 4px 12px #517cb015; }
 .table-scroll { overflow-x: auto; }
-.history-table { width: 100%; min-width: 970px; border-collapse: collapse; text-align: left; }
+.history-table { width: 100%; min-width: 1060px; border-collapse: collapse; text-align: left; }
 .history-table thead { background: #f1f7ff; }
 .history-table th { padding: 11px 12px; border-bottom: 1px solid #d8e5f5; color: #466286; font-size: 11px; font-weight: 750; white-space: nowrap; }
 .history-table td { padding: 9px 12px; border-bottom: 1px solid #e4edf8; color: #213c65; font-size: 12px; vertical-align: middle; }
@@ -107,7 +107,7 @@
 .history-primary-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .prop22-section { margin-top: 24px; }
 .prop22-section h2 { font-size: 18px; }
-.payment-table { min-width: 570px; }
+.payment-table { min-width: 670px; }
 
 .settlement-details { margin-top: 16px; border: 1px solid #dce8f8; border-radius: 8px; padding: 12px; }
 .settlement-details summary { cursor: pointer; color: #294775; font-size: 13px; font-weight: 700; }
@@ -149,3 +149,6 @@
 .annual-warning { padding: 10px 12px; border-left: 3px solid #b77900; background: #fff8e7; color: #684500; font-size: 12px; line-height: 1.5; }
 .annual-statements .table-scroll:focus-visible { outline: 2px solid #0875ff; outline-offset: 3px; }
 .annual-caption { text-align: left; padding: 10px 12px; color: #516889; font-size: 12px; }
+
+.platform-label { display: inline-block; white-space: nowrap; padding: 3px 7px; border-radius: 4px; background: #eef3fa; color: #304c76; font-size: 11px; }
+.payment-platform-filter { max-width: 220px; margin-bottom: 12px; }

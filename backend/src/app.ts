@@ -10,6 +10,7 @@ import {
   deliveryInputSchema, deliveryPatchSchema, deliveryQuerySchema, deliveryResponse,
   merchantInputSchema, merchantPatchSchema, merchantResponse, objectIdSchema,
   earningsAdjustmentInputSchema, earningsAdjustmentPatchSchema, earningsAdjustmentResponse,
+  earningsAdjustmentPersistedSchema, earningsAdjustmentQuerySchema,
   type EarningsAdjustmentDocument, type DeliveryDocument, type MerchantDocument
 } from "./model.js";
 
@@ -109,8 +110,14 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     return response.json(await withReferenceWrite(() => getDestinationHeatmap(db, parsed.data, now)));
   });
 
-  app.get("/api/earnings-adjustments", async (_request, response) => {
-    const rows = await adjustments.find().sort({ paymentDate: -1, _id: -1 }).toArray();
+  app.get("/api/earnings-adjustments", async (request, response) => {
+    const query = earningsAdjustmentQuerySchema.safeParse(request.query);
+    if (!query.success) return invalid(response, query.error);
+    const platform = query.data.platform;
+    const filter: Filter<EarningsAdjustmentDocument> = platform === undefined ? {} : {
+      platform: platform === "unknown" ? { $exists: false } : platform
+    };
+    const rows = await adjustments.find(filter).sort({ paymentDate: -1, _id: -1 }).toArray();
     return response.json({ data: rows.map(earningsAdjustmentResponse) });
   });
   app.get("/api/earnings-adjustments/:id", async (request, response) => {
@@ -143,7 +150,11 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
         merged.settlementDetails = details;
       }
       for (const key of ["coverageStartDate", "coverageEndDate", "notes", "settlementDetails"]) if (merged[key] === null) delete merged[key];
-      const validated = earningsAdjustmentInputSchema.safeParse(merged);
+      const platformChanged = patch.data.platform !== undefined && patch.data.platform !== existing.platform;
+      // Reassignment always requires a later, separate confirmation, even if this
+      // request also sends true. Prior confirmation cannot prove the new scope.
+      if (platformChanged) merged.sessionCoverageConfirmed = false;
+      const validated = earningsAdjustmentPersistedSchema.safeParse(merged);
       if (!validated.success) return invalid(response, validated.error);
       const set: Record<string, unknown> = {};
       const unset: Record<string, ""> = {};
@@ -156,6 +167,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
         } else if (value === null) unset[key] = "";
         else set[key] = value;
       }
+      if (platformChanged) set.sessionCoverageConfirmed = false;
       const updated = await adjustments.findOneAndUpdate({ _id }, {
         ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {})
       }, { returnDocument: "after" });
@@ -247,8 +259,9 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
   app.get("/api/deliveries", async (request, response) => {
     const parsed = deliveryQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalid(response, parsed.error);
-    const { search, category, from, to, sort, page, pageSize } = parsed.data;
+    const { platform, search, category, from, to, sort, page, pageSize } = parsed.data;
     const filter: Filter<DeliveryDocument> = {};
+    if (platform !== undefined) filter.platform = platform === "unknown" ? { $exists: false } : platform;
     if (search || category) {
       const merchantFilter: Filter<MerchantDocument> = {};
       if (search) merchantFilter.name = { $regex: escapeRegex(search), $options: "i" };
@@ -296,7 +309,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
       }
     }
     const delivery: DeliveryDocument = {
-      _id: new ObjectId(), merchantId, pickedUpAt: new Date(parsed.data.pickedUpAt),
+      _id: new ObjectId(), merchantId, platform: parsed.data.platform, pickedUpAt: new Date(parsed.data.pickedUpAt),
       ...(parsed.data.payout === undefined ? {} : { payout: parsed.data.payout }),
       ...(parsed.data.distanceMiles === undefined ? {} : { distanceMiles: parsed.data.distanceMiles }),
       ...(parsed.data.deliveryDurationSeconds === undefined ? {} : { deliveryDurationSeconds: parsed.data.deliveryDurationSeconds }),
@@ -326,6 +339,7 @@ export function createApp(db: Db, geocodeDestination: DestinationGeocoder, geoco
     }
     const set: Partial<DeliveryDocument> = {};
     const unset: Record<string, ""> = {};
+    if (changes.platform !== undefined) set.platform = changes.platform;
     if (changes.merchantId !== undefined) set.merchantId = new ObjectId(changes.merchantId);
     if (changes.pickedUpAt !== undefined) set.pickedUpAt = new Date(changes.pickedUpAt);
     if (changes.destinationAddress !== undefined) {

@@ -24,12 +24,13 @@ it("keeps details collapsed and optional, then captures engaged time without inf
   expect(screen.getByText("Insufficient data")).toBeInTheDocument();
   await user.click(summary); expect(details.open).toBe(false);
   await user.click(summary);
+  await user.selectOptions(screen.getByLabelText("Payment Platform *"), "doordash");
   fireEvent.change(screen.getByLabelText("Payment Date *"), { target: { value: "2026-10-08" } });
-  for (const [label, value] of [["Amount Received *", "24.17"], ["Hours", "8"], ["Minutes", "24"], ["Seconds", "0"], ["Engaged Miles", "38.123456"], ["Eligible Earnings (Excluding Tips)", "100"], ["Uber Reported Guaranteed Amount", "124.17"]]) {
+  for (const [label, value] of [["Amount Received *", "24.17"], ["Hours", "8"], ["Minutes", "24"], ["Seconds", "0"], ["Engaged Miles", "38.123456"], ["Eligible Earnings (Excluding Tips)", "100"], ["DoorDash Reported Guaranteed Amount", "124.17"]]) {
     await user.type(screen.getByLabelText(label), value);
   }
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
-  expect(savePayment).toHaveBeenCalledWith({ type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17, settlementDetails: observed }, undefined);
+  expect(savePayment).toHaveBeenCalledWith({ platform: "doordash", type: "prop22_guarantee", paymentDate: "2026-10-08", amount: 24.17, settlementDetails: observed }, undefined);
   expect(saved).toHaveBeenCalledOnce();
 });
 
@@ -39,7 +40,7 @@ it("backfills a legacy payment with explicit zero observations using its origina
   expect(screen.getByLabelText("Hours")).toHaveValue(null);
   expect(await screen.findByText("Insufficient data")).toBeInTheDocument();
   for (const label of ["Seconds", "Engaged Miles", "Eligible Earnings (Excluding Tips)"]) await user.type(screen.getByLabelText(label), "0");
-  await user.type(screen.getByLabelText("Uber Reported Guaranteed Amount"), "24.17");
+  await user.type(screen.getByLabelText("Platform Reported Guaranteed Amount"), "24.17");
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
   expect(savePayment).toHaveBeenCalledWith(expect.objectContaining({ amount: 24.17, settlementDetails: { engagedSeconds: 0, engagedMiles: 0, eligibleEarningsExcludingTips: 0, reportedGuaranteedAmount: 24.17 } }), "legacy-payment");
 });
@@ -55,8 +56,8 @@ it("prepopulates time, shows saved reconciliation, edits one field, and intentio
   expect(within(reconciliation).getAllByText("$24.17")).toHaveLength(2);
   expect(within(reconciliation).getByText("$0.00")).toBeInTheDocument();
   await user.clear(screen.getByLabelText("Engaged Miles"));
-  await user.clear(screen.getByLabelText("Uber Reported Guaranteed Amount"));
-  await user.type(screen.getByLabelText("Uber Reported Guaranteed Amount"), "130");
+  await user.clear(screen.getByLabelText("Platform Reported Guaranteed Amount"));
+  await user.type(screen.getByLabelText("Platform Reported Guaranteed Amount"), "130");
   expect(screen.queryByText("Matched")).not.toBeInTheDocument();
   expect(screen.getByText(/Save changes, then reopen/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
@@ -69,7 +70,7 @@ it("shows Needs review without replacing received money and allows clearing ever
   expect(await screen.findByText("Needs review")).toBeInTheDocument();
   expect(screen.getByLabelText("Amount Received *")).toHaveValue(24.17);
   expect(screen.getByText("-$5.83")).toBeInTheDocument();
-  for (const label of ["Hours", "Minutes", "Seconds", "Engaged Miles", "Eligible Earnings (Excluding Tips)", "Uber Reported Guaranteed Amount"]) await user.clear(screen.getByLabelText(label));
+  for (const label of ["Hours", "Minutes", "Seconds", "Engaged Miles", "Eligible Earnings (Excluding Tips)", "Platform Reported Guaranteed Amount"]) await user.clear(screen.getByLabelText(label));
   await user.click(screen.getByRole("button", { name: "Save Payment" }));
   expect(savePayment).toHaveBeenCalledWith(expect.objectContaining({ settlementDetails: null }), "legacy-payment");
 });

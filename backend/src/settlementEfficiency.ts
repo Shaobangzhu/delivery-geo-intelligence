@@ -2,10 +2,14 @@ import type { Db } from "mongodb";
 import { z } from "zod";
 import { resolveCoverageDates } from "./dashboard.js";
 import { calculateSessionEfficiency } from "./efficiency.js";
-import type { DeliveryDocument, EarningsAdjustmentDocument } from "./model.js";
+import { deliveryPlatformSchema, type DeliveryDocument, type EarningsAdjustmentDocument } from "./model.js";
 import type { DeliverySessionDocument, VehicleEconomicsProfile, VehicleProfileDocument } from "./sessionModel.js";
 
-type DeliveryObservation = Pick<DeliveryDocument, "_id" | "pickedUpAt" | "sessionId" | "payout">;
+type DeliveryObservation = Pick<DeliveryDocument, "_id" | "pickedUpAt" | "sessionId" | "payout" | "platform">;
+const knownPlatform = (value: unknown) => {
+  const parsed = deliveryPlatformSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
 const valid = (n: number | undefined): n is number => n !== undefined && Number.isFinite(n) && n >= 0;
 const safe = (n: number) => Number.isFinite(n) && Math.abs(n) <= Number.MAX_SAFE_INTEGER / 100 ? n : null;
 const sum = (values: number[]) => values.length ? safe(values.reduce((total, n) => total + n, 0)) : null;
@@ -20,46 +24,78 @@ export function calculateSettlementEfficiency(payment: EarningsAdjustmentDocumen
   deliveries: DeliveryObservation[], sessions: DeliverySessionDocument[], profile: VehicleEconomicsProfile | null) {
   const range = coverage(payment);
   const issues = new Set<string>();
+  const platform = knownPlatform(payment.platform);
+  if (!platform) issues.add("unknown_payment_platform");
   const confirmed = payment.sessionCoverageConfirmed === true;
   if (!range) issues.add("missing_coverage_dates");
   if (!confirmed) issues.add("unconfirmed_session_coverage");
   if (range && allPayments.some((other) => {
     if (other._id.equals(payment._id)) return false;
+    // Unknown legacy periods compete conservatively with either platform.
+    const otherPlatform = knownPlatform(other.platform);
+    if (platform && otherPlatform && platform !== otherPlatform) return false;
     const interval = coverage(other);
     return interval && interval.start < range.endExclusive && interval.endExclusive > range.start;
   })) issues.add("overlapping_settlements");
   const inRange = (date: Date) => !!range && date >= range.start && date < range.endExclusive;
-  const covered = deliveries.filter((row) => inRange(row.pickedUpAt));
-  const included = sessions.filter((row) => range && row.startedAt >= range.start && row.endedAt <= range.endExclusive && row.endedAt > row.startedAt);
-  const crossing = sessions.filter((row) => range && row.startedAt < range.endExclusive && row.endedAt > range.start &&
-    (row.startedAt < range.start || row.endedAt > range.endExclusive));
-  if (crossing.length) issues.add("session_crosses_coverage_boundary");
-  const sessionById = new Map(sessions.map((row) => [row._id.toHexString(), row]));
-  for (const row of sessions) {
-    if ((inRange(row.startedAt) || inRange(row.endedAt)) && !(row.endedAt > row.startedAt)) issues.add("missing_session_duration");
-  }
-  const includedIds = new Set(included.map((row) => row._id.toHexString()));
+  const observed = deliveries.filter((row) => inRange(row.pickedUpAt));
+  const covered = observed.filter((row) => platform !== null && row.platform === platform);
+  const unknownPlatformDeliveryCount = observed.filter((row) => !knownPlatform(row.platform)).length;
+  if (unknownPlatformDeliveryCount) issues.add("unknown_delivery_platform");
   const links = new Map<string, DeliveryObservation[]>();
   for (const row of deliveries) if (row.sessionId) {
     const key = row.sessionId.toHexString(); const group = links.get(key) ?? [];
     group.push(row); links.set(key, group);
   }
+  // Only explicit, complete, exclusive associations establish Session platform.
+  // Time overlap selects candidates for review; it never supplies attribution.
+  const attribution = (row: DeliverySessionDocument) => {
+    const linked = links.get(row._id.toHexString()) ?? [];
+    const platforms = new Set(linked.map((delivery) => knownPlatform(delivery.platform)).filter((value) => value !== null));
+    if (platforms.size > 1) return { platform: null, reason: "mixed_platform_session" };
+    if (row.associationIntegrity) return { platform: null, reason: "incomplete_session_associations" };
+    if (!linked.length) return { platform: null, reason: "session_without_linked_deliveries" };
+    if (linked.some((delivery) => !knownPlatform(delivery.platform))) return { platform: null, reason: "unknown_session_platform" };
+    if (!(row.endedAt > row.startedAt)) return { platform: null, reason: "missing_session_duration" };
+    if (linked.some((delivery) => !(delivery.pickedUpAt >= row.startedAt && delivery.pickedUpAt < row.endedAt))) {
+      return { platform: null, reason: "linked_delivery_outside_session" };
+    }
+    return { platform: knownPlatform(linked[0]!.platform), reason: null };
+  };
+  const attributed = new Map(sessions.map((row) => [row._id.toHexString(), attribution(row)]));
+  const candidates = sessions.filter((row) => range && (row.startedAt < range.endExclusive && row.endedAt > range.start ||
+    inRange(row.startedAt) || inRange(row.endedAt)));
+  const relevant = candidates.filter((row) => {
+    const result = attributed.get(row._id.toHexString())!;
+    return result.platform === null || result.platform === platform;
+  });
+  for (const row of relevant) {
+    const result = attributed.get(row._id.toHexString())!;
+    if (result.reason) issues.add(result.reason);
+    if (!(row.endedAt > row.startedAt)) issues.add("missing_session_duration");
+    const linked = links.get(row._id.toHexString()) ?? [];
+    if (linked.some((delivery) => !inRange(delivery.pickedUpAt))) issues.add("linked_delivery_outside_coverage");
+  }
+  const included = relevant.filter((row) => platform !== null && attributed.get(row._id.toHexString())!.platform === platform &&
+    row.startedAt >= range!.start && row.endedAt <= range!.endExclusive);
+  const crossing = relevant.filter((row) => row.startedAt < range!.endExclusive && row.endedAt > range!.start &&
+    (row.startedAt < range!.start || row.endedAt > range!.endExclusive));
+  if (crossing.length) issues.add("session_crosses_coverage_boundary");
+  const sessionById = new Map(sessions.map((row) => [row._id.toHexString(), row]));
   for (const row of covered) {
     if (!valid(row.payout)) issues.add("missing_delivery_payout");
     if (!row.sessionId) { issues.add("unlinked_delivery"); continue; }
     const target = sessionById.get(row.sessionId.toHexString());
     if (!target) issues.add("missing_linked_session");
     else {
-      if (!includedIds.has(target._id.toHexString())) issues.add("covered_delivery_session_outside_coverage");
+      if (range && !(target.startedAt >= range.start && target.endedAt <= range.endExclusive)) issues.add("covered_delivery_session_outside_coverage");
+      const result = attributed.get(target._id.toHexString())!;
+      if (result.reason) issues.add(result.reason);
       if (!(target.endedAt > target.startedAt)) issues.add("missing_session_duration");
     }
   }
   for (const row of included) {
-    if (row.associationIntegrity) issues.add("incomplete_session_associations");
     const linked = links.get(row._id.toHexString()) ?? [];
-    if (!linked.length) issues.add("session_without_linked_deliveries");
-    if (linked.some((delivery) => !inRange(delivery.pickedUpAt))) issues.add("linked_delivery_outside_coverage");
-    if (linked.some((delivery) => delivery.pickedUpAt < row.startedAt || delivery.pickedUpAt >= row.endedAt)) issues.add("linked_delivery_outside_session");
     if (linked.some((delivery) => !valid(delivery.payout))) issues.add("missing_linked_delivery_payout");
     if (!valid(row.totalDrivenMiles)) issues.add("missing_session_mileage");
   }
@@ -73,7 +109,11 @@ export function calculateSettlementEfficiency(payment: EarningsAdjustmentDocumen
   const known = covered.filter((row) => valid(row.payout));
   const knownTotal = sum(known.map((row) => row.payout!));
   const actualAdjustment = valid(payment.amount) ? safe(payment.amount) : null;
-  const workPeriodRevenue = range && covered.length > 0 && known.length === covered.length && knownTotal !== null && actualAdjustment !== null && !issues.has("overlapping_settlements")
+  const attributionComplete = platform !== null && range !== null && unknownPlatformDeliveryCount === 0 &&
+    relevant.every((row) => attributed.get(row._id.toHexString())!.reason === null) &&
+    covered.every((row) => !row.sessionId || !sessionById.has(row.sessionId.toHexString()) ||
+      attributed.get(row.sessionId.toHexString())!.reason === null);
+  const workPeriodRevenue = attributionComplete && range && covered.length > 0 && known.length === covered.length && knownTotal !== null && actualAdjustment !== null && !issues.has("overlapping_settlements")
     ? safe(knownTotal + actualAdjustment) : null;
   if (known.length > 0 && knownTotal === null || actualAdjustment === null || knownTotal !== null && actualAdjustment !== null && safe(knownTotal + actualAdjustment) === null) issues.add("numeric_result_unavailable");
   const calculations = included.map((row) => calculateSessionEfficiency(row, links.get(row._id.toHexString()) ?? [], profile));
@@ -103,15 +143,20 @@ export function calculateSettlementEfficiency(payment: EarningsAdjustmentDocumen
   if (estimatedEconomicProfit !== null && (estimatedEconomicProfitPerHour === null || totalMiles! > 0 && estimatedEconomicProfitPerMile === null)) reasons.add("numeric_result_unavailable");
   if (totalMiles === 0) reasons.add("zero_session_mileage_denominator");
   if (completeCoverage && (adjustedEarningsPerHour === null || totalMiles! > 0 && adjustedEarningsPerMile === null || fullCost !== null && estimatedEconomicProfit === null)) reasons.add("numeric_result_unavailable");
-  const status = !range || !covered.length || !included.length ? "unavailable" as const
+  const status = !platform || !range || !covered.length || !included.length ? "unavailable" as const
     : completeCoverage && adjustedEarningsPerHour !== null && adjustedEarningsPerMile !== null ? "ready" as const : "partial" as const;
   return {
-    settlementId: payment._id.toHexString(), paymentDate: payment.paymentDate,
+    settlementId: payment._id.toHexString(), paymentDate: payment.paymentDate, platform,
     coverageStartDate: payment.coverageStartDate ?? null, coverageEndDate: payment.coverageEndDate ?? null,
     categoryScope: "all" as const, basis: "settlement_coverage_period" as const,
     range: range ? { start: range.start.toISOString(), endExclusive: range.endExclusive.toISOString(), timeZone: range.timeZone } : null,
-    actualAdjustment, deliveryRevenue: { knownTotal, deliveryCount: covered.length, knownPayoutCount: known.length, missingPayoutCount: covered.length - known.length },
+    actualAdjustment, deliveryRevenue: { knownTotal, deliveryCount: covered.length, knownPayoutCount: known.length, missingPayoutCount: covered.length - known.length,
+      unknownPlatformDeliveryCount, excludedOtherPlatformDeliveryCount: observed.filter((row) => knownPlatform(row.platform) !== null && row.platform !== platform).length,
+      attributionComplete },
     sessionCoverage: { includedSessionCount: included.length, excludedBoundarySessionCount: crossing.length,
+      excludedOtherPlatformSessionCount: candidates.length - relevant.length,
+      unattributedSessionCount: relevant.filter((row) => attributed.get(row._id.toHexString())!.platform === null).length,
+      mixedPlatformSessionCount: relevant.filter((row) => attributed.get(row._id.toHexString())!.reason === "mixed_platform_session").length,
       totalHours, totalMiles, completenessConfirmed: confirmed, structurallyComplete, issues: [...issues] },
     vehicleCost: { basis: "current_profile" as const, knownAndEstimatedTotal: partialCost, fullTotal: completeCoverage ? fullCost : null, componentTotals,
       completeSessionCount: calculations.filter((row) => row.vehicleCost.completeness === "complete").length, sessionCount: calculations.length },
@@ -130,7 +175,7 @@ function bounded<T>(rows: T[], maximum = MAX_RECORDS) {
 export async function getSettlementEfficiency(db: Db) {
   // Check overlaps against every stored period, including payments outside the recent response.
   const payments = bounded(await db.collection<EarningsAdjustmentDocument>("earningsAdjustments").find({ type: "prop22_guarantee" },
-    { projection: { _id: 1, paymentDate: 1, amount: 1, coverageStartDate: 1, coverageEndDate: 1, sessionCoverageConfirmed: 1 } })
+    { projection: { _id: 1, platform: 1, paymentDate: 1, amount: 1, coverageStartDate: 1, coverageEndDate: 1, sessionCoverageConfirmed: 1 } })
     .sort({ paymentDate: -1, _id: -1 }).limit(1001).toArray(), 1000);
   const recent = payments.slice(0, 20);
   const ranges = recent.flatMap((row) => { const range = coverage(row); return range ? [range] : []; });
@@ -139,7 +184,7 @@ export async function getSettlementEfficiency(db: Db) {
   if (ranges.length) {
     const start = new Date(Math.min(...ranges.map((row) => row.start.getTime())));
     const end = new Date(Math.max(...ranges.map((row) => row.endExclusive.getTime())));
-    const projection = { _id: 1, pickedUpAt: 1, sessionId: 1, payout: 1 };
+    const projection = { _id: 1, platform: 1, pickedUpAt: 1, sessionId: 1, payout: 1 };
     deliveries = bounded(await db.collection<DeliveryDocument>("deliveries").find({ pickedUpAt: { $gte: start, $lt: end } }, { projection }).limit(MAX_RECORDS + 1).toArray());
     const sessionIds = deliveries.flatMap((row) => row.sessionId ? [row.sessionId] : []);
     sessions = bounded(await db.collection<DeliverySessionDocument>("deliverySessions").find({ $or: [

@@ -16,7 +16,7 @@ test("early ISO years retain their century and inclusive coverage boundaries", (
   assert.equal(resolveDashboardFilters({ period: "month", category: "all", asOf: "0099-12-31" }).startDate, "0099-12-01");
 });
 test("unsafe payouts are rejected while zero and optional clearing remain valid", () => {
-  const base = { merchantId: new ObjectId().toHexString(), pickedUpAt: "2026-03-08T09:00:00Z" };
+  const base = { platform: "uber_eats", merchantId: new ObjectId().toHexString(), pickedUpAt: "2026-03-08T09:00:00Z" };
   assert.equal(deliveryInputSchema.safeParse({ ...base, payout: 1e308 }).success, false);
   assert.equal(deliveryPatchSchema.safeParse({ payout: 1e308 }).success, false);
   assert.equal(deliveryInputSchema.parse({ ...base, payout: 0 }).payout, 0);
@@ -41,11 +41,11 @@ test.integration("injected write failures, read isolation and concurrent PATCH i
     await db.collection("merchants").insertOne({ _id: merchantId, name: "Synthetic Pickup", category: "restaurant", city: "Test", location: { type: "Point", coordinates: [0, 0] } });
     const profile = { _id: "primary", vehicleName: "2022 Tesla Model Y Long Range", energyCashCostPerMile: 0, tireReplacementSetCost: 800, expectedTireSetLifeMiles: 20000, marginalDepreciationCostPerMile: 0.05 };
     await db.collection("vehicleEconomics").insertOne(profile);
-    const payment = { _id: new ObjectId(), type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 24.17, coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: true };
+    const payment = { platform: "uber_eats", _id: new ObjectId(), type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 24.17, coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: true };
     await db.collection("earningsAdjustments").insertOne(payment);
     const row = { _id: new ObjectId(), startedAt: new Date("2026-03-08T09:00:00Z"), endedAt: new Date("2026-03-08T10:00:00Z"), totalDrivenMiles: 10, notes: "Synthetic original" };
-    const original = { _id: new ObjectId(), merchantId, pickedUpAt: row.startedAt, payout: 10, sessionId: row._id };
-    const candidates = [20, 30].map((payout) => ({ _id: new ObjectId(), merchantId, pickedUpAt: row.startedAt, payout }));
+    const original = { platform: "uber_eats", _id: new ObjectId(), merchantId, pickedUpAt: row.startedAt, payout: 10, sessionId: row._id };
+    const candidates = [20, 30].map((payout) => ({ platform: "uber_eats", _id: new ObjectId(), merchantId, pickedUpAt: row.startedAt, payout }));
     await db.collection("deliverySessions").insertOne(row); await db.collection("deliveries").insertMany([original, ...candidates]);
     const fail = async () => { throw new Error("External services must not run"); };
     server = createApp(proxy, fail, fail).listen(0, "127.0.0.1"); await once(server, "listening");

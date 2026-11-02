@@ -54,6 +54,7 @@ test("History: required fields, synthetic creation and edit persist through the 
   const dialog = page.getByRole("dialog", { name: "Add Delivery", exact: true });
   await dialog.getByRole("button", { name: "Save Delivery", exact: true }).click();
   await expect(dialog.getByRole("alert")).toHaveText("Complete the required fields before saving.");
+  await dialog.getByLabel("Delivery Platform").selectOption("uber_eats");
   await dialog.getByRole("combobox", { name: "Merchant", exact: true }).selectOption("111111111111111111111111");
   await dialog.getByLabel("Pickup Date & Time").fill("2026-03-08T11:30");
   await dialog.getByRole("textbox", { name: "Destination Address", exact: true }).fill("Synthetic destination zone A");
@@ -171,4 +172,37 @@ test("Mobile: all four routes remain usable at 390px", async ({ page }) => {
     await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name, exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
   }
+});
+
+test("History: both delivery/payment platforms persist and destination input stays private", async ({ page, request }) => {
+  await page.goto("/history");
+  for (const platform of ["uber_eats", "doordash"]) {
+    await page.getByRole("button", { name: "Add Delivery", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Delivery Platform").selectOption(platform);
+    await dialog.getByRole("combobox", { name: "Merchant", exact: true }).selectOption("111111111111111111111111");
+    await dialog.getByLabel("Pickup Date & Time").fill("2026-03-08T11:30");
+    await dialog.getByRole("textbox", { name: "Destination Address", exact: true }).fill("Synthetic destination zone private");
+    await dialog.getByLabel("Payout", { exact: true }).fill(platform === "uber_eats" ? "13.11" : "14.22");
+    await dialog.getByRole("button", { name: "Save Delivery" }).click(); await expect(dialog).toHaveCount(0);
+    await page.getByRole("button", { name: /Add Prop 22 Payment/ }).click();
+    const payment = page.getByRole("dialog");
+    await payment.getByLabel("Payment Platform").selectOption(platform);
+    await payment.getByLabel("Payment Date *").fill("2026-03-08");
+    await payment.getByLabel("Amount Received *").fill(platform === "uber_eats" ? "21.11" : "22.22");
+    await payment.getByRole("button", { name: "Save Payment" }).click(); await expect(payment).toHaveCount(0);
+  }
+  await page.reload();
+  for (const [amount, label] of [["13.11", "Uber Eats"], ["14.22", "DoorDash"], ["21.11", "Uber Eats"], ["22.22", "DoorDash"]]) {
+    await expect(page.getByRole("row").filter({ hasText: `$${amount}` })).toContainText(label);
+  }
+  await page.getByLabel("Delivery Platform", { exact: true }).selectOption("doordash");
+  await expect(page.getByRole("row").filter({ hasText: "$13.11" })).toHaveCount(0);
+  await expect(page.getByRole("row").filter({ hasText: "$22.22" })).toBeVisible();
+  await page.getByLabel("Payment Platform", { exact: true }).selectOption("uber_eats");
+  await expect(page.getByRole("row").filter({ hasText: "$22.22" })).toHaveCount(0);
+  await expect(page.getByRole("row").filter({ hasText: "$14.22" })).toBeVisible();
+  const data = await request.get("/api/deliveries"); const text = await data.text();
+  expect(text).not.toContain("Synthetic destination zone private"); expect(text).not.toContain("coordinates");
+  await expect(page.getByText("Synthetic destination zone private")).toHaveCount(0);
 });

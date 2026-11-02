@@ -49,7 +49,7 @@ export function createEvidenceCollector() {
         const row = value as Record<string, unknown>;
         if (typeof row.strategy === "string") { path = [...path, row.strategy]; context = { ...context, cohort: `strategy:${row.strategy}` }; }
         if (typeof row.paymentDate === "string") {
-          context = { ...context, scope: `Payment ${row.paymentDate}; coverage ${row.coverageStartDate ?? "unavailable"}–${row.coverageEndDate ?? "unavailable"} (America/Los_Angeles)`, basis: "settlement_coverage_period" };
+          context = { ...context, scope: `Payment ${row.paymentDate}; platform ${row.platform ?? "unknown"}; coverage ${row.coverageStartDate ?? "unavailable"}–${row.coverageEndDate ?? "unavailable"} (America/Los_Angeles)`, basis: "settlement_coverage_period" };
           if (row.sessionCoverage && row.deliveryRevenue && row.vehicleCost) {
             const sessions = row.sessionCoverage as Record<string, unknown>, deliveries = row.deliveryRevenue as Record<string, unknown>, costs = row.vehicleCost as Record<string, unknown>;
             context.eligibility = `received payments: 1; status: ${row.status}; sessions: ${sessions.includedSessionCount}; boundary excluded: ${sessions.excludedBoundarySessionCount}; known payouts: ${deliveries.knownPayoutCount}; missing payouts: ${deliveries.missingPayoutCount}; complete cost sessions: ${costs.completeSessionCount}; confirmed: ${sessions.completenessConfirmed}; structurally complete: ${sessions.structurallyComplete}; reasons: ${(row.reasons as string[]).join(", ") || "none"}`;

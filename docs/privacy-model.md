@@ -74,3 +74,7 @@ The existing MapView owns one graphics-overlay house marker, independent of Merc
 ## Provider observability
 
 The backend now retains a bounded, process-local allowlist of provider operation categories, completion timestamps, durations, sanitized outcomes and numeric AI usage. It never retains command/reply/error objects, namespaces, addresses, coordinates, prompts, responses, credentials or full URLs. System APIs expose aggregate snapshots only. Metrics expire after 24 hours, may be incomplete after capacity eviction, and reset on restart. MongoDB status uses a bounded local ping; system APIs never probe paid ArcGIS or OpenAI endpoints. Browser Maps SDK observations remain separate. See [Observability contracts and privacy](observability.md).
+
+## Platform metadata
+
+Platform values are bounded enums, not customer information. History adds platform labels and independent filters without exposing destination addresses or coordinates. Removing Delivery Notes from its form does not erase stored notes; Payment and Session notes remain supported. AI receives only projected aggregate metadata, validated platforms and bounded integrity reasons, never those notes or raw Delivery/Session records.

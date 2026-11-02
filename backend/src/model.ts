@@ -4,6 +4,12 @@ import { z } from "zod";
 export const categorySchema = z.enum(["restaurant", "grocery", "retail", "other"]);
 export type Category = z.infer<typeof categorySchema>;
 
+export const deliveryPlatformSchema = z.enum(["uber_eats", "doordash"]);
+export type DeliveryPlatform = z.infer<typeof deliveryPlatformSchema>;
+// Unknown is a query choice only. Stored records have a known platform or no field.
+export const platformFilterSchema = z.union([deliveryPlatformSchema, z.literal("unknown")]);
+export const earningsAdjustmentQuerySchema = z.strictObject({ platform: platformFilterSchema.optional() });
+
 export const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Must be a 24-character hexadecimal ID");
 
 export const pointSchema = z.strictObject({
@@ -34,6 +40,7 @@ const timestampSchema = z.iso.datetime({ offset: true });
 const destinationAddressSchema = z.string().trim().min(1).max(500);
 
 export const deliveryInputSchema = z.strictObject({
+  platform: deliveryPlatformSchema,
   merchantId: objectIdSchema,
   pickedUpAt: timestampSchema,
   payout: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER / 100).optional(),
@@ -44,6 +51,7 @@ export const deliveryInputSchema = z.strictObject({
 });
 
 export const deliveryPatchSchema = z.strictObject({
+  platform: deliveryPlatformSchema.optional(),
   merchantId: objectIdSchema.optional(),
   pickedUpAt: timestampSchema.optional(),
   payout: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER / 100).nullable().optional(),
@@ -57,6 +65,7 @@ export const deliveryPatchSchema = z.strictObject({
 );
 
 export const deliveryQuerySchema = z.strictObject({
+  platform: platformFilterSchema.optional(),
   search: z.string().trim().max(120).optional(),
   category: categorySchema.optional(),
   from: timestampSchema.optional(),
@@ -81,6 +90,7 @@ export interface MerchantDocument {
 
 export interface DeliveryDocument {
   _id: ObjectId;
+  platform?: DeliveryPlatform;
   merchantId: ObjectId;
   sessionId?: ObjectId;
   pickedUpAt: Date;
@@ -106,6 +116,7 @@ export function merchantResponse(merchant: MerchantDocument, deliveryCount: numb
 export function deliveryResponse(delivery: DeliveryDocument) {
   return {
     id: delivery._id.toHexString(),
+    ...(delivery.platform === undefined ? {} : { platform: delivery.platform }),
     merchantId: delivery.merchantId.toHexString(),
     ...(delivery.sessionId === undefined ? {} : { sessionId: delivery.sessionId.toHexString() }),
     pickedUpAt: delivery.pickedUpAt.toISOString(),
@@ -134,6 +145,7 @@ const settlementDetailsPatchSchema = z.strictObject({
 }).refine((value) => Object.keys(value).length > 0, { message: "At least one settlement field is required" });
 
 const adjustmentFields = {
+  platform: deliveryPlatformSchema.optional(),
   type: z.literal("prop22_guarantee"),
   paymentDate: z.iso.date(),
   amount: settlementCurrencySchema.positive(),
@@ -143,11 +155,13 @@ const adjustmentFields = {
   notes: z.string().trim().max(2000).optional(),
   settlementDetails: settlementDetailsSchema.optional()
 };
-export const earningsAdjustmentInputSchema = z.strictObject(adjustmentFields).refine(
+// PATCH validates merged persisted data; legacy records need not gain a platform.
+export const earningsAdjustmentPersistedSchema = z.strictObject(adjustmentFields).refine(
   (value) => (value.coverageStartDate === undefined && value.coverageEndDate === undefined) ||
     (value.coverageStartDate !== undefined && value.coverageEndDate !== undefined && value.coverageStartDate <= value.coverageEndDate),
   { path: ["coverageEndDate"], message: "Supply both coverage dates in chronological order" }
 );
+export const earningsAdjustmentInputSchema = earningsAdjustmentPersistedSchema.safeExtend({ platform: deliveryPlatformSchema });
 export const earningsAdjustmentPatchSchema = z.strictObject({
   ...adjustmentFields,
   coverageStartDate: z.iso.date().nullable().optional(),
@@ -155,7 +169,7 @@ export const earningsAdjustmentPatchSchema = z.strictObject({
   notes: z.string().trim().max(2000).nullable().optional(),
   settlementDetails: settlementDetailsPatchSchema.nullable().optional()
 }).partial().refine((value) => Object.keys(value).length > 0, { message: "At least one field is required" });
-export type EarningsAdjustmentDocument = z.infer<typeof earningsAdjustmentInputSchema> & { _id: ObjectId };
+export type EarningsAdjustmentDocument = z.infer<typeof earningsAdjustmentPersistedSchema> & { _id: ObjectId };
 export function earningsAdjustmentResponse({ _id, ...fields }: EarningsAdjustmentDocument) {
   return { id: _id.toHexString(), ...fields };
 }

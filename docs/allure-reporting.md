@@ -18,6 +18,10 @@ The Vitest adapter supports the public `TestRunner` used by Vitest 5. Its declar
 
 Official documentation: [native Node reporter](https://allurereport.org/docs/node-test/), [configuration](https://allurereport.org/docs/node-test-configuration/), [Vitest](https://allurereport.org/docs/vitest/), [Playwright configuration](https://allurereport.org/docs/playwright-configuration/), [Allure 3 configuration](https://allurereport.org/docs/v3/configure/), [generation](https://allurereport.org/docs/v3/generate-report/), [local viewing](https://allurereport.org/docs/v3/view-report/). Installed CLI help and actual generation, rather than Allure 2 command assumptions, determine the scripts.
 
+## Cached dependency directories
+
+The frontend Vitest configuration allows the workspace and the resolved root/frontend dependency directories through Vite's filesystem gate. This supports symlinked local dependency caches while retaining the real Allure setup, custom runner, assertions and reporters. No framework version, adapter, coverage threshold or production Vite configuration is changed. When consolidating results after switching commits, use `npm run allure:test` to clean stale batches and execute all layers; generation intentionally rejects mixed commit/run provenance.
+
 ## Results architecture
 
 ```text

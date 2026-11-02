@@ -12,17 +12,112 @@ import { createApp } from "../dist/app.js";
 
 const profile = { vehicleName: "2022 Tesla Model Y Long Range", energyCashCostPerMile: 0, tireReplacementSetCost: 800, expectedTireSetLifeMiles: 20000, marginalDepreciationCostPerMile: 0.05 };
 function fixture() {
-  const payment = { _id: new ObjectId(), type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 24.17, coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: true,
+  const payment = { platform: "uber_eats", _id: new ObjectId(), type: "prop22_guarantee", paymentDate: "2026-03-20", amount: 24.17, coverageStartDate: "2026-03-01", coverageEndDate: "2026-03-14", sessionCoverageConfirmed: true,
     settlementDetails: { reportedGuaranteedAmount: 124.17, eligibleEarningsExcludingTips: 100, engagedSeconds: 999999, engagedMiles: 99999 } };
   const sessions = [{ _id: new ObjectId(), startedAt: new Date("2026-03-08T09:30:00Z"), endedAt: new Date("2026-03-08T10:30:00Z"), totalDrivenMiles: 10 },
     { _id: new ObjectId(), startedAt: new Date("2026-03-09T16:00:00Z"), endedAt: new Date("2026-03-09T18:00:00Z"), totalDrivenMiles: 20 }];
-  const deliveries = [10, 20, 30].map((payout, i) => ({ _id: new ObjectId(), payout,
+  const deliveries = [10, 20, 30].map((payout, i) => ({ platform: "uber_eats", _id: new ObjectId(), payout,
     pickedUpAt: new Date(sessions[i === 2 ? 1 : 0].startedAt.getTime() + i * 1000), sessionId: sessions[i === 2 ? 1 : 0]._id }));
   return { payment, sessions, deliveries };
 }
 const calc = (f, payments = [f.payment], p = profile) => calculateSettlementEfficiency(f.payment, payments, f.deliveries, f.sessions, p);
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 const finite = (v) => { if (typeof v === "number") assert.ok(Number.isFinite(v)); else if (v && typeof v === "object") Object.values(v).forEach(finite); };
+
+function platformPair() {
+  const uber = fixture(), door = fixture();
+  door.payment.platform = "doordash"; door.payment.amount = 7;
+  door.deliveries.forEach((row) => { row.platform = "doordash"; row.payout *= 10; });
+  door.sessions.forEach((row) => { row.totalDrivenMiles *= 10; });
+  const payments = [uber.payment, door.payment], deliveries = [...uber.deliveries, ...door.deliveries], sessions = [...uber.sessions, ...door.sessions];
+  return { uber, door, payments, deliveries, sessions,
+    calculate: (payment) => calculateSettlementEfficiency(payment, payments, deliveries, sessions, profile) };
+}
+
+test("same-period platforms isolate Delivery payouts, overlapping Sessions, mileage, costs and actual adjustments", () => {
+  const f = platformPair(), uber = f.calculate(f.uber.payment), door = f.calculate(f.door.payment);
+  assert.equal(uber.status, "ready"); assert.equal(door.status, "ready");
+  assert.equal(uber.platform, "uber_eats"); assert.equal(door.platform, "doordash");
+  assert.equal(uber.deliveryRevenue.knownTotal, 60); assert.equal(door.deliveryRevenue.knownTotal, 600);
+  assert.equal(uber.workPeriodRevenue, 84.17); assert.equal(door.workPeriodRevenue, 607);
+  close(uber.workPeriodRevenue + door.workPeriodRevenue, 660 + 24.17 + 7);
+  assert.equal(uber.sessionCoverage.totalHours, 3); assert.equal(door.sessionCoverage.totalHours, 3);
+  assert.equal(uber.sessionCoverage.totalMiles, 30); assert.equal(door.sessionCoverage.totalMiles, 300);
+  assert.equal(uber.vehicleCost.fullTotal, 2.7); assert.equal(door.vehicleCost.fullTotal, 27);
+  for (const result of [uber, door]) {
+    assert.equal(result.deliveryRevenue.excludedOtherPlatformDeliveryCount, 3);
+    assert.equal(result.sessionCoverage.excludedOtherPlatformSessionCount, 2);
+    assert.equal(result.sessionCoverage.includedSessionCount, 2);
+    assert.equal(result.deliveryRevenue.attributionComplete, true);
+    assert.ok(!result.reasons.includes("overlapping_sessions"));
+    assert.ok(!result.reasons.includes("overlapping_settlements"));
+  }
+});
+test("same-platform and legacy-unknown overlaps fail closed for both platforms", () => {
+  for (const platform of ["uber_eats", "doordash"]) {
+    const f = fixture(); f.payment.platform = platform; f.deliveries.forEach((row) => { row.platform = platform; });
+    for (const otherPlatform of [platform, undefined]) {
+      const other = { ...f.payment, _id: new ObjectId(), platform: otherPlatform };
+      const result = calc(f, [f.payment, other]);
+      assert.ok(result.reasons.includes("overlapping_settlements"));
+      assert.equal(result.actualAdjustment, 24.17); assert.equal(result.workPeriodRevenue, null);
+      assert.equal(result.adjustedEarningsPerHour, null); assert.equal(result.estimatedEconomicProfit, null);
+      if (otherPlatform === undefined) {
+        const legacy = calculateSettlementEfficiency(other, [f.payment, other], f.deliveries, f.sessions, profile);
+        assert.ok(legacy.reasons.includes("overlapping_settlements")); assert.equal(legacy.status, "unavailable");
+      }
+    }
+  }
+});
+test("mixed Sessions are never split or counted twice and preserve only safe platform observations", () => {
+  const f = platformPair();
+  // One DoorDash pickup explicitly shares an Uber Session; its time remains valid.
+  f.door.deliveries[0].sessionId = f.uber.sessions[0]._id;
+  for (const payment of f.payments) {
+    const result = f.calculate(payment);
+    assert.ok(result.reasons.includes("mixed_platform_session"));
+    assert.equal(result.sessionCoverage.mixedPlatformSessionCount, 1);
+    assert.equal(result.sessionCoverage.includedSessionCount, payment.platform === "uber_eats" ? 1 : 2);
+    assert.equal(result.workPeriodRevenue, null); assert.equal(result.adjustedEarningsPerHour, null);
+    assert.equal(result.adjustedEarningsPerMile, null); assert.equal(result.sessionCoverage.totalHours, null);
+    assert.equal(result.estimatedEconomicProfit, null); assert.equal(result.vehicleCost.fullTotal, null);
+    assert.equal(result.deliveryRevenue.knownTotal, payment.platform === "uber_eats" ? 60 : 600);
+    assert.equal(result.deliveryRevenue.attributionComplete, false);
+  }
+  // The mixed ten-mile Session's cost is absent from both partial cost sums.
+  assert.equal(f.calculate(f.uber.payment).vehicleCost.knownAndEstimatedTotal, 1.8);
+  assert.equal(f.calculate(f.door.payment).vehicleCost.knownAndEstimatedTotal, 27);
+});
+test("unknown Delivery/Session attribution cannot be overridden by manual confirmation", () => {
+  for (const kind of ["unknown_delivery", "unknown_link", "unassociated", "pending"]) {
+    const f = fixture();
+    if (kind === "unknown_delivery") { const unknown = { ...f.deliveries[0], _id: new ObjectId() }; delete unknown.platform; delete unknown.sessionId; f.deliveries.push(unknown); }
+    if (kind === "unknown_link") delete f.deliveries[0].platform;
+    if (kind === "unassociated") f.sessions.push({ ...f.sessions[0], _id: new ObjectId() });
+    if (kind === "pending") f.sessions[0].associationIntegrity = "pending";
+    const result = calc(f);
+    assert.equal(result.workPeriodRevenue, null); assert.equal(result.adjustedEarningsPerHour, null);
+    assert.equal(result.estimatedEconomicProfit, null); assert.equal(result.sessionCoverage.structurallyComplete, false);
+    assert.equal(result.sessionCoverage.completenessConfirmed, true); assert.equal(result.deliveryRevenue.attributionComplete, false);
+    assert.ok(result.deliveryRevenue.knownTotal > 0);
+    if (kind.startsWith("unknown")) assert.equal(result.deliveryRevenue.unknownPlatformDeliveryCount, 1);
+    if (kind === "unknown_link") assert.ok(result.reasons.includes("unknown_session_platform"));
+    if (kind === "unassociated") assert.ok(result.reasons.includes("session_without_linked_deliveries"));
+  }
+});
+test("legacy unknown payments retain actual received amount and statement reconciliation without inferred platform", () => {
+  const f = fixture(); delete f.payment.platform;
+  const result = calc(f);
+  assert.equal(result.platform, null); assert.equal(result.status, "unavailable");
+  assert.ok(result.reasons.includes("unknown_payment_platform"));
+  assert.equal(result.actualAdjustment, 24.17); assert.equal(result.workPeriodRevenue, null);
+  assert.equal(result.deliveryRevenue.knownTotal, null); assert.equal(result.sessionCoverage.includedSessionCount, 0);
+  assert.equal(result.sessionCoverage.totalHours, null); assert.equal(result.sessionCoverage.totalMiles, null);
+  assert.equal(result.vehicleCost.knownAndEstimatedTotal, null); assert.equal(result.estimatedEconomicProfit, null);
+  assert.equal(reconcileSettlement(f.payment).status, "matched");
+  delete f.deliveries[0].platform;
+  assert.equal(calc(f).deliveryRevenue.unknownPlatformDeliveryCount, 1);
+});
 
 test("inclusive LA coverage resolves local midnight across spring/fall DST", () => {
   const spring = resolveCoverageDates("2026-03-01", "2026-03-14");
@@ -85,7 +180,7 @@ test("crossing sessions are counted, excluded, and block even otherwise valid su
 test("outside linked pickups, overlapping sessions, and sessions without deliveries block attribution", () => {
   for (const kind of ["outside_coverage", "outside_session", "overlap", "no_links"]) {
     const f = fixture();
-    if (kind === "outside_coverage") f.deliveries.push({ _id: new ObjectId(), sessionId: f.sessions[0]._id, pickedUpAt: new Date("2026-03-15T07:00:00Z"), payout: 2 });
+    if (kind === "outside_coverage") f.deliveries.push({ platform: "uber_eats", _id: new ObjectId(), sessionId: f.sessions[0]._id, pickedUpAt: new Date("2026-03-15T07:00:00Z"), payout: 2 });
     if (kind === "outside_session") f.deliveries[0].pickedUpAt = new Date("2026-03-10T07:00:00Z");
     if (kind === "overlap") { f.sessions[1].startedAt = f.sessions[0].startedAt; f.sessions[1].endedAt = f.sessions[0].endedAt; f.deliveries[2].pickedUpAt = f.sessions[1].startedAt; }
     if (kind === "no_links") f.sessions.push({ _id: new ObjectId(), startedAt: new Date("2026-03-10T16:00:00Z"), endedAt: new Date("2026-03-10T17:00:00Z"), totalDrivenMiles: 2 });
@@ -166,13 +261,52 @@ test.integration("isolated API reads complete periods and safely extends Payment
       for (const value of ["destination", "coordinates", "address", "notes", "0.123", "Synthetic private note", f.deliveries[0]._id.toHexString(), "reportedGuaranteedAmount", "expectedAdjustment"]) assert.ok(!output.includes(value));
     });
     await t.test("out-of-window linked pickup and invalid unlinked session are fetched and block", async () => {
-      const outside = { _id: new ObjectId(), merchantId, sessionId: f.sessions[0]._id, pickedUpAt: new Date("2026-04-01T00:00:00Z"), payout: 10 };
+      const outside = { platform: "uber_eats", _id: new ObjectId(), merchantId, sessionId: f.sessions[0]._id, pickedUpAt: new Date("2026-04-01T00:00:00Z"), payout: 10 };
       await db.collection("deliveries").insertOne(outside);
       assert.ok((await api("/api/efficiency/settlements")).body.data[0].reasons.includes("linked_delivery_outside_coverage"));
       await db.collection("deliveries").deleteOne({ _id: outside._id });
       const invalid = { _id: new ObjectId(), startedAt: new Date("2026-03-10T12:00:00Z") }; await db.collection("deliverySessions").insertOne(invalid);
       assert.ok((await api("/api/efficiency/settlements")).body.data[0].reasons.includes("missing_session_duration"));
       await db.collection("deliverySessions").deleteOne({ _id: invalid._id });
+    });
+    await t.test("stored platform projections isolate settlements and preserve all-platform cash income", async () => {
+      const door = fixture(); door.payment.platform = "doordash"; door.payment.amount = 7;
+      door.deliveries.forEach((row) => { row.platform = "doordash"; row.payout *= 10; });
+      door.sessions.forEach((row) => { row.totalDrivenMiles *= 10; });
+      await db.collection("earningsAdjustments").insertOne(door.payment);
+      await db.collection("deliverySessions").insertMany(door.sessions);
+      await db.collection("deliveries").insertMany(door.deliveries.map((row) => ({ ...row, merchantId })));
+      const snapshots = await db.collection("deliveries").find().toArray();
+      const read = async () => (await api("/api/efficiency/settlements")).body.data;
+      const results = await read(); assert.equal(results.length, 2);
+      const uberResult = results.find((row) => row.platform === "uber_eats"), doorResult = results.find((row) => row.platform === "doordash");
+      assert.equal(uberResult.status, "ready"); assert.equal(doorResult.status, "ready");
+      assert.equal(uberResult.workPeriodRevenue, 84.17); assert.equal(doorResult.workPeriodRevenue, 607);
+      assert.equal(uberResult.sessionCoverage.totalMiles, 30); assert.equal(doorResult.sessionCoverage.totalMiles, 300);
+      const cash = (await api("/api/dashboard?period=month&asOf=2026-03-20")).body.summary.totalEarnings;
+      assert.equal(cash.deliveryEarnings, 660); assert.equal(cash.prop22Earnings, 31.17); assert.equal(cash.value, 691.17);
+      assert.equal(cash.prop22PaymentCount, 2);
+      assert.deepEqual(await db.collection("deliveries").find().toArray(), snapshots);
+      // Fetch ALL linked observations, even outside the payment range, before
+      // proving exclusivity. A DoorDash pickup outside the range makes this mixed.
+      const outside = { ...door.deliveries[0], _id: new ObjectId(), merchantId, sessionId: f.sessions[0]._id, pickedUpAt: new Date("2026-04-01T00:00:00Z") };
+      await db.collection("deliveries").insertOne(outside);
+      const mixed = await read();
+      for (const result of mixed) {
+        assert.ok(result.reasons.includes("mixed_platform_session"));
+        assert.equal(result.workPeriodRevenue, null); assert.equal(result.adjustedEarningsPerHour, null);
+        assert.equal(result.estimatedEconomicProfit, null);
+      }
+      await db.collection("deliveries").deleteOne({ _id: outside._id });
+      const legacy = { ...f.payment, _id: new ObjectId() }; delete legacy.platform;
+      await db.collection("earningsAdjustments").insertOne(legacy);
+      for (const result of await read()) assert.ok(result.reasons.includes("overlapping_settlements"));
+      const legacyResult = (await read()).find((row) => row.platform === null);
+      assert.equal(legacyResult.actualAdjustment, 24.17); assert.equal(legacyResult.status, "unavailable");
+      assert.equal((await api(`/api/earnings-adjustments/${legacy._id}`)).body.reconciliation.status, "matched");
+      await db.collection("earningsAdjustments").deleteMany({ _id: { $in: [door.payment._id, legacy._id] } });
+      await db.collection("deliverySessions").deleteMany({ _id: { $in: door.sessions.map((row) => row._id) } });
+      await db.collection("deliveries").deleteMany({ _id: { $in: door.deliveries.map((row) => row._id) } });
     });
     await t.test("recent response stays bounded but checks overlap with older omitted settlements", async () => {
       const filler = Array.from({ length: 22 }, (_, i) => ({ _id: new ObjectId(), type: "prop22_guarantee", amount: 1, paymentDate: `2020-01-${String(i + 1).padStart(2, "0")}` }));
@@ -187,4 +321,27 @@ test.integration("isolated API reads complete periods and safely extends Payment
     if (server) await new Promise((resolve) => server.close(resolve));
     try { if (connected) await db.dropDatabase(); } finally { await client.close(); }
   }
+});
+
+test("proven foreign boundary-crossing Sessions cannot contaminate platform coverage even with missing foreign mileage", () => {
+  const f = fixture();
+  const foreign = { _id: new ObjectId(), startedAt: new Date("2026-02-28T23:00:00-08:00"), endedAt: new Date("2026-03-01T01:00:00-08:00") };
+  f.sessions.push(foreign);
+  f.deliveries.push({ _id: new ObjectId(), platform: "doordash", pickedUpAt: new Date("2026-03-01T00:30:00-08:00"), sessionId: foreign._id, payout: 0 });
+  const result = calc(f);
+  assert.equal(result.status, "ready"); assert.equal(result.workPeriodRevenue, 84.17);
+  assert.equal(result.sessionCoverage.totalHours, 3); assert.equal(result.sessionCoverage.totalMiles, 30);
+  assert.equal(result.sessionCoverage.excludedOtherPlatformSessionCount, 1);
+  assert.equal(result.sessionCoverage.excludedBoundarySessionCount, 0);
+  assert.equal(result.vehicleCost.fullTotal, 2.7);
+});
+test("out-of-window unknown linked Delivery prevents exclusive Session attribution without losing known platform payouts", () => {
+  const f = fixture();
+  f.deliveries.push({ _id: new ObjectId(), sessionId: f.sessions[0]._id, pickedUpAt: new Date("2026-04-01T00:00:00Z"), payout: 0 });
+  const result = calc(f);
+  assert.equal(result.deliveryRevenue.knownTotal, 60); assert.equal(result.actualAdjustment, 24.17);
+  assert.ok(result.reasons.includes("unknown_session_platform"));
+  assert.ok(result.reasons.includes("linked_delivery_outside_coverage"));
+  assert.equal(result.workPeriodRevenue, null); assert.equal(result.adjustedEarningsPerHour, null);
+  assert.equal(result.sessionCoverage.totalMiles, null); assert.equal(result.estimatedEconomicProfit, null);
 });
