@@ -1,3 +1,5 @@
+import { Pagination } from "../components/Pagination";
+import { PAGE_SIZE, pageRange } from "../components/pageRange";
 import { useEffect, useState } from "react";
 import { loadDashboard, loadDestinationHeatmap, type Category, type DashboardData, type DestinationHeatmapData, type MerchantRanking, type Metric, type Period } from "../dashboard/api";
 import { DashboardMap } from "../dashboard/DashboardMap";
@@ -102,11 +104,14 @@ export function Dashboard() {
   const selectedYear = yearChoice === "current" ? years[0] : yearChoice;
   const year = period === "year" ? selectedYear : undefined;
   const requestKey = `${period}/${category}/${year ?? ""}/${today}`;
-  const setPeriod = (period: Period) => setFilters((previous) => ({ ...previous, period }));
-  const setCategory = (category: Category) => setFilters((previous) => ({ ...previous, category }));
+  const [merchantPage, setMerchantPage] = useState(1);
+  const setPeriod = (period: Period) => { if (period !== filters.period) setMerchantPage(1); setFilters((previous) => ({ ...previous, period })); };
+  const setCategory = (category: Category) => { if (category !== filters.category) setMerchantPage(1); setFilters((previous) => ({ ...previous, category })); };
+  useEffect(() => { setMerchantPage(1); }, [year]);
   const [metric, setMetric] = useState<Metric>("pickupVolume");
   const [result, setResult] = useState<{ key: string; data: DashboardData } | null>(null);
   const data = result?.data ?? null;
+  const merchantRange = pageRange(merchantPage, data?.topMerchants.length ?? 0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [destination, setDestination] = useState<{ key: string; data: DestinationHeatmapData } | null>(null);
@@ -163,7 +168,7 @@ export function Dashboard() {
     <AskDgi />
     <div className="dashboard-filters">
       <div className="dashboard-filter"><span>Time Period</span><div className="segmented time-period" role="group" aria-label="Time period">{periods.map((item) => <button key={item.value} type="button" aria-pressed={period === item.value} onClick={() => setPeriod(item.value)}>{item.label}</button>)}<select className="dashboard-year" aria-label="Dashboard calendar year" data-active={period === "year"} value={period === "year" ? String(yearChoice) : ""}
-        onChange={(event) => setFilters((previous) => ({ ...previous, period: "year", yearChoice: event.target.value === "current" ? "current" : Number(event.target.value) }))}>
+        onChange={(event) => { setMerchantPage(1); setFilters((previous) => ({ ...previous, period: "year", yearChoice: event.target.value === "current" ? "current" : Number(event.target.value) })); }}>
         {period !== "year" && <option value="" disabled>Year · {selectedYear}</option>}
         {years.map((value, index) => <option key={value} value={index === 0 ? "current" : String(value)}>{index === 0 ? `Year · Current (${value})` : `Year · ${value}`}</option>)}
       </select><button type="button" aria-pressed={period === "all"} title="Detailed DGI history from January 1, 2026" onClick={() => setPeriod("all")}>All</button></div></div>
@@ -191,7 +196,8 @@ export function Dashboard() {
         <div className="charts-grid"><Distribution data={data} /><Timeline data={data} /></div>
         <section className="dash-card ranking-card" aria-labelledby="ranking-title"><h2 id="ranking-title">Top Merchants by Deliveries</h2>
           <div className="ranking-scroll"><table><thead><tr><th scope="col">#</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Deliveries</th><th scope="col">Total Earnings</th><th scope="col">Avg Earnings</th></tr></thead>
-          <tbody>{data.topMerchants.length ? data.topMerchants.map((row, index) => <tr key={row.id}><td>{index + 1}</td><td><strong>{row.name}</strong><small>{row.city}</small></td><td>{row.category}</td><td>{row.deliveries}</td><td>{money(row.totalEarnings)} <small>{row.sampleCount} known</small></td><td>{money(row.averageEarnings)} <small>{row.sampleCount} known</small></td></tr>) : <tr><td colSpan={6} className="empty-ranking">No deliveries in this period.</td></tr>}</tbody></table></div>
+          <tbody>{data.topMerchants.length ? data.topMerchants.slice(merchantRange.offset, merchantRange.offset + PAGE_SIZE).map((row, index) => <tr key={row.id}><td>{merchantRange.offset + index + 1}</td><td><strong>{row.name}</strong><small>{row.city}</small></td><td>{row.category}</td><td>{row.deliveries}</td><td>{money(row.totalEarnings)} <small>{row.sampleCount} known</small></td><td>{money(row.averageEarnings)} <small>{row.sampleCount} known</small></td></tr>) : <tr><td colSpan={6} className="empty-ranking">No deliveries in this period.</td></tr>}</tbody></table></div>
+          <Pagination page={merchantRange.page} total={data.topMerchants.length} noun="merchants" label="Top merchant pages" disabled={updating} onPageChange={setMerchantPage} />
         </section>
       </div>
     </div>}

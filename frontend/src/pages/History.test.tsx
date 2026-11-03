@@ -19,6 +19,8 @@ function reply(body: unknown, status = 200): Response {
 
 function installApi(options: {
   rows?: Delivery[];
+  payments?: unknown[];
+  sessions?: unknown[];
   get?: (url: URL) => Promise<Response> | Response;
   post?: (payload: DeliveryPayload) => Promise<Response> | Response;
   patch?: (payload: DeliveryPayload) => Promise<Response> | Response;
@@ -27,9 +29,9 @@ function installApi(options: {
   const fetchMock = vi.fn(async (input: string, init?: RequestInit): Promise<Response> => {
     const url = new URL(input, "http://localhost");
     const method = init?.method ?? "GET";
-    if (url.pathname === "/api/delivery-sessions") return reply({ data: [] });
+    if (url.pathname === "/api/delivery-sessions") return reply({ data: options.sessions ?? [] });
     if (url.pathname === "/api/vehicle-economics") return reply({ data: null, historicalMileage: [] });
-    if (url.pathname === "/api/earnings-adjustments") return reply({ data: [] });
+    if (url.pathname === "/api/earnings-adjustments") return reply({ data: options.payments ?? [] });
     if (url.pathname === "/api/uber-annual-summaries") return reply({ data: [], limit: 20, hasMore: false });
     if (url.pathname === "/api/merchants") return reply({ data: merchants });
     if (url.pathname === "/api/deliveries" && method === "GET") {
@@ -99,12 +101,12 @@ function syntheticRows(count: number): Delivery[] {
 
 async function navigateToPage(user: ReturnType<typeof userEvent.setup>, page: number) {
   for (let current = 1; current < page; current += 1) {
-    const next = screen.getByRole("button", { name: "Next page" });
+    const next = within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Next page" });
     await waitFor(() => expect(next).toBeEnabled());
     await user.click(next);
-    await waitFor(() => expect(screen.getByRole("button", { name: `Page ${current + 1}` })).toHaveAttribute("aria-current", "page"));
+    await waitFor(() => expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: `Page ${current + 1}` })).toHaveAttribute("aria-current", "page"));
   }
-  await waitFor(() => expect(screen.getByRole("button", { name: `Page ${page}` })).toBeEnabled());
+  await waitFor(() => expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: `Page ${page}` })).toBeEnabled());
 }
 
 function deliveryQueries(fetchMock: ReturnType<typeof vi.fn>) {
@@ -130,7 +132,7 @@ describe("Delivery History", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await within(screen.getAllByRole("table")[0]).findByText("Uber Eats")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Page 8" })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Page 8" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("Showing 71–80 of 88 deliveries")).toBeInTheDocument();
     expect(deliveryQueries(fetchMock).slice(before).map((query) => query.get("page"))).toEqual(["8"]);
   });
@@ -151,7 +153,7 @@ describe("Delivery History", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save Delivery" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await screen.findByText("Showing 1–10 of 13 deliveries");
-    expect(screen.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
     expect(deliveryQueries(fetchMock).slice(before).map((query) => query.get("page"))).toEqual(["1"]);
   });
 
@@ -186,10 +188,10 @@ describe("Delivery History", () => {
     }
     expect(within(screen.getAllByRole("table")[0]).queryByText("DoorDash")).not.toBeInTheDocument();
     if (count > 1) {
-      expect(screen.getByRole("button", { name: `Page ${expectedPage}` })).toHaveAttribute("aria-current", "page");
+      expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: `Page ${expectedPage}` })).toHaveAttribute("aria-current", "page");
     } else {
-      expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
-      expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+      expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Previous page" })).toBeDisabled();
+      expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Next page" })).toBeDisabled();
     }
   });
 
@@ -203,14 +205,14 @@ describe("Delivery History", () => {
     await user.click(screen.getAllByRole("button", { name: "Edit delivery for Test Merchant A" })[0]);
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
     await user.click(screen.getAllByRole("button", { name: "Edit delivery for Test Merchant A" })[0]);
     const dialog = screen.getByRole("dialog", { name: "Edit Delivery" });
     await user.selectOptions(within(dialog).getByLabelText(/Delivery Platform/), "uber_eats");
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("The server could not complete the request.");
     expect(dialog).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
     expect(deliveryQueries(fetchMock)).toHaveLength(before);
   });
 
@@ -227,7 +229,7 @@ describe("Delivery History", () => {
       } else {
         await user.selectOptions(screen.getByLabelText(label), label === "Sort" ? "oldest" : label === "Category" ? "restaurant" : "unknown");
       }
-      await waitFor(() => expect(screen.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page"));
+      await waitFor(() => expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page"));
       expect(deliveryQueries(fetchMock).at(-1)?.get("page")).toBe("1");
     }
   );
@@ -242,7 +244,7 @@ describe("Delivery History", () => {
     await user.click(screen.getByRole("button", { name: "Delete delivery for Test Merchant A" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Delivery" }));
     await screen.findByText("Showing 1–10 of 10 deliveries");
-    expect(screen.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+    expect(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
     expect(deliveryQueries(fetchMock).slice(before).map((query) => query.get("page"))).toEqual(["1"]);
   });
 
@@ -281,7 +283,7 @@ describe("Delivery History", () => {
     const fetchMock = installApi({ rows });
     render(<History />);
     await screen.findByText("Showing 1–10 of 12 deliveries");
-    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await user.click(within(screen.getByRole("navigation", { name: "Delivery pages" })).getByRole("button", { name: "Next page" }));
     await screen.findByText("Showing 11–12 of 12 deliveries");
     expect(new URL(String(requests(fetchMock, "GET", "/api/deliveries").at(-1)?.[0]), "http://localhost").searchParams.get("page")).toBe("2");
 
@@ -531,4 +533,30 @@ it("shows platform labels and rejects a stale Delivery response after platform c
   const gets = requests(mock, "GET", "/api/deliveries"); expect(gets[0][1].signal.aborted).toBe(true);
   finish(reply({ data: [], pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 } }));
   await waitFor(() => expect(screen.getByText("Showing 1–3 of 3 deliveries")).toBeInTheDocument());
+});
+
+it("keeps all three History pagers independent, including after editing a page-eight delivery", async () => {
+  const payments = Array.from({ length: 21 }, (_, index) => ({ id: `payment-${index}`, type: "prop22_guarantee", platform: "uber_eats", paymentDate: "2026-10-01", amount: index + 1 }));
+  const sessions = Array.from({ length: 21 }, (_, index) => ({ id: `session-${index}`, startedAt: "2026-10-01T12:00:00Z", endedAt: "2026-10-01T13:00:00Z", sessionDurationSeconds: 3600, deliveryIds: [], linkedDeliveries: [],
+    vehicleCost: { knownAndEstimatedCost: null, fullEconomicCost: null, completeness: "partial", amounts: { energy: null, tireWear: null, depreciation: null }, rates: { energy: null, tireWear: null, depreciation: null }, missingComponents: ["energy", "tireWear", "depreciation"] } }));
+  const mock = installApi({ rows: syntheticRows(88), payments, sessions });
+  const user = userEvent.setup(); render(<History />);
+  await screen.findByText("Showing 1–10 of 88 deliveries");
+  await screen.findByText("Showing 1–10 of 21 payments");
+  await screen.findByText("Showing 1–10 of 21 sessions");
+  const pager = (name: string) => within(screen.getByRole("navigation", { name }));
+  const calls = mock.mock.calls.length;
+  await user.click(pager("Prop 22 payment pages").getByRole("button", { name: "Page 2" }));
+  await user.click(pager("Delivery session pages").getByRole("button", { name: "Page 3" }));
+  expect(mock).toHaveBeenCalledTimes(calls);
+  expect(pager("Delivery pages").getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+  await navigateToPage(user, 8);
+  expect(pager("Prop 22 payment pages").getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+  expect(pager("Delivery session pages").getByRole("button", { name: "Page 3" })).toHaveAttribute("aria-current", "page");
+  await user.click(screen.getAllByRole("button", { name: "Edit delivery for Test Merchant A" })[0]);
+  await user.click(screen.getByRole("button", { name: "Save Changes" }));
+  await screen.findByText("Showing 71–80 of 88 deliveries");
+  await screen.findByText("Showing 21–21 of 21 sessions");
+  expect(pager("Prop 22 payment pages").getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+  expect(pager("Delivery session pages").getByRole("button", { name: "Page 3" })).toHaveAttribute("aria-current", "page");
 });

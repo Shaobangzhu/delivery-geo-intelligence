@@ -1,0 +1,8 @@
+.table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 50px; padding: 8px 12px; border-top: 1px solid #e4edf8; color: #59728f; font-size: 11px; }
+.pagination { display: flex; gap: 4px; }
+.pagination button { min-width: 27px; height: 27px; padding: 0 5px; border: 1px solid #d7e4f4; border-radius: 4px; background: white; color: #31527e; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.pagination button[aria-current="page"] { background: #1262df; border-color: #1262df; color: white; }
+.pagination button:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 600px) {
+  .table-footer { align-items: flex-start; flex-direction: column; }
+}
