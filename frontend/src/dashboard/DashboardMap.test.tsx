@@ -508,3 +508,17 @@ it("ignores a cancelled StrictMode import rejection while the active mount initi
   unmount();
   expect(FakeMapView.instances[0].destroy).toHaveBeenCalledTimes(1);
 });
+
+
+it("waits for a delayed SDK import before creating the first active view", async () => {
+  let resolveImport!: (value: ArcgisRuntime) => void;
+  loadArcgisMock.mockReturnValueOnce(new Promise<ArcgisRuntime>((resolve) => { resolveImport = resolve; }));
+  render(<DashboardMap pickupRows={pickupRows} diversityRows={diversityRows} destinationCells={[]} metric="pickupVolume" />);
+  expect(FakeMapView.instances).toHaveLength(0);
+  expect(getBrowserMapStatus().event).toBeNull();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  resolveImport(runtime);
+  await waitFor(() => expect(getBrowserMapStatus().event).toBe("map_initialized"));
+  expect(FakeMapView.instances).toHaveLength(1);
+  await waitFor(() => expect(FakeFeatureLayer.instances[0]?.edits).toHaveLength(1));
+});
