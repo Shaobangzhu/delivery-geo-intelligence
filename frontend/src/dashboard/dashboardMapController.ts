@@ -1,3 +1,4 @@
+import { ignoreArcgisTrace, traceArcgisPromise, type ArcgisTrace } from "./arcgisDiagnostics";
 import type { DashboardData, DestinationHeatmapData, Metric } from "./api";
 import type { ArcgisRuntime } from "./arcgisRuntime";
 import { HOME_REFERENCE_SVG, type HomeReference } from "./homeReference";
@@ -36,9 +37,12 @@ export class DashboardMapController {
     private readonly onError: (message: string) => void,
     private readonly onUpdating: (value: boolean) => void,
     home: HomeReference | null = null,
-    onInitialized: () => void = () => {}
+    onInitialized: () => void = () => {},
+    private readonly trace: ArcgisTrace = ignoreArcgisTrace
   ) {
+    trace("map:construct");
     const map = new arcgis.Map({ basemap: "arcgis/light-gray/base" });
+    trace("merchant-layer:construct");
     this.merchantLayer = new arcgis.FeatureLayer({
       title: "Observed merchant pickups",
       source: [], geometryType: "point", spatialReference: { wkid: 4326 },
@@ -61,6 +65,7 @@ export class DashboardMapController {
         ] }]
       })
     });
+    trace("destination-layer:construct");
     this.destinationLayer = new arcgis.FeatureLayer({
       title: "Generalized observed destination activity",
       source: [], geometryType: "point", spatialReference: { wkid: 4326 },
@@ -70,7 +75,9 @@ export class DashboardMapController {
     });
     map.add(this.merchantLayer);
     map.add(this.destinationLayer);
+    trace("mapview:construct");
     this.view = new arcgis.MapView({ container, map, center: [-117.58, 33.97], zoom: 11 });
+    trace("mapview:constructed");
     // One local reference per view, outside data-driven FeatureLayers and renderers.
     if (home) {
       this.view.graphics.add(new arcgis.Graphic({
@@ -84,17 +91,17 @@ export class DashboardMapController {
     this.handles.push(this.view.on("layerview-create-error", () => {
       if (!this.destroyed) this.onError("A map layer could not be displayed.");
     }));
-    this.ready = Promise.all([this.view.when(), this.merchantLayer.when(), this.destinationLayer.when()]).then(() => {
+    this.ready = Promise.all([traceArcgisPromise(trace, "view", this.view.when()), traceArcgisPromise(trace, "merchant-layer", this.merchantLayer.when()), traceArcgisPromise(trace, "destination-layer", this.destinationLayer.when())]).then(() => {
       if (this.destroyed) return;
       onInitialized();
-      void this.view.whenLayerView(this.merchantLayer).then((layerView) => {
+      void traceArcgisPromise(trace, "merchant-layerview", this.view.whenLayerView(this.merchantLayer)).then((layerView) => {
         if (this.destroyed) return;
         this.handles.push(this.arcgis.reactiveUtils.watch(() => layerView.updating, (value) => {
           this.merchantUpdating = value;
           this.emitUpdating();
         }, { initial: true }));
       }).catch(() => { if (!this.destroyed) this.onError("The merchant map layer could not be displayed."); });
-      void this.view.whenLayerView(this.destinationLayer).then((layerView) => {
+      void traceArcgisPromise(trace, "destination-layerview", this.view.whenLayerView(this.destinationLayer)).then((layerView) => {
         if (this.destroyed) return;
         this.handles.push(this.arcgis.reactiveUtils.watch(() => layerView.updating, (value) => {
           this.destinationUpdating = value;
@@ -287,6 +294,7 @@ export class DashboardMapController {
 
   destroy(): void {
     if (this.destroyed) return;
+    this.trace("controller:destroy");
     this.destroyed = true;
     this.merchantRevision += 1;
     this.destinationRevision += 1;
