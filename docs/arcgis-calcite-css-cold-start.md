@@ -62,7 +62,9 @@ sequenceDiagram
 
 ## Regression and acceptance evidence
 
-[viteAssets.test.ts](../frontend/src/test/viteAssets.test.ts), line 45, now requests the Calcite stylesheet before any SDK importer is requested. It failed before the configuration correction with `expected 403 to be 200` and passed afterward. This deterministic local HTTP test represents a browser reusing cached importers: the test server has no import-analysis registration for the external CSS. It also checks that a real sibling Calcite runtime file stays 403, unrelated external files stay 403, dotenv deny rules stay effective, strict mode remains enabled, and existing font serving continues to work. No real ArcGIS service calls are made by this test.
+[viteAssets.test.ts](../frontend/src/test/viteAssets.test.ts) requests the Calcite stylesheet before any SDK importer is requested. It failed before the configuration correction with `expected 403 to be 200` and passed afterward. This deterministic local HTTP test represents a browser reusing cached importers: the test server has no import-analysis registration for the external CSS. It also checks unrelated external files stay 403, dotenv deny rules stay effective, strict mode remains enabled, and existing font serving continues to work. No real ArcGIS service calls are made by this test.
+
+CI exposed an installation-layout assumption in the original sibling-file assertion: a sibling Calcite runtime file legitimately returns 200 when `npm ci` installs it inside the allowed workspace. The local external-cache installation returned 403. The test now runs two controlled scopes. The normal configuration permits a non-sensitive workspace JS fixture and denies dotenv files; a second server removes only the workspace allowance to isolate the explicit SDK exceptions. In that scope, Calcite CSS and ArcGIS fonts still load while the actual Calcite runtime sibling and the workspace JS fixture return 403. This exercises the permission boundary independently of where dependencies are installed. Production configuration and coverage thresholds are unchanged by this test correction.
 
 The same persistent Chrome profile that had failed was retained for post-fix testing. Four initial passes included filters, all three map modes, Settings, and visual inspection after tile traffic settled. Six further passes completed ten first-navigation checks across normal server starts. Every pass recorded 395 cached JavaScript responses, a successful CSS response/revalidation, `map_initialized`, a canvas, and no import failure. Cache clearing was never used to obtain success.
 
@@ -87,7 +89,8 @@ After restoring the normal development servers, the user's existing Chrome profi
 | --- | --- |
 | `npm run typecheck` | Passed frontend, backend/evals, and E2E typechecks |
 | `npm run lint` | Passed with no warnings |
-| `npm run test:frontend` | 239 tests passed in 23 files |
+| `npm run test:frontend` | Initially 239 tests; 240 passed in 23 files after the CI portability correction |
+| `npm run test:coverage && npm run coverage:check` | Passed full backend/frontend coverage and unchanged thresholds after the CI portability correction |
 | `npm run build:quality` | Passed real-SDK frontend and backend builds; existing SDK chunk-size advisory remains |
 | `npm run test:e2e -- --grep 'Dashboard\|Settings'` | Six offline cases passed, separate from the real-SDK checks above |
 
