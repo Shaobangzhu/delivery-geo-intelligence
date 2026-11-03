@@ -2,6 +2,8 @@
 
 November 2, 2026 · Branch `fix/arcgis-cold-start-reliability-v2`
 
+**Follow-up:** the subsequent natural reproduction and persistent-browser-cache experiment identified the Calcite CSS failure and verified a targeted correction. See [ArcGIS cold start failure from cached Calcite imports](arcgis-calcite-css-cold-start.md). The unresolved-cause statements below describe the evidence available during this earlier investigation.
+
 **The visible console's ArcGIS font 403 defect is fixed and verified. The reported intermittent map load-chain failure has not been captured naturally, so this is not a claim that its root cause is resolved.** This investigation used the normal development scripts and the actual `http://127.0.0.1:5173` origin, including the user's running Chrome profile. No local request forwarding or synthetic SDK was used for the live experiments.
 
 **User verification:** after the patch, the user answered “First load now works” when asked whether their usual stop/start and first Dashboard load still produced the error. This confirms the first-load outcome in the user's workflow, in addition to the automated verification below. It does not establish which change or environment condition eliminated the earlier failure.
