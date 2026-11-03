@@ -235,3 +235,64 @@ it("advances an open page at Los Angeles year rollover and refreshes All without
     expect(mock.mock.calls.at(-1)![0]).toBe("/api/dashboard?period=all&category=grocery");
   } finally { vi.useRealTimers(); }
 });
+
+it.each([0, 1, 10, 11, 20, 21])("shows at most ten of %i merchants in sorted order with absolute ranks", async (count) => {
+  const topMerchants = Object.freeze(Array.from({ length: count }, (_, index) => ({ ...merchant, id: `merchant-${index}`, name: `Ranked merchant ${index + 1}` })));
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ ...fixture, topMerchants }) })));
+  const user = userEvent.setup(); render(<Dashboard />);
+  const nav = within(await screen.findByRole("navigation", { name: "Top merchant pages" }));
+  const table = screen.getByRole("table");
+  expect(within(table).getAllByRole("row")).toHaveLength(Math.max(1, Math.min(count, 10)) + 1);
+  expect(screen.getByText(`Showing ${count ? "1–" + Math.min(count, 10) : "0"} of ${count} merchants`)).toBeInTheDocument();
+  if (count > 10) {
+    await user.click(nav.getByRole("button", { name: "Next page" }));
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(within(rows[0]).getAllByRole("cell")[0]).toHaveTextContent(/^11$/);
+    expect(rows[0]).toHaveTextContent("Ranked merchant 11");
+    expect(rows).toHaveLength(Math.min(10, count - 10));
+  }
+  expect(topMerchants).toHaveLength(count);
+});
+
+it("resets merchant pages for period, year and category, preserves metric changes, and never fetches on pagination", async () => {
+  vi.setSystemTime(new Date("2028-06-01T12:00:00Z"));
+  try {
+    const topMerchants = Array.from({ length: 21 }, (_, index) => ({ ...merchant, id: `rank-${index}`, name: `Rank ${index}` }));
+    const mock = vi.fn(async (url: string) => ({ ok: true, json: async () => url.includes("destination-heatmap") ? { cells: [] } : { ...fixture, topMerchants } }));
+    vi.stubGlobal("fetch", mock); const user = userEvent.setup(); render(<Dashboard />);
+    await screen.findByRole("navigation", { name: "Top merchant pages" });
+    await user.click(screen.getByRole("button", { name: "Destination Heatmap" }));
+    const nav = () => within(screen.getByRole("navigation", { name: "Top merchant pages" }));
+    let requests = mock.mock.calls.length;
+    await user.click(nav().getByRole("button", { name: "Page 3" }));
+    expect(screen.getByText("Showing 21–21 of 21 merchants")).toBeInTheDocument();
+    await user.click(nav().getByRole("button", { name: "Previous page" }));
+    expect(mock).toHaveBeenCalledTimes(requests);
+    await user.click(screen.getByRole("button", { name: "Merchant Diversity" }));
+    expect(nav().getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    for (const change of [
+      () => user.click(screen.getByRole("button", { name: "Month" })),
+      () => user.selectOptions(screen.getByRole("combobox"), "2027"),
+      () => user.selectOptions(screen.getByRole("combobox"), "2026"),
+      () => user.click(screen.getByRole("button", { name: "Grocery" }))
+    ]) {
+      await user.click(nav().getByRole("button", { name: "Page 2" }));
+      requests = mock.mock.calls.length;
+      await change();
+      await waitFor(() => expect(nav().getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page"));
+      expect(mock).toHaveBeenCalledTimes(requests + 1);
+    }
+    expect(screen.getByRole("navigation", { name: "Top merchant pages" }).closest(".ranking-scroll")).toBeNull();
+  } finally { vi.useRealTimers(); }
+});
+
+it("exposes no merchant pager while the initial load is pending or fails", async () => {
+  let fail!: (error: Error) => void;
+  vi.stubGlobal("fetch", vi.fn(() => new Promise((_resolve, reject) => { fail = reject; })));
+  render(<Dashboard />);
+  expect(screen.getByText("Loading dashboard analytics…")).toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "Top merchant pages" })).not.toBeInTheDocument();
+  fail(new Error("unavailable"));
+  await screen.findByText("Dashboard analytics are unavailable. Try again.");
+  expect(screen.queryByRole("navigation", { name: "Top merchant pages" })).not.toBeInTheDocument();
+});

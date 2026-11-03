@@ -49,11 +49,6 @@
 .icon-action:hover { background: #ecf4ff; }
 .icon-action.destructive { color: #d92d39; }
 .icon-action.destructive:hover { background: #fff0f1; }
-.table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 50px; padding: 8px 12px; border-top: 1px solid #e4edf8; color: #59728f; font-size: 11px; }
-.pagination { display: flex; gap: 4px; }
-.pagination button { min-width: 27px; height: 27px; padding: 0 5px; border: 1px solid #d7e4f4; border-radius: 4px; background: white; color: #31527e; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
-.pagination button[aria-current="page"] { background: #1262df; border-color: #1262df; color: white; }
-.pagination button:disabled { opacity: .45; cursor: not-allowed; }
 
 .dialog-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: #1833579c; }
 .dialog-card { position: relative; width: min(100%, 560px); max-height: calc(100vh - 40px); overflow-y: auto; padding: 22px 24px 20px; border: 1px solid #d8e5f5; border-radius: 9px; background: white; box-shadow: 0 22px 60px #09294a55; }
@@ -93,7 +88,6 @@
   .form-grid { grid-template-columns: 1fr; }
   .form-wide { grid-column: auto; }
   .dialog-card { padding: 20px 16px 16px; }
-  .table-footer { align-items: flex-start; flex-direction: column; }
 }
 
 .duration-group { min-width: 0; margin: 0; padding: 0; border: 0; }

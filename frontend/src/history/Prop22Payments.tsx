@@ -1,3 +1,5 @@
+import { Pagination } from "../components/Pagination";
+import { PAGE_SIZE, pageRange } from "../components/pageRange";
 import { PlatformOptions, platformLabel, type PlatformFilter } from "./platform";
 import { useEffect, useRef, useState } from "react";
 import { DialogFrame } from "./DialogFrame";
@@ -13,6 +15,8 @@ export function Prop22Payments({ adding, onCloseAdd }: { adding: boolean; onClos
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  const [page, setPage] = useState(1);
+  const range = pageRange(page, rows.length);
   const [editing, setEditing] = useState<EarningsAdjustment | null>(null);
   const [target, setTarget] = useState<EarningsAdjustment | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -21,11 +25,11 @@ export function Prop22Payments({ adding, onCloseAdd }: { adding: boolean; onClos
   useEffect(() => {
     const controller = new AbortController(); let active = true;
     setLoading(true); setError("");
-    listPayments(controller.signal, platform).then((data) => { if (active) { setRows(data); setLoading(false); } })
+    listPayments(controller.signal, platform).then((data) => { if (active) { setRows(data); setPage((page) => pageRange(page, data.length).page); setLoading(false); } })
       .catch(() => { if (active) { setError(paymentError()); setLoading(false); } });
     return () => { active = false; controller.abort(); };
   }, [reload, platform]);
-  function saved() { setEditing(null); onCloseAdd(); setReload((value) => value + 1); }
+  function saved() { if (!editing) setPage(1); setEditing(null); onCloseAdd(); setReload((value) => value + 1); }
   async function confirmDelete() {
     if (!target || pending.current) return;
     pending.current = true; setDeleting(true); setDeleteError("");
@@ -35,15 +39,17 @@ export function Prop22Payments({ adding, onCloseAdd }: { adding: boolean; onClos
   }
   return <section className="prop22-section" aria-labelledby="prop22-title">
     <h2 id="prop22-title">Prop 22 Payments</h2>
-    <div className="filter-field payment-platform-filter"><label htmlFor="payment-platform-filter">Payment Platform</label><select id="payment-platform-filter" value={platform} onChange={(event) => setPlatform(event.target.value as PlatformFilter)}><PlatformOptions filter /></select></div>
+    <div className="filter-field payment-platform-filter"><label htmlFor="payment-platform-filter">Payment Platform</label><select id="payment-platform-filter" value={platform} onChange={(event) => { setPlatform(event.target.value as PlatformFilter); setPage(1); }}><PlatformOptions filter /></select></div>
     {error && <p role="alert" className="form-error">{error}</p>}
-    <div className="history-table-card table-scroll"><table className="history-table payment-table">
+    <div className="history-table-card"><div className="table-scroll"><table className="history-table payment-table">
       <thead><tr><th scope="col">Payment Date</th><th scope="col">Platform</th><th scope="col">Coverage Period</th><th scope="col">Amount</th><th scope="col">Actions</th></tr></thead>
-      <tbody>{loading ? <tr><td colSpan={5}>Loading payments…</td></tr> : error ? <tr><td colSpan={5}>Payments unavailable.</td></tr> : !rows.length ? <tr><td colSpan={5}>No Prop 22 payments recorded.</td></tr> : rows.map((row) => <tr key={row.id}>
+      <tbody>{loading ? <tr><td colSpan={5}>Loading payments…</td></tr> : error ? <tr><td colSpan={5}>Payments unavailable.</td></tr> : !rows.length ? <tr><td colSpan={5}>No Prop 22 payments recorded.</td></tr> : rows.slice(range.offset, range.offset + PAGE_SIZE).map((row) => <tr key={row.id}>
         <td>{displayDate(row.paymentDate)}</td><td><span className="platform-label">{platformLabel(row.platform)}</span></td><td>{row.coverageStartDate && row.coverageEndDate ? `${displayDate(row.coverageStartDate)} – ${displayDate(row.coverageEndDate)}` : "—"}</td><td>${row.amount.toFixed(2)}</td>
         <td><div className="row-actions"><button type="button" className="icon-action" aria-label={`Edit Prop 22 payment ${row.paymentDate}`} onClick={() => setEditing(row)}>✎</button><button type="button" className="icon-action delete-action" aria-label={`Delete Prop 22 payment ${row.paymentDate}`} onClick={() => { setDeleteError(""); setTarget(row); }}>⌫</button></div></td>
       </tr>)}</tbody>
     </table></div>
+    {!loading && !error && <Pagination page={page} total={rows.length} noun="payments" label="Prop 22 payment pages" onPageChange={setPage} />}
+    </div>
     {(adding || editing) && <PaymentModal key={editing?.id ?? "new"} payment={editing} onClose={() => { setEditing(null); onCloseAdd(); }} onSaved={saved} />}
     {target && <DialogFrame title="Delete Prop 22 payment?" onClose={() => setTarget(null)} busy={deleting} className="confirm-dialog">
       <p className="dialog-intro">This payment will be permanently removed. This action cannot be undone.</p>

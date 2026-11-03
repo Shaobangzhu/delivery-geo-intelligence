@@ -319,3 +319,71 @@ it("uses saveSession to serialize only changed platform removals without legacy 
   expect(body.tripsOfferedByPlatform).toEqual({ uber_eats: null });
   expect(body).not.toHaveProperty("notes");
 });
+
+const sessionPages = () => within(screen.getByRole("navigation", { name: "Delivery session pages" }));
+function sessionRows(count: number): DeliverySession[] {
+  return Array.from({ length: count }, (_, index) => ({ ...base, id: `session-${String(index).padStart(6, "0")}`, totalDrivenMiles: index + 1 }));
+}
+it.each([0, 1, 10, 11, 20, 21])("paginates %i sessions in the returned chronological order", async (count) => {
+  rows = sessionRows(count); Object.freeze(rows);
+  const user = userEvent.setup(); mount();
+  await screen.findByText(`Showing ${count ? "1–" + Math.min(10, count) : "0"} of ${count} sessions`);
+  const table = screen.getAllByRole("table")[0];
+  expect(within(table).getAllByRole("row")).toHaveLength(Math.max(1, Math.min(count, 10)) + 1);
+  if (count > 10) {
+    await user.click(sessionPages().getByRole("button", { name: "Next page" }));
+    expect(within(table).getAllByRole("row").slice(1)[0]).toHaveTextContent("11 mi");
+    expect(screen.getByText(`Showing 11–${Math.min(20, count)} of ${count} sessions`)).toBeInTheDocument();
+  }
+  expect(api.listSessions).toHaveBeenCalledTimes(1); expect(api.getEconomics).toHaveBeenCalledTimes(1);
+  expect(rows.map((row) => row.totalDrivenMiles)).toEqual(Array.from({ length: count }, (_, index) => index + 1));
+  expect(screen.getByRole("navigation", { name: "Delivery session pages" }).closest(".table-scroll")).toBeNull();
+});
+
+it("preserves session page through edits and economics refresh, clamps deletion, and resets creation", async () => {
+  rows = sessionRows(21);
+  vi.mocked(api.saveSession).mockImplementation(async (payload, id) => {
+    const next = { ...base, ...payload, id: id ?? "session-new", sessionDurationSeconds: 10800 } as DeliverySession;
+    rows = id ? rows.map((row) => row.id === id ? next : row) : [next, ...rows];
+    return { data: next };
+  });
+  vi.mocked(api.deleteSession).mockImplementation(async (id) => { rows = rows.filter((row) => row.id !== id); });
+  const user = userEvent.setup(); const view = render(<UberSessions merchants={merchants} deliveryRevision={0} />);
+  await screen.findByText("Showing 1–10 of 21 sessions");
+  await user.click(sessionPages().getByRole("button", { name: "Page 3" }));
+  await user.click(screen.getByRole("button", { name: "Edit session 000020" }));
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await screen.findByText("Showing 21–21 of 21 sessions");
+  expect(sessionPages().getByRole("button", { name: "Page 3" })).toHaveAttribute("aria-current", "page");
+  await user.click(screen.getByText("Tesla Model Y — Vehicle Economics"));
+  await user.click(screen.getByRole("button", { name: "Initialize Missing Confirmed Records" }));
+  await screen.findByText("Showing 21–21 of 21 sessions");
+  expect(api.initializeEconomics).toHaveBeenCalledTimes(1);
+  view.rerender(<UberSessions merchants={merchants} deliveryRevision={1} />);
+  await screen.findByText("Showing 21–21 of 21 sessions");
+  await user.click(screen.getByRole("button", { name: "Delete session 000020" }));
+  await user.click(screen.getByRole("button", { name: "Delete Session" }));
+  await screen.findByText("Showing 11–20 of 20 sessions");
+  expect(sessionPages().getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+  await user.click(screen.getByRole("button", { name: /Add Session/ }));
+  fireEvent.change(screen.getByLabelText("Session Start *"), { target: { value: "2026-11-01T12:00" } });
+  fireEvent.change(screen.getByLabelText("Session End *"), { target: { value: "2026-11-01T13:00" } });
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await screen.findByText("Showing 1–10 of 21 sessions");
+  expect(sessionPages().getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+});
+
+it("hides session pagination on pending and failed refreshes, preserving a valid page for retry", async () => {
+  rows = sessionRows(21); const user = userEvent.setup();
+  const view = render(<UberSessions merchants={merchants} deliveryRevision={0} />);
+  expect(screen.getByText("Loading sessions…")).toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "Delivery session pages" })).not.toBeInTheDocument();
+  await screen.findByText("Showing 1–10 of 21 sessions");
+  await user.click(sessionPages().getByRole("button", { name: "Page 3" }));
+  vi.mocked(api.listSessions).mockRejectedValueOnce(new Error("failed"));
+  view.rerender(<UberSessions merchants={merchants} deliveryRevision={1} />);
+  await screen.findByText("Sessions unavailable.");
+  expect(screen.queryByRole("navigation", { name: "Delivery session pages" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Retry session data" }));
+  await screen.findByText("Showing 21–21 of 21 sessions");
+});

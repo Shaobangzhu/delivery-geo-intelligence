@@ -1,3 +1,5 @@
+import { Pagination } from "../components/Pagination";
+import { PAGE_SIZE, pageRange } from "../components/pageRange";
 import { useEffect, useRef, useState } from "react";
 import type { Merchant } from "./api";
 import { DialogFrame } from "./DialogFrame";
@@ -15,6 +17,8 @@ export function UberSessions({ merchants, deliveryRevision }: { merchants: Merch
   const [economics, setEconomics] = useState<EconomicsResponse>({ data: null, historicalMileage: [] });
   const [loading, setLoading] = useState(true); const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  const [page, setPage] = useState(1);
+  const range = pageRange(page, rows.length);
   const [editing, setEditing] = useState<DeliverySession | null | undefined>(undefined);
   const [vehicleOpen, setVehicleOpen] = useState(false);
   const [annual, setAnnual] = useState<AnnualMileage | null | undefined>(undefined);
@@ -24,11 +28,11 @@ export function UberSessions({ merchants, deliveryRevision }: { merchants: Merch
     const controller = new AbortController(); let active = true;
     setLoading(true); setError("");
     Promise.all([listSessions(controller.signal), getEconomics(controller.signal)]).then(([sessions, settings]) => {
-      if (active) { setRows(sessions); setEconomics(settings); setLoading(false); }
+      if (active) { setRows(sessions); setPage((page) => pageRange(page, sessions.length).page); setEconomics(settings); setLoading(false); }
     }).catch((cause) => { if (active) { setRows([]); setEconomics({ data: null, historicalMileage: [] }); setError(sessionError(cause)); setLoading(false); } });
     return () => { active = false; controller.abort(); };
   }, [reload, deliveryRevision]);
-  function saved() { setEditing(undefined); setVehicleOpen(false); setAnnual(undefined); setReload((value) => value + 1); }
+  function saved() { if (editing === null) setPage(1); setEditing(undefined); setVehicleOpen(false); setAnnual(undefined); setReload((value) => value + 1); }
   async function initialize() {
     if (pending.current) return; pending.current = true; setBusy(true); setActionError("");
     try { await initializeEconomics(); setReload((value) => value + 1); }
@@ -45,9 +49,9 @@ export function UberSessions({ merchants, deliveryRevision }: { merchants: Merch
   return <section className="session-section" aria-labelledby="sessions-title">
     <div className="session-section-heading"><div><h2 id="sessions-title">Delivery Sessions</h2><p className="duration-help">Complete operating periods; time and mileage are recorded independently of individual deliveries.</p></div><button type="button" className="button secondary" disabled={loading || Boolean(error)} onClick={() => setEditing(null)}>＋ Add Session</button></div>
     {error && <p role="alert" className="history-alert">{error} <button type="button" className="text-button" onClick={() => setReload((value) => value + 1)}>Retry session data</button></p>}
-    <div className="history-table-card table-scroll"><table className="history-table session-table">
+    <div className="history-table-card"><div className="table-scroll"><table className="history-table session-table">
       <thead><tr><th scope="col">Date</th><th scope="col">Start–End (Los Angeles)</th><th scope="col">Duration</th><th scope="col">Strategy</th><th scope="col">Trips Offered</th><th scope="col">Total Miles</th><th scope="col">Estimated Vehicle Cost</th><th scope="col">Actions</th></tr></thead>
-      <tbody>{loading ? <tr><td colSpan={8}>Loading sessions…</td></tr> : error ? <tr><td colSpan={8}>Sessions unavailable.</td></tr> : !rows.length ? <tr><td colSpan={8}>No delivery sessions recorded.</td></tr> : rows.map((row) => <tr key={row.id}>
+      <tbody>{loading ? <tr><td colSpan={8}>Loading sessions…</td></tr> : error ? <tr><td colSpan={8}>Sessions unavailable.</td></tr> : !rows.length ? <tr><td colSpan={8}>No delivery sessions recorded.</td></tr> : rows.slice(range.offset, range.offset + PAGE_SIZE).map((row) => <tr key={row.id}>
         <td>{displaySessionDate(row.startedAt)}{row.associationIntegrity && <small className="merchant-city">Association review required</small>}</td><td>{displaySessionTime(row.startedAt)}<br />{displaySessionTime(row.endedAt)}</td><td>{formatDuration(row.sessionDurationSeconds)}</td>
         <td>{strategies.find((item) => item.value === row.strategy)?.label ?? "Not recorded"}<span className="merchant-city">{row.deliveryIds.length} linked deliveries</span></td>
         <td className="session-offers-cell">{platforms.map(({ value, label }) => `${label}: ${row.tripsOfferedByPlatform?.[value] ?? "—"}`).join(" · ")}</td>
@@ -56,6 +60,8 @@ export function UberSessions({ merchants, deliveryRevision }: { merchants: Merch
         <td><div className="row-actions"><button type="button" className="icon-action" aria-label={`Edit session ${row.id.slice(-6)}`} onClick={() => setEditing(row)}>✎</button><button type="button" className="icon-action destructive" aria-label={`Delete session ${row.id.slice(-6)}`} onClick={() => { setActionError(""); setTarget(row); }}>⌫</button></div></td>
       </tr>)}</tbody>
     </table></div>
+    {!loading && !error && <Pagination page={page} total={rows.length} noun="sessions" label="Delivery session pages" onPageChange={setPage} />}
+    </div>
     <details className="vehicle-panel">
       <summary>Tesla Model Y — Vehicle Economics</summary>
       {loading ? <p>Loading vehicle data…</p> : profile ? <>

@@ -1,3 +1,5 @@
+import { Pagination } from "../components/Pagination";
+import { PAGE_SIZE } from "../components/pageRange";
 import { PlatformOptions, platformLabel, type PlatformFilter } from "../history/platform";
 import { useEffect, useMemo, useState } from "react";
 import { listDeliveries, listMerchants, userFacingError, type Category, type Delivery, type DeliveryPage, type Merchant, type SortOrder } from "../history/api";
@@ -9,7 +11,6 @@ import { UberAnnualStatements } from "../history/UberAnnualStatements";
 import { UberSessions } from "../history/UberSessions";
 import "../history/history.css";
 
-const PAGE_SIZE = 10;
 const emptyPage: DeliveryPage = { data: [], pagination: { page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 0 } };
 const categories: { value: Category | ""; label: string }[] = [
   { value: "", label: "All Categories" }, { value: "restaurant", label: "Restaurant" },
@@ -24,11 +25,6 @@ function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit"
   }).format(new Date(value));
-}
-
-function pageNumbers(page: number, totalPages: number): number[] {
-  const start = Math.max(1, Math.min(page - 2, totalPages - 4));
-  return Array.from({ length: Math.min(totalPages, 5) }, (_, index) => start + index);
 }
 
 export function History() {
@@ -87,9 +83,7 @@ export function History() {
   }, [platform, search, category, fromDate, toDate, sort, page, reload]);
 
   const merchantById = useMemo(() => new Map(merchants.map((merchant) => [merchant.id, merchant])), [merchants]);
-  const { total, totalPages } = result.pagination;
-  const startItem = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const endItem = Math.min(page * PAGE_SIZE, total);
+  const { total } = result.pagination;
 
   function refreshAfterSave() {
     setEditor(undefined);
@@ -177,14 +171,7 @@ export function History() {
               })}
           </tbody>
         </table></div>
-        <div className="table-footer">
-          <span>Showing {startItem}{total > 0 ? `–${endItem}` : ""} of {total} deliveries</span>
-          <nav className="pagination" aria-label="Delivery pages">
-            <button type="button" aria-label="Previous page" disabled={page <= 1 || loading} onClick={() => setPage(page - 1)}>‹</button>
-            {pageNumbers(page, totalPages).map((number) => <button key={number} type="button" aria-label={`Page ${number}`} aria-current={number === page ? "page" : undefined} disabled={loading} onClick={() => setPage(number)}>{number}</button>)}
-            <button type="button" aria-label="Next page" disabled={page >= totalPages || loading} onClick={() => setPage(page + 1)}>›</button>
-          </nav>
-        </div>
+        <Pagination page={page} total={total} noun="deliveries" label="Delivery pages" disabled={loading} onPageChange={setPage} />
       </div>
 
       <Prop22Payments adding={addingPayment} onCloseAdd={() => setAddingPayment(false)} />

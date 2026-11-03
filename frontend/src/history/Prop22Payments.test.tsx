@@ -1,11 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Prop22Payments } from "./Prop22Payments";
 import { History } from "../pages/History";
 import type { EarningsAdjustment } from "./earningsApi";
 
-function install() {
-  let rows: EarningsAdjustment[] = [];
+function install(initialRows: EarningsAdjustment[] = []) {
+  let rows = [...initialRows];
   const mock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     let data: unknown;
@@ -14,11 +15,13 @@ function install() {
     else if (url === "/api/delivery-sessions") data = { data: [] };
     else if (url === "/api/vehicle-economics") data = { data: null, historicalMileage: [] };
     else if (url.startsWith("/api/deliveries")) data = { data: [], pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 } };
-    else if (method === "GET") data = url === "/api/earnings-adjustments" ? { data: rows } : { data: rows[0], reconciliation: { status: "insufficient_data", expectedAdjustment: null, difference: null } };
-    else if (method === "DELETE") { rows = []; return { ok: true, status: 204 } as Response; }
+    else if (method === "GET") data = url.startsWith("/api/earnings-adjustments/") ? { data: rows[0], reconciliation: { status: "insufficient_data", expectedAdjustment: null, difference: null } } : { data: rows.filter((row) => !url.includes("?platform=") || row.platform === new URL(url, "http://test").searchParams.get("platform")) };
+    else if (method === "DELETE") { rows = rows.filter((row) => row.id !== url.split("/").at(-1)); return { ok: true, status: 204 } as Response; }
     else {
       const payload = JSON.parse(String(init?.body));
-      rows = [{ ...payload, id: "payment-a" }]; data = { data: rows[0] };
+      const id = method === "PATCH" ? url.split("/").at(-1)! : "payment-a";
+      const next = { ...payload, id };
+      rows = method === "PATCH" ? rows.map((row) => row.id === id ? next : row) : [next, ...rows]; data = { data: next };
     }
     return { ok: true, status: 200, json: async () => data } as Response;
   });
@@ -90,4 +93,77 @@ it("keeps a payment modal pending, prevents duplicate saves, and shows a safe fa
   finish({ ok: false, status: 500, json: async () => ({ error: "Private server detail" }) } as Response);
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not save or load");
   expect(screen.getByRole("dialog")).not.toHaveTextContent("Private server detail");
+});
+
+function paymentRows(count: number): EarningsAdjustment[] {
+  return Array.from({ length: count }, (_, index) => ({ id: `payment-${index}`, platform: index < 11 ? "uber_eats" : "doordash", type: "prop22_guarantee", paymentDate: `2026-10-${String(31 - index).padStart(2, "0")}`, amount: index + 1 }));
+}
+const paymentPages = () => within(screen.getByRole("navigation", { name: "Prop 22 payment pages" }));
+
+it.each([0, 1, 10, 11, 20, 21])("paginates %i payments without changing the source order", async (count) => {
+  const rows = paymentRows(count); const mock = install(Object.freeze(rows) as unknown as EarningsAdjustment[]);
+  const user = userEvent.setup(); render(<History />);
+  await screen.findByText(`Showing ${count ? "1–" + Math.min(10, count) : "0"} of ${count} payments`);
+  const table = screen.getByRole("heading", { name: "Prop 22 Payments" }).closest("section")!.querySelector("table")!;
+  expect(within(table).getAllByRole("row")).toHaveLength(Math.max(1, Math.min(count, 10)) + 1);
+  const requests = mock.mock.calls.length;
+  if (count > 10) {
+    await user.click(paymentPages().getByRole("button", { name: "Next page" }));
+    expect(within(table).getAllByRole("row").slice(1)[0]).toHaveTextContent("$11.00");
+    expect(screen.getByText(`Showing 11–${Math.min(20, count)} of ${count} payments`)).toBeInTheDocument();
+  }
+  expect(mock).toHaveBeenCalledTimes(requests);
+  expect(rows.map((row) => row.amount)).toEqual(Array.from({ length: count }, (_, index) => index + 1));
+  expect(screen.getByRole("navigation", { name: "Prop 22 payment pages" }).closest(".table-scroll")).toBeNull();
+});
+
+it("resets payment pages for the platform filter and leaves delivery pagination alone", async () => {
+  install(paymentRows(21)); const user = userEvent.setup(); render(<History />);
+  await screen.findByText("Showing 1–10 of 21 payments");
+  await user.click(paymentPages().getByRole("button", { name: "Page 3" }));
+  await user.selectOptions(screen.getByLabelText("Payment Platform"), "uber_eats");
+  await screen.findByText("Showing 1–10 of 11 payments");
+  expect(paymentPages().getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+  await user.click(paymentPages().getByRole("button", { name: "Page 2" }));
+  await user.selectOptions(screen.getByLabelText("Payment Platform"), "doordash");
+  await screen.findByText("Showing 1–10 of 10 payments");
+  expect(screen.getByText("Showing 0 of 0 deliveries")).toBeInTheDocument();
+});
+
+it("preserves payment page after saving, clamps after last-page deletion, and resets after creation", async () => {
+  install(paymentRows(21)); const user = userEvent.setup(); render(<History />);
+  await screen.findByText("Showing 1–10 of 21 payments");
+  await user.click(paymentPages().getByRole("button", { name: "Page 3" }));
+  await user.click(screen.getByRole("button", { name: "Edit Prop 22 payment 2026-10-11" }));
+  await user.click(screen.getByRole("button", { name: "Save Payment" }));
+  await screen.findByText("Showing 21–21 of 21 payments");
+  expect(paymentPages().getByRole("button", { name: "Page 3" })).toHaveAttribute("aria-current", "page");
+  await user.click(screen.getByRole("button", { name: "Delete Prop 22 payment 2026-10-11" }));
+  await user.click(screen.getByRole("button", { name: "Delete Payment" }));
+  await screen.findByText("Showing 11–20 of 20 payments");
+  expect(paymentPages().getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+  await user.click(screen.getByRole("button", { name: /Add Prop 22 Payment/ }));
+  fireEvent.change(screen.getByLabelText("Payment Date *"), { target: { value: "2026-11-01" } });
+  await user.selectOptions(screen.getByLabelText("Payment Platform *"), "uber_eats");
+  await user.type(screen.getByLabelText("Amount Received *"), "50");
+  await user.click(screen.getByRole("button", { name: "Save Payment" }));
+  await screen.findByText("Showing 1–10 of 21 payments");
+  expect(paymentPages().getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+});
+
+it("hides payment pagination while loading or unavailable and resets safely on a new filter", async () => {
+  const rows = paymentRows(21);
+  const mock = vi.fn(async () => ({ ok: true, json: async () => ({ data: rows }) }));
+  vi.stubGlobal("fetch", mock); const user = userEvent.setup();
+  render(<Prop22Payments adding={false} onCloseAdd={vi.fn()} />);
+  expect(screen.getByText("Loading payments…")).toBeInTheDocument();
+  expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+  await screen.findByText("Showing 1–10 of 21 payments");
+  await user.click(paymentPages().getByRole("button", { name: "Page 3" }));
+  mock.mockRejectedValueOnce(new Error("failed"));
+  await user.selectOptions(screen.getByLabelText("Payment Platform"), "doordash");
+  await screen.findByText("Payments unavailable.");
+  expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("Payment Platform"), "");
+  await screen.findByText("Showing 1–10 of 21 payments");
 });
