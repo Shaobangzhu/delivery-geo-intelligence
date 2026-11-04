@@ -64,10 +64,63 @@ it("shows an unfinished association warning and resubmits reviewed links even wh
 });
 function mount() { render(<UberSessions merchants={merchants} deliveryRevision={0} />); }
 
+it("displays minute-only Edit inputs without saving on open, rerender, or cancel", async () => {
+  const close = vi.fn(), saved = vi.fn(), user = userEvent.setup();
+  const view = render(<SessionModal session={base} merchants={merchants} onClose={close} onSaved={saved} />);
+  for (const [label, value] of [["Session Start *", "2026-03-07T23:30"], ["Session End *", "2026-03-08T03:30"]]) {
+    expect(screen.getByLabelText(label)).toHaveValue(value);
+    expect(screen.getByLabelText(label)).toHaveAttribute("type", "datetime-local");
+    expect(screen.getByLabelText(label)).toHaveAttribute("step", "60");
+    expect(screen.getByLabelText(label)).toBeRequired();
+  }
+  view.rerender(<SessionModal session={base} merchants={[...merchants]} onClose={close} onSaved={saved} />);
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(close).toHaveBeenCalledOnce(); expect(saved).not.toHaveBeenCalled(); expect(api.saveSession).not.toHaveBeenCalled();
+});
+
+it("preserves untouched legacy precision and links, normalizing only explicitly edited timestamps", async () => {
+  const user = userEvent.setup(), saved = vi.fn();
+  const legacy = { ...base, startedAt: "2026-11-01T09:30:42.123Z", endedAt: "2026-11-01T10:30:59.456Z",
+    deliveryIds: ["delivery-a"], linkedDeliveries: [{ id: "delivery-a", merchantId: "merchant-a", pickedUpAt: base.startedAt }] };
+  render(<SessionModal session={legacy} merchants={merchants} onClose={vi.fn()} onSaved={saved} />);
+  expect(screen.getByLabelText("Session Start *")).toHaveValue("2026-11-01T01:30");
+  expect(screen.getByLabelText("Session End *")).toHaveValue("2026-11-01T02:30");
+  expect(screen.getByLabelText("Start clock occurrence")).toHaveValue("later");
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+  expect(api.saveSession).toHaveBeenLastCalledWith(expect.objectContaining({ startedAt: legacy.startedAt, endedAt: legacy.endedAt }), legacy.id);
+  // Even a browser-emitted subminute value is reduced to the selected minute.
+  fireEvent.change(screen.getByLabelText("Session Start *"), { target: { value: "2026-11-01T01:31:12.345" } });
+  expect(screen.getByLabelText("Session Start *")).toHaveValue("2026-11-01T01:31");
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledTimes(2));
+  expect(api.saveSession).toHaveBeenLastCalledWith(expect.objectContaining({ startedAt: "2026-11-01T09:31:00.000Z", endedAt: legacy.endedAt }), legacy.id);
+  fireEvent.change(screen.getByLabelText("Session End *"), { target: { value: "2026-11-01T02:31:59.999" } });
+  await user.selectOptions(screen.getByLabelText("Start clock occurrence"), "earlier");
+  await user.click(screen.getByRole("button", { name: "Save Session" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledTimes(3));
+  expect(api.saveSession).toHaveBeenLastCalledWith(expect.objectContaining({ startedAt: "2026-11-01T08:31:00.000Z", endedAt: "2026-11-01T10:31:00.000Z" }), legacy.id);
+  for (const [payload] of vi.mocked(api.saveSession).mock.calls) expect(payload).not.toHaveProperty("deliveryIds");
+});
+
+it.each([
+  ["", ""], ["2026-01-15T12:00", "2026-01-15T11:59"],
+  ["2026-01-15T12:00", "2026-01-15T12:00"], ["2026-03-08T02:30", "2026-03-08T03:30"]
+])("rejects missing, unordered, equal, or skipped-DST minute inputs (%s, %s)", async (start, end) => {
+  render(<SessionModal session={null} merchants={merchants} onClose={vi.fn()} onSaved={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Session Start *"), { target: { value: start } });
+  fireEvent.change(screen.getByLabelText("Session End *"), { target: { value: end } });
+  await userEvent.click(screen.getByRole("button", { name: "Save Session" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("end after start");
+  expect(api.saveSession).not.toHaveBeenCalled();
+});
+
 it("creates an explicitly linked session across midnight/DST and validates independent business mileage", async () => {
   const user = userEvent.setup(); mount(); await screen.findByText("No delivery sessions recorded.");
   await user.click(screen.getByRole("button", { name: /Add Session/ }));
   const dialog = screen.getByRole("dialog", { name: "Add Session" });
+  expect(screen.getByLabelText("Session Start *")).toHaveAttribute("step", "60");
+  expect(screen.getByLabelText("Session End *")).toHaveAttribute("step", "60");
   expect(screen.getByLabelText("Session Start *")).toHaveFocus();
   await user.click(screen.getByRole("button", { name: "Save Session" })); expect(screen.getByRole("alert")).toHaveTextContent("end after start");
   fireEvent.change(screen.getByLabelText("Session Start *"), { target: { value: "2026-03-07T23:30" } });
