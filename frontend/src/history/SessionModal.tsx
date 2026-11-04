@@ -2,15 +2,17 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { DialogFrame } from "./DialogFrame";
 import { type DeliveryPage, type Merchant } from "./api";
 import { listSessionCandidates, saveSession, sessionError, strategies, type DeliverySession, type DeliveryStrategy } from "./sessionApi";
-import { displaySessionTime, initialOccurrence, losAngelesInput, sessionInstant, sessionTimeCandidates } from "./sessionTime";
+import { displaySessionTime, initialOccurrence, losAngelesMinuteInput, sessionInstant, sessionTimeCandidates } from "./sessionTime";
 import { platforms, type DeliveryPlatform } from "./platform";
 
 export function SessionModal({ session, merchants, onClose, onSaved }: {
   session: DeliverySession | null; merchants: Merchant[]; onClose: () => void; onSaved: () => void;
 }) {
   const id = useId();
-  const [start, setStart] = useState(session ? losAngelesInput(session.startedAt) : "");
-  const [end, setEnd] = useState(session ? losAngelesInput(session.endedAt) : "");
+  const [start, setStart] = useState(session ? losAngelesMinuteInput(session.startedAt) : "");
+  const [end, setEnd] = useState(session ? losAngelesMinuteInput(session.endedAt) : "");
+  const [startChanged, setStartChanged] = useState(false);
+  const [endChanged, setEndChanged] = useState(false);
   const [startOccurrence, setStartOccurrence] = useState(initialOccurrence(session?.startedAt));
   const [endOccurrence, setEndOccurrence] = useState(initialOccurrence(session?.endedAt));
   const [strategy, setStrategy] = useState<DeliveryStrategy | "">(session?.strategy ?? "");
@@ -30,8 +32,12 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pending = useRef(false);
-  const startIso = sessionInstant(start, startOccurrence);
-  const endIso = sessionInstant(end, endOccurrence);
+  // Preserve untouched stored instants, including legacy subminute precision and DST folds.
+  // New/edited wall times contain minutes only, so serialization zeros seconds and millis.
+  const parsedStart = sessionInstant(start, startOccurrence);
+  const parsedEnd = sessionInstant(end, endOccurrence);
+  const startIso = parsedStart && session && !startChanged ? session.startedAt : parsedStart;
+  const endIso = parsedEnd && session && !endChanged ? session.endedAt : parsedEnd;
   useEffect(() => {
     setPage(1);
   }, [startIso, endIso]);
@@ -90,11 +96,11 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
     <button type="button" className="dialog-close" aria-label="Close dialog" disabled={busy} onClick={onClose}>×</button>
     <form onSubmit={submit} noValidate aria-busy={busy}>
       <div className="form-grid">
-        <div className="form-field"><label htmlFor={`${id}-start`}>Session Start *</label><input id={`${id}-start`} type="datetime-local" step="0.001" required data-autofocus disabled={busy} value={start} onChange={(event) => setStart(event.target.value)} />
-          {sessionTimeCandidates(start).length === 2 && <><label htmlFor={`${id}-start-fold`}>Start clock occurrence</label><select id={`${id}-start-fold`} value={startOccurrence} disabled={busy} onChange={(event) => setStartOccurrence(event.target.value as "earlier" | "later")}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></select></>}
+        <div className="form-field"><label htmlFor={`${id}-start`}>Session Start *</label><input id={`${id}-start`} type="datetime-local" step="60" required data-autofocus disabled={busy} value={start} onChange={(event) => { setStart(event.target.value.slice(0, 16)); setStartChanged(true); }} />
+          {sessionTimeCandidates(start).length === 2 && <><label htmlFor={`${id}-start-fold`}>Start clock occurrence</label><select id={`${id}-start-fold`} value={startOccurrence} disabled={busy} onChange={(event) => { setStartOccurrence(event.target.value as "earlier" | "later"); setStartChanged(true); }}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></select></>}
         </div>
-        <div className="form-field"><label htmlFor={`${id}-end`}>Session End *</label><input id={`${id}-end`} type="datetime-local" step="0.001" required disabled={busy} value={end} onChange={(event) => setEnd(event.target.value)} />
-          {sessionTimeCandidates(end).length === 2 && <><label htmlFor={`${id}-end-fold`}>End clock occurrence</label><select id={`${id}-end-fold`} value={endOccurrence} disabled={busy} onChange={(event) => setEndOccurrence(event.target.value as "earlier" | "later")}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></select></>}
+        <div className="form-field"><label htmlFor={`${id}-end`}>Session End *</label><input id={`${id}-end`} type="datetime-local" step="60" required disabled={busy} value={end} onChange={(event) => { setEnd(event.target.value.slice(0, 16)); setEndChanged(true); }} />
+          {sessionTimeCandidates(end).length === 2 && <><label htmlFor={`${id}-end-fold`}>End clock occurrence</label><select id={`${id}-end-fold`} value={endOccurrence} disabled={busy} onChange={(event) => { setEndOccurrence(event.target.value as "earlier" | "later"); setEndChanged(true); }}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></select></>}
         </div>
         <div className="form-field form-wide"><label htmlFor={`${id}-strategy`}>Operating Strategy</label><select id={`${id}-strategy`} disabled={busy} value={strategy} onChange={(event) => setStrategy(event.target.value as DeliveryStrategy | "")}><option value="">Not recorded</option>{strategies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
         {platforms.map(({ value, label }) => <div className="form-field" key={value}><label htmlFor={`${id}-${value}`}>{label} — Trips Offered</label><input id={`${id}-${value}`} name={value} type="number" min="0" max={Number.MAX_SAFE_INTEGER} step="1" aria-describedby={`${id}-offers-help`} disabled={busy} value={offers[value]} onChange={(event) => setOffers((previous) => ({ ...previous, [value]: event.target.value }))} /></div>)}

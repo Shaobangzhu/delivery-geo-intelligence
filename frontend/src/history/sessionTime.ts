@@ -8,6 +8,10 @@ export function losAngelesInput(iso: string) {
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}` +
     (date.getUTCMilliseconds() ? `.${String(date.getUTCMilliseconds()).padStart(3, "0")}` : "");
 }
+/** Minute-only native input value, derived from LA wall time rather than UTC. */
+export function losAngelesMinuteInput(iso: string) {
+  return losAngelesInput(iso).slice(0, 16);
+}
 /** Validate wall time against actual LA offsets; reject DST gaps and expose both fold instants. */
 export function sessionTimeCandidates(local: string): string[] {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(local);
