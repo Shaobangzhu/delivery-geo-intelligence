@@ -35,6 +35,19 @@ it("handles configuration/provider errors and retries only by user action", asyn
   expect(await screen.findByRole("alert")).toHaveTextContent("unavailable"); expect(fetch).toHaveBeenCalledTimes(1);
   await user.click(screen.getByRole("button", { name: "Retry analysis" })); await screen.findByRole("region", { name: "DGI answer" }); expect(fetch).toHaveBeenCalledTimes(2);
 });
+it.each(["07ef87c3-71fa-46bd-b213-774c678b672f", "PRIVATE_PROVIDER_DETAIL"]) (
+  "shows only a validated request reference on failure: %s", async (requestId) => {
+    const fetch = vi.fn().mockResolvedValue({ ok: false, status: 502,
+      json: async () => ({ requestId, error: "PRIVATE_PROVIDER_DETAIL", code: "PRIVATE_PROVIDER_DETAIL" }) });
+    vi.stubGlobal("fetch", fetch); render(<AskDgi />); const user = await open();
+    await user.click(screen.getByRole("button", { name: "How efficient were my delivery sessions?" }));
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("DGI analysis is unavailable"); expect(alert).not.toHaveTextContent("PRIVATE_PROVIDER_DETAIL");
+    if (requestId !== "PRIVATE_PROVIDER_DETAIL") expect(alert).toHaveTextContent(`Reference: ${requestId}`);
+    else expect(alert).not.toHaveTextContent("Reference:");
+    expect(screen.getByRole("button", { name: "Retry analysis" })).toBeEnabled(); expect(fetch).toHaveBeenCalledTimes(1);
+  });
 it("cancels on close/unmount and ignores stale completions after reopening", async () => {
   const resolvers: ((value: unknown) => void)[] = [];
   const fetch = vi.fn((_url: string, _init: RequestInit) => new Promise((resolve) => resolvers.push(resolve))); vi.stubGlobal("fetch", fetch);

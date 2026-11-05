@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { askDgi, type AnalystAnswer } from "./aiApi";
+import { AnalystRequestError, askDgi, type AnalystAnswer } from "./aiApi";
 
 const suggestions = ["How efficient were my delivery sessions?", "What does my latest Prop 22 settlement show?",
   "Compare my operating strategies.", "What data should I backfill?"];
@@ -27,8 +27,9 @@ export function AskDgi() {
     try {
       const answer = await askDgi(trimmed, controller.signal);
       if (mounted.current && pending.current === controller && !controller.signal.aborted) setResult(answer);
-    } catch {
-      if (mounted.current && pending.current === controller && !controller.signal.aborted) setError("DGI analysis is unavailable. Try again or review the recorded analytics below.");
+    } catch (failure) {
+      if (mounted.current && pending.current === controller && !controller.signal.aborted) setError("DGI analysis is unavailable. Try again or review the recorded analytics below."
+        + (failure instanceof AnalystRequestError && failure.requestId ? ` Reference: ${failure.requestId}.` : ""));
     } finally {
       if (mounted.current && pending.current === controller) { pending.current = null; setBusy(false); }
     }
