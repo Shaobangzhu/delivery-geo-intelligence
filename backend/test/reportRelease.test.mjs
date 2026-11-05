@@ -6,6 +6,7 @@ import AdmZip from "adm-zip";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import test from "./support/scoped-test.mjs";
 import { normalizeHistory, writeHistory, beforeHistory, afterHistory, auditJson } from "../../scripts/allure/history.mjs";
 import { apiClient, sourceRun, trustedRun, repository, releaseWorkflow, restoreHistory, sha256 } from "../../scripts/allure/github.mjs";
@@ -284,4 +285,36 @@ test("Main push metadata uses the ref name when GitHub provides an empty PR head
   assert.equal(child.status, 0);
   const metadata = JSON.parse(readFileSync(join(base, ".allure-raw/backend/unit/dgi-run.json")));
   assert.equal(metadata.branch, "main"); assert.equal(metadata.ciRun, "300");
+});
+
+test("PR branch metadata is safely projected before publication without relaxing privacy or provenance", (t) => {
+  const module = new URL("../../scripts/allure/results.mjs", import.meta.url).href;
+  for (const branch of ["feature/session-reliability", "fix/ask-dgi-ai-analyst-502", "fix/sk-syntheticKey12345", "fix/SYNTHETIC_SECRET_token"]) {
+    const base = temp(t);
+    const child = spawnSync(process.execPath, ["--input-type=module", "-e", `import { prepareResults } from ${JSON.stringify(module)}; prepareResults("backend", "unit", process.argv[1]);`, base], {
+      encoding: "utf8", timeout: 10_000,
+      env: { PATH: process.env.PATH, GITHUB_HEAD_REF: branch, GITHUB_REF_NAME: "21/merge", GITHUB_RUN_ID: "300", GITHUB_ACTIONS: "true" }
+    });
+    assert.equal(child.status, 0);
+    const raw = join(base, ".allure-raw/backend/unit");
+    assert.equal(JSON.parse(readFileSync(join(raw, "dgi-run.json"))).branch, branch);
+    writeFileSync(join(raw, "case-result.json"), JSON.stringify({ uuid: "case", name: "Synthetic quality operation", status: "failed" }));
+    const manifest = collectBatch("backend", "unit", 1, base);
+    const expected = branch === "feature/session-reliability" ? branch : `redacted-${createHash("sha256").update(branch).digest("hex").slice(0, 16)}`;
+    assert.equal(manifest.branch, expected);
+    assert.equal(collectBatch("backend", "unit", 1, base).branch, expected, "Projection is deterministic");
+    assert.doesNotThrow(() => auditJson(manifest));
+    const summary = mergeResults(base, true), input = publicInput(base, summary);
+    assert.equal(summary.executions[0].testExitCode, 1); assert.deepEqual(summary.executions[0].counts, { failed: 1 });
+    const published = readdirSync(input.directory).filter((name) => name.endsWith("-result.json"))
+      .map((name) => JSON.parse(readFileSync(join(input.directory, name))));
+    assert.equal(published.length, 1); assert.equal(published[0].status, "failed");
+    if (expected !== branch) assert.ok(!readFileSync(join(base, "allure-merged/environment.properties"), "utf8").includes(branch));
+    // A projected feature branch must still be rejected as a trusted main run.
+    assert.throws(() => publicInput(base, summary, source), /provenance_rejected/);
+  }
+  // The strict scanner still rejects key-like text everywhere else.
+  for (const diagnostic of ["fix/ask-dgi-ai-analyst-502", "sk-syntheticKey12345", "Bearer synthetic_token", "SYNTHETIC_SECRET_token"]) {
+    assert.throws(() => auditJson({ diagnostic }), /privacy_text_rejected/);
+  }
 });
