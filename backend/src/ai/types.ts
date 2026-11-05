@@ -7,12 +7,19 @@ export interface ProviderUsage {
 }
 
 export interface ResponsesClient {
-  create(input: ResponseCreateParamsNonStreaming, signal: AbortSignal): Promise<Pick<Response, "output" | "output_text" | "status" | "usage">>;
+  create(input: ResponseCreateParamsNonStreaming, signal: AbortSignal): Promise<Pick<Response, "output" | "output_text" | "status" | "usage"> & Partial<Pick<Response, "incomplete_details">>>;
 }
+export type AiStage = "request_validation" | "provider_call" | "provider_response" | "tool_call_validation"
+  | "tool_execution" | "evidence_collection" | "tool_continuation" | "final_parse" | "evidence_selection"
+  | "scope_validation" | "narrative_validation" | "answer_render";
 export interface AiDiagnostics {
   requestId: string; model: string; tools: string[]; toolCallCount: number;
   latencyMs: number; inputTokens: number; outputTokens: number; usageAvailable: boolean; outcome: string;
   providerCallCount: number; providerErrorCount: number; toolPayloadBytes: number;
+  failureStage?: AiStage;
+  responseStatus?: Response["status"];
+  incompleteReason?: "max_output_tokens" | "content_filter";
+  comparisonAdjusted?: boolean;
   providerFailureCategory?: "timeout" | "rate_limit" | "authentication" | "configuration" | "provider" | "network" | "provider_5xx" | "invalid_response";
   // Exact usage records, including cached/reasoning details when supplied. No prompts or tool data.
   providerUsage: ProviderUsage[];

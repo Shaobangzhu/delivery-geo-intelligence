@@ -114,14 +114,16 @@ export const cases: AgentEvalCase[] = [
   success("irs-not-revenue", "Financial Semantics", "Does the IRS mileage deduction increase my actual earnings?", { tools: ["get_session_efficiency"], explanation: "IRS deductions are neither income nor economic vehicle cost. Consult recorded costs separately.", select: /Estimated pre-tax/ }, ({ result }) => assert.match(result.answer, /IRS deductions are neither income/)),
   success("partial-not-profit", "Financial Semantics", "Is partial vehicle cost equivalent to full economic profit?", { tools: ["get_session_efficiency"], explanation: "Partial cost is not full economic cost or complete profit. Missing assumptions require backfill.", select: /Estimated pre-tax|Full modeled/ }, ({ result }) => assert.match(result.answer, /unavailable USD/)),
   failure("month-vs-settlement", "Period/Cohort Safety", "Compare this month's Session efficiency with the latest biweekly settlement.", async (context) => {
-    await reject(runPlan(context, "Compare periods", { tools: ["get_session_efficiency", "get_settlement_efficiency"], explanation: "Recorded results.", select: /Payout per complete session hour|Adjusted earnings \(USD\/hour\)/, comparison: "none" }), "scope_conflict");
+    const { result } = await runPlan(context, "Compare periods", { tools: ["get_session_efficiency", "get_settlement_efficiency"], explanation: "Recorded results.", select: /Payout per complete session hour|Adjusted earnings \(USD\/hour\)/, comparison: "none" });
+    assert.match(result.answer, /Do not add income views/);
     await reject(runPlan(context, "Was this month higher?", { tools: ["get_session_efficiency"], explanation: "This month's efficiency exceeded the previous period.", select: /Payout per complete session hour/, comparison: "none" }), "ungrounded_answer");
   }),
   success("strategy-no-causality", "Period/Cohort Safety", "Did Eastvale Local-Only improve over Wide-Area Marathon?", { tools: ["compare_strategies"], explanation: "Eastvale caused higher earnings and improved performance.", select: /Payout per complete session hour/ }, ({ result }) => {
     assert.doesNotMatch(result.answer, /caused higher|improved performance/); assert.match(result.answer, /before\/after improvement/);
   }),
   failure("delivery-session-denominator", "Period/Cohort Safety", "Compare delivery-hour payout with full session-hour payout.", async (context) => {
-    await reject(runPlan(context, "Compare denominators", { tools: ["get_delivery_efficiency", "get_session_efficiency"], explanation: "Recorded results.", select: /Payout per recorded delivery hour|Payout per complete session hour/, comparison: "none" }), "scope_conflict");
+    const { result } = await runPlan(context, "Compare denominators", { tools: ["get_delivery_efficiency", "get_session_efficiency"], explanation: "Delivery rates are higher.", select: /Payout per recorded delivery hour|Payout per complete session hour/, comparison: "none" });
+    assert.match(result.answer, /Different periods, accounting bases or cohorts/); assert.doesNotMatch(result.answer, /Delivery rates are higher/);
   }),
   success("unavailable-adjusted-rate", "Missing Data", "Why is adjusted earnings/hour unavailable?", { tools: ["get_settlement_efficiency"], explanation: "Prop 22 coverage confirmation and structural completeness are required; confirmation alone does not repair missing data.", select: /Adjusted earnings \(USD\/hour\)/ }, ({ result }) => {
     assert.match(result.answer, /unavailable USD\/hour/); assert.match(result.answer, /sessions: 1/); assert.match(result.answer, /unconfirmed_session_coverage/);
@@ -172,7 +174,7 @@ export const cases: AgentEvalCase[] = [
     await reject(createAnalyst({ create: async () => mockResponse() }, "mock", context.observe)("Income", syntheticRegistry().registry, "eval"), "no_tool_evidence");
     for (const text of ["", "{", JSON.stringify({ explanation: "Recorded results", factIds: [], comparison: "none" }), JSON.stringify({ explanation: "Recorded results", factIds: ["forged"], comparison: "none" })]) {
       let step = 0;
-      await reject(createAnalyst({ create: async () => ++step === 1 ? mockResponse([functionCall("get_period_summary")]) : mockResponse([], text) }, "mock", context.observe)("Income", syntheticRegistry().registry, "eval"), "ungrounded_answer");
+      await reject(createAnalyst({ create: async () => ++step === 1 ? mockResponse([functionCall("get_period_summary")]) : mockResponse([], text) }, "mock", context.observe)("Income", syntheticRegistry().registry, "eval"), text === "" || text === "{" ? "invalid_final_response" : "ungrounded_answer");
     }
     const fixture = syntheticRegistry(); fixture.registry.execute = async () => ({} as never);
     let step = 0;
@@ -243,7 +245,8 @@ export const cases: AgentEvalCase[] = [
     assert.ok(result.warnings.some((w) => w.includes("cannot be reconstructed"))); assert.doesNotMatch(JSON.stringify(result), /SYNTHETIC_TAXPAYER|SYNTHETIC_TIN|SYNTHETIC_PDF|coordinates|pdfContent/);
   }),
   failure("annual-cash-scope-isolation", "Period/Cohort Safety", "Can I add annual Net Payout to Dashboard earnings?", async (context) => {
-    await reject(runPlan(context, "Combine annual and cash", { tools: ["get_annual_uber_summary", "get_period_summary"], explanation: "Recorded results.", select: /Net Payout|Total earnings/, comparison: "none" }), "scope_conflict");
+    const { result } = await runPlan(context, "Combine annual and cash", { tools: ["get_annual_uber_summary", "get_period_summary"], explanation: "These are additional earnings.", select: /Net Payout|Total earnings/, comparison: "none" });
+    assert.match(result.answer, /Do not add income views/); assert.doesNotMatch(result.answer, /These are additional earnings/);
     const { result: answer } = await runPlan(context, "Combine annual and cash", { tools: ["get_annual_uber_summary", "get_period_summary"], explanation: "These are additional earnings.", select: /Net Payout|Total earnings/, comparison: "limited" });
     assert.match(answer.answer, /Do not add income views/); assert.doesNotMatch(answer.answer, /These are additional earnings/);
   }),

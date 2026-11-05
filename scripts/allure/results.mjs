@@ -116,6 +116,10 @@ export function collectBatch(layer, execution, exitCode = null, base = artifactR
       !/^(?:\d+|local)$/.test(inputMeta.ciRun) || !/^v\d+\.\d+\.\d+$/.test(inputMeta.runtime) ||
       !["github-actions", "local"].includes(inputMeta.environment)) throw new Error("Invalid Allure run attestation");
   const meta = Object.fromEntries(["commit", "branch", "ciRun", "runtime", "environment", "layer", "execution", "dataset"].map((k) => [k, inputMeta[k]]));
+  // Git refs are untrusted text too. Preserve strict secret detection (even
+  // conservative matches such as "sk-" inside "ask-") without exporting the
+  // flagged ref or failing otherwise valid diagnostics. Main stays unchanged.
+  if (forbiddenText(meta.branch)) meta.branch = `redacted-${hash(meta.branch).slice(0, 16)}`;
   rmSync(output, { recursive: true, force: true }); mkdirSync(output, { recursive: true });
   const audit = { auditedAttachments: 0, omittedAttachments: 0 }, counts = {};
   for (const name of readdirSync(raw).sort()) {

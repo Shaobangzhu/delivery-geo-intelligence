@@ -130,6 +130,9 @@ export function isDeterministicAnnualComparison(selected: Fact[]) {
 // explanations or the names of accounting views. NFKC closes full-width forms.
 export function validateNarrative(explanation: string) {
   const qualitative = explanation.normalize("NFKC").replace(/Prop\s*22/gi, "Prop guarantee")
+    // Exact cautionary sentences only. Added numbers, clauses or claims still
+    // pass through the ordinary checks; this is not general negation parsing.
+    .replace(/(?:^|(?<=[.!?])\s+)(?:These observations cannot establish whether efficiency improved|Incomplete records do not establish higher efficiency)\.(?=\s|$)/giu, "Scope limitation.")
     .replace(/\b(?:not double counted|do not double count|half-open intervals?|recorded zero is valid|missing values should not be treated as zero)\b/gi, "accounting concept")
     .replace(/(?:unknown|missing|unavailable)(?:\s+is|\s+means|\s+payout\s+is)?[,;]?\s+not\s+(?:a\s+recorded\s+)?zero/gi, "unknown")
     .replace(/(?:one|two)\s+(?:different\s+)?(?:accounting\s+)?views?/gi, "accounting views")

@@ -2,17 +2,17 @@ import { httpFailure } from "../observability/failures.js";
 import { z } from "zod";
 import type { ResponseInput, ResponseInputItem } from "openai/resources/responses/responses.js";
 import { analystInstructions } from "./prompts.js";
-import { AnalystError, type AiAnswer, type AiDiagnostics, type ResponsesClient } from "./types.js";
+import { AnalystError, type AiAnswer, type AiDiagnostics, type AiStage, type ResponsesClient } from "./types.js";
 import type { ToolName, ToolRegistry } from "./tools.js";
 import { createEvidenceCollector, requiresComparisonBoundary, isDeterministicAnnualComparison, validateNarrative } from "./evidence.js";
 
 export const askSchema = z.strictObject({ question: z.string().trim().min(1).max(1000) });
 export const AI_LIMITS = { rounds: 3, tools: 6, outputTokens: 1000, timeoutMs: 60_000, toolBytes: 48_000, totalToolBytes: 128_000 } as const;
 const finalSchema = z.strictObject({ explanation: z.string().trim().min(1).max(4000), factIds: z.array(z.string()).max(12), comparison: z.enum(["none", "limited"]) });
-const finalFormat = { type: "json_schema" as const, name: "dgi_answer", strict: true,
-  schema: { type: "object", additionalProperties: false, required: ["explanation", "factIds", "comparison"], properties: {
-    comparison: { type: "string", enum: ["none", "limited"] }, explanation: { type: "string" }, factIds: { type: "array", items: { type: "string" } }
-  } } };
+// One schema owns both provider constraints and local validation.
+const finalJsonSchema = z.toJSONSchema(finalSchema);
+delete finalJsonSchema.$schema;
+const finalFormat = { type: "json_schema" as const, name: "dgi_answer", strict: true, schema: finalJsonSchema };
 const tokenCount = z.number().int().nonnegative();
 const usageSchema = z.object({ input_tokens: tokenCount, output_tokens: tokenCount, total_tokens: tokenCount,
   input_tokens_details: z.object({ cached_tokens: tokenCount.optional(), cache_write_tokens: tokenCount.optional() }).optional(),
@@ -37,6 +37,7 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
     if (parentSignal?.aborted) cancel();
     const timer = setTimeout(cancel, timeoutMs);
     const metadata: AiDiagnostics = { requestId, model, tools: [], toolCallCount: 0, latencyMs: 0, inputTokens: 0, outputTokens: 0, usageAvailable: false, providerCallCount: 0, providerErrorCount: 0, toolPayloadBytes: 0, providerUsage: [], outcome: "failure" };
+    let stage: AiStage = "request_validation";
     try {
       if (!client) throw new AnalystError("configuration_missing", 503);
       if (!askSchema.safeParse({ question }).success) throw new AnalystError("invalid_question");
@@ -52,6 +53,8 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
             parallel_tool_calls: false, max_output_tokens: AI_LIMITS.outputTokens, store: false,
             text: { format: finalFormat } };
         try {
+          stage = "provider_call";
+          delete metadata.responseStatus; delete metadata.incompleteReason;
           metadata.providerCallCount++;
           response = await bounded(client.create(request, controller.signal), controller.signal);
         } catch (error) {
@@ -65,7 +68,12 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
             : status === 404 ? "configuration" : error instanceof Error && error.name === "APIConnectionError" ? "network" : httpFailure(status);
           throw new AnalystError(code, controller.signal.aborted || status === 429 ? 503 : 502);
         }
+        stage = "provider_response";
         if (!response || typeof response !== "object") throw new AnalystError("invalid_provider_response");
+        // Allowlisted protocol metadata only: never retain provider text or errors.
+        if (["completed", "failed", "in_progress", "cancelled", "queued", "incomplete"].includes(response.status ?? "")) metadata.responseStatus = response.status;
+        const reason = response.incomplete_details?.reason;
+        if (reason === "max_output_tokens" || reason === "content_filter") metadata.incompleteReason = reason;
         if (response.usage) {
           const usage = usageSchema.safeParse(response.usage);
           if (!usage.success) throw new AnalystError("invalid_provider_response");
@@ -73,13 +81,15 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
           metadata.usageAvailable = true; metadata.inputTokens += usage.data.input_tokens; metadata.outputTokens += usage.data.output_tokens;
         }
         if (response.status !== "completed") throw new AnalystError("incomplete_provider_response");
-        if (!Array.isArray(response.output)) throw new AnalystError("invalid_provider_response");
+        if (!Array.isArray(response.output) || response.output.some((item) => !item || typeof item !== "object" || typeof item.type !== "string")) throw new AnalystError("invalid_provider_response");
         const calls = response.output.filter((item) => item.type === "function_call");
         if (calls.length) {
+          stage = "tool_call_validation";
           if (++rounds > AI_LIMITS.rounds || metadata.toolCallCount + calls.length > AI_LIMITS.tools) throw new AnalystError("tool_limit");
           // Retain output items, including reasoning, for the Responses continuation protocol.
           input.push(...response.output as ResponseInputItem[]);
           for (const call of calls) {
+            stage = "tool_call_validation";
             if (controller.signal.aborted) throw new AnalystError("timeout_or_cancelled", 503);
             if (typeof call.call_id !== "string" || !call.call_id || call.call_id.length > 200 || callIds.has(call.call_id)) throw new AnalystError("invalid_tool_call");
             callIds.add(call.call_id);
@@ -89,8 +99,10 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
             try { args = JSON.parse(call.arguments); } catch { throw new AnalystError("invalid_tool_arguments"); }
             metadata.toolCallCount++; metadata.tools.push(call.name);
             let data: unknown;
+            stage = "tool_execution";
             try { data = await bounded(registry.execute(call.name as ToolName, args, controller.signal), controller.signal); }
             catch (error) { if (error instanceof AnalystError) throw error; throw new AnalystError("tool_failure", 503); }
+            stage = "evidence_collection";
             const result = data as { limitations?: string[]; backfillWorkflows?: string[] };
             for (const note of result.limitations ?? []) limitations.add(note);
             const evidence = collector.collect(data, call.name, metadata.toolCallCount);
@@ -105,6 +117,7 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
               if (!sources.has(key)) sources.set(key, { id: `${source.execution}s${sources.size + 1}`, source: sharedSource });
               return { ...fact, ...(definition ? { definition } : {}), sourceId: sources.get(key)!.id };
             });
+            stage = "tool_continuation";
             const payload = JSON.stringify({ evidence: compact, sources: [...sources.values()], limitations: result.limitations ?? [], backfillWorkflows: result.backfillWorkflows ?? [] });
             const size = Buffer.byteLength(payload); metadata.toolPayloadBytes += size;
             if (size > AI_LIMITS.toolBytes || metadata.toolPayloadBytes > AI_LIMITS.totalToolBytes) throw new AnalystError("tool_payload_limit", 503);
@@ -113,19 +126,28 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
           continue;
         }
         // Never accept provider-only prose as a successful operational analysis.
+        stage = "evidence_selection";
         if (!metadata.toolCallCount || !facts.size) throw new AnalystError("no_tool_evidence");
+        stage = "final_parse";
         let parsed: z.infer<typeof finalSchema>;
-        try { parsed = finalSchema.parse(JSON.parse(response.output_text)); } catch { metadata.providerFailureCategory = "invalid_response"; throw new AnalystError("ungrounded_answer"); }
+        try { parsed = finalSchema.parse(JSON.parse(response.output_text)); } catch { metadata.providerFailureCategory = "invalid_response"; throw new AnalystError("invalid_final_response"); }
+        stage = "evidence_selection";
         const selected = [...new Set(parsed.factIds)].map((id) => facts.get(id));
         if (selected.some((fact) => !fact) || !selected.length) throw new AnalystError("ungrounded_answer");
         const trusted = selected.filter((fact) => fact !== undefined);
+        stage = "scope_validation";
         const boundary = requiresComparisonBoundary(trusted);
-        if (boundary && parsed.comparison !== "limited") throw new AnalystError("scope_conflict");
-        if (parsed.comparison === "none") validateNarrative(parsed.explanation);
+        // The server owns accounting/cohort safety. A model classification can
+        // add a boundary, but cannot remove one required by verified evidence.
+        const limited = boundary || parsed.comparison === "limited";
+        if (boundary && parsed.comparison === "none") metadata.comparisonAdjusted = true;
+        stage = "narrative_validation";
+        if (!limited) validateNarrative(parsed.explanation);
         // Unsupported comparisons never inherit the model's interpretation. The
         // server renders a qualitative boundary and independent facts instead.
+        stage = "answer_render";
         const chinese = /\p{Script=Han}/u.test(question);
-        const explanation = parsed.comparison === "limited"
+        const explanation = limited
           ? isDeterministicAnnualComparison(trusted)
             ? chinese ? "以下差值由后端按相同年度指标定义计算。年度报表与 DGI 现金收入相互独立；差值不证明因果关系或策略优劣。净到账不是完整经济利润。" : "These changes were calculated by the backend using the same annual metric definitions. Annual statements are independent of DGI cash income. Changes do not establish causality or strategy superiority; Net Payout is not full economic profit."
             : chinese ? "这些是不同范围或观察群体的独立结果，不能直接相加，也不能据此判断策略优劣、因果关系或前后改善。请分别查看期间、分母、样本数和完整性。"
@@ -138,6 +160,7 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
           warnings: ["Recorded observations only; LLM explanations may be mistaken. Metrics below come from deterministic tools.", "Different tool scopes/cohorts may not be directly comparable; refresh after record edits.", ...limitations] };
       }
     } catch (error) {
+      metadata.failureStage = stage;
       metadata.outcome = error instanceof AnalystError ? error.code : "internal_failure";
       if (error instanceof AnalystError) throw error;
       throw new AnalystError("internal_failure", 503);
@@ -150,7 +173,7 @@ export function createAnalyst(client: ResponsesClient | null, model: string,
   return Object.assign(run, {
     invalidQuestion(requestId: string, latencyMs: number) {
       diagnose({ requestId, model, tools: [], toolCallCount: 0, latencyMs, inputTokens: 0, outputTokens: 0,
-        usageAvailable: false, providerCallCount: 0, providerErrorCount: 0, toolPayloadBytes: 0, providerUsage: [], outcome: "invalid_question" });
+        usageAvailable: false, providerCallCount: 0, providerErrorCount: 0, toolPayloadBytes: 0, providerUsage: [], outcome: "invalid_question", failureStage: "request_validation" });
     }
   });
 }
