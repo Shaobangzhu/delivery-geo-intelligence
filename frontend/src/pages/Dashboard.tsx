@@ -1,4 +1,5 @@
 import { Pagination } from "../components/Pagination";
+import { Alert, Card, Table } from "@shaobangzhu/clu-ui";
 import { PAGE_SIZE, pageRange } from "../components/pageRange";
 import { useEffect, useState } from "react";
 import { loadDashboard, loadDestinationHeatmap, type Category, type DashboardData, type DestinationHeatmapData, type MerchantRanking, type Metric, type Period } from "../dashboard/api";
@@ -35,11 +36,11 @@ function dateLabel(date: string): string {
 function MerchantCard({ label, row, kind }: { label: string; row: MerchantRanking | null; kind: "orders" | "total" | "average" }) {
   const value = kind === "orders" ? `${row?.deliveries ?? 0} deliveries`
     : kind === "total" ? money(row?.totalEarnings ?? null) : money(row?.averageEarnings ?? null);
-  return <div className="dash-card merchant-card">
+  return <Card className="merchant-card">
     <span className="stat-label">{label}</span><strong>{row?.name ?? "No data"}</strong>
     <span>{row ? value : "—"}</span>
     {kind !== "orders" && <small>{row ? `${row.sampleCount} known payout${row.sampleCount === 1 ? "" : "s"}` : "0 known payouts"}</small>}
-  </div>;
+  </Card>;
 }
 
 function Distribution({ data }: { data: DashboardData }) {
@@ -161,7 +162,7 @@ export function Dashboard() {
 
   const updating = loading || (result !== null && result.key !== requestKey);
 
-  return <section className="dashboard-page" aria-labelledby="dashboard-title">
+  return <section className="dashboard-page" data-clu-theme="light" aria-labelledby="dashboard-title">
     <div className="dashboard-heading"><div><div className="section-kicker">Dashboard</div><h1 id="dashboard-title">Observed Delivery Activity</h1></div>
       <div className="dashboard-range" aria-live="polite"><span aria-hidden="true">▦</span> {updating ? "Updating date range…" : data ? `${dateLabel(data.filters.range.startDate)} – ${dateLabel(data.filters.range.endDate)}` : error ? "Date range unavailable" : "Loading date range…"}</div>
     </div>
@@ -175,7 +176,7 @@ export function Dashboard() {
       <div className="dashboard-filter"><span>Metric / View</span><div className="segmented" role="group" aria-label="Map metric">{metrics.map((item) => <button key={item.value} type="button" aria-pressed={metric === item.value} onClick={() => setMetric(item.value)}>{item.label}</button>)}</div></div>
       <div className="dashboard-filter"><span>Category</span><div className="segmented" role="group" aria-label="Category">{categories.map((item) => <button key={item.value} type="button" aria-pressed={category === item.value} onClick={() => setCategory(item.value)}>{item.label}</button>)}</div></div>
     </div>
-    {error && <p className="dashboard-error" role="alert">{error}</p>}
+    {error && <Alert tone="error" announcement="urgent" className="dashboard-error">{error}</Alert>}
     {updating && <p className="dashboard-loading" role="status">Loading dashboard analytics…</p>}
     {data && <div className={`dashboard-grid${updating ? " is-updating" : ""}`} aria-busy={updating} inert={updating} aria-hidden={updating}>
       <MapPanel data={data} metric={metric} category={category}
@@ -183,10 +184,10 @@ export function Dashboard() {
         destinationLoading={destinationLoading} destinationError={destinationError} />
       <div className="dashboard-details">
         <div className="summary-grid">
-          <div className="dash-card stat-card"><span className="stat-label">Total Deliveries</span><strong data-testid="summary-deliveries">{data.summary.totalDeliveries}</strong></div>
-          <div className="dash-card stat-card"><span className="stat-label">Unique Merchants</span><strong>{data.summary.uniqueMerchants}</strong></div>
-          <div className="dash-card stat-card"><span className="stat-label">Observed Destination Areas</span><strong>{data.summary.observedDestinationAreas}</strong></div>
-          <div className="dash-card stat-card"><span className="stat-label">Total Earnings</span><strong data-testid="summary-earnings">{money(data.summary.totalEarnings.value)}</strong><small>{category === "all" ? `Delivery ${money(data.summary.totalEarnings.deliveryEarnings)} + Prop 22 ${money(data.summary.totalEarnings.prop22Earnings)}` : "Delivery payouts only; Prop 22 not allocated"}</small><small>{data.summary.totalEarnings.deliveryPayoutSampleCount} known delivery payouts{category === "all" ? ` · ${data.summary.totalEarnings.prop22PaymentCount} Prop 22 payment${data.summary.totalEarnings.prop22PaymentCount === 1 ? "" : "s"}` : ""}</small></div>
+          <Card className="stat-card"><span className="stat-label">Total Deliveries</span><strong data-testid="summary-deliveries">{data.summary.totalDeliveries}</strong></Card>
+          <Card className="stat-card"><span className="stat-label">Unique Merchants</span><strong>{data.summary.uniqueMerchants}</strong></Card>
+          <Card className="stat-card"><span className="stat-label">Observed Destination Areas</span><strong>{data.summary.observedDestinationAreas}</strong></Card>
+          <Card className="stat-card"><span className="stat-label">Total Earnings</span><strong data-testid="summary-earnings">{money(data.summary.totalEarnings.value)}</strong><small>{category === "all" ? `Delivery ${money(data.summary.totalEarnings.deliveryEarnings)} + Prop 22 ${money(data.summary.totalEarnings.prop22Earnings)}` : "Delivery payouts only; Prop 22 not allocated"}</small><small>{data.summary.totalEarnings.deliveryPayoutSampleCount} known delivery payouts{category === "all" ? ` · ${data.summary.totalEarnings.prop22PaymentCount} Prop 22 payment${data.summary.totalEarnings.prop22PaymentCount === 1 ? "" : "s"}` : ""}</small></Card>
         </div>
         <div className="merchant-grid">
           <MerchantCard label="Top Merchant by Orders" row={data.summary.topMerchantByOrders} kind="orders" />
@@ -195,8 +196,8 @@ export function Dashboard() {
         </div>
         <div className="charts-grid"><Distribution data={data} /><Timeline data={data} /></div>
         <section className="dash-card ranking-card" aria-labelledby="ranking-title"><h2 id="ranking-title">Top Merchants by Deliveries</h2>
-          <div className="ranking-scroll"><table><thead><tr><th scope="col">#</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Deliveries</th><th scope="col">Total Earnings</th><th scope="col">Avg Earnings</th></tr></thead>
-          <tbody>{data.topMerchants.length ? data.topMerchants.slice(merchantRange.offset, merchantRange.offset + PAGE_SIZE).map((row, index) => <tr key={row.id}><td>{merchantRange.offset + index + 1}</td><td><strong>{row.name}</strong><small>{row.city}</small></td><td>{row.category}</td><td>{row.deliveries}</td><td>{money(row.totalEarnings)} <small>{row.sampleCount} known</small></td><td>{money(row.averageEarnings)} <small>{row.sampleCount} known</small></td></tr>) : <tr><td colSpan={6} className="empty-ranking">No deliveries in this period.</td></tr>}</tbody></table></div>
+          <div className="ranking-scroll"><Table density="compact" aria-labelledby="ranking-title"><Table.Header><Table.Row><Table.HeadCell>#</Table.HeadCell><Table.HeadCell>Merchant</Table.HeadCell><Table.HeadCell>Category</Table.HeadCell><Table.HeadCell>Deliveries</Table.HeadCell><Table.HeadCell>Total Earnings</Table.HeadCell><Table.HeadCell>Avg Earnings</Table.HeadCell></Table.Row></Table.Header>
+          <Table.Body>{data.topMerchants.length ? data.topMerchants.slice(merchantRange.offset, merchantRange.offset + PAGE_SIZE).map((row, index) => <Table.Row key={row.id}><Table.Cell>{merchantRange.offset + index + 1}</Table.Cell><Table.Cell><strong>{row.name}</strong><small>{row.city}</small></Table.Cell><Table.Cell>{row.category}</Table.Cell><Table.Cell>{row.deliveries}</Table.Cell><Table.Cell>{money(row.totalEarnings)} <small>{row.sampleCount} known</small></Table.Cell><Table.Cell>{money(row.averageEarnings)} <small>{row.sampleCount} known</small></Table.Cell></Table.Row>) : <Table.Row><Table.Cell colSpan={6} className="empty-ranking">No deliveries in this period.</Table.Cell></Table.Row>}</Table.Body></Table></div>
           <Pagination page={merchantRange.page} total={data.topMerchants.length} noun="merchants" label="Top merchant pages" disabled={updating} onPageChange={setMerchantPage} />
         </section>
       </div>

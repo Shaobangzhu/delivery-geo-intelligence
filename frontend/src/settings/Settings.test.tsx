@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Settings } from "../pages/Settings";
 import { categories, parseSnapshot } from "./api";
@@ -7,7 +7,7 @@ import { observeBrowserMap, resetBrowserMapStatus } from "./browserStatus";
 const timestamp = "2026-10-23T10:00:00.000Z";
 function fixture(window = "24h", samples = 2) {
   return { schemaVersion: 1, window, generatedAt: timestamp, startedAt: timestamp, incomplete: false,
-    providers: (["mongodb", "arcgis_geocoding", "openai"] as const).map((provider) => ({ provider, configured: true, status: samples ? "operational" : "not_yet_verified",
+    providers: (["mongodb", "arcgis_geocoding", "openai"] as const).map((provider) => ({ provider, configured: true as boolean | null, status: samples ? "operational" : "not_yet_verified",
       lastSuccessAt: samples ? timestamp : null, lastUpdatedAt: samples ? timestamp : null, lastErrorCategory: null as string | null,
       sampleCount: samples, requestCount: samples, successCount: samples, failureCount: 0, noMatchCount: 0, lowConfidenceCount: 0,
       latency: { sampleCount: samples, meanMs: samples ? 10 : null, p50Ms: samples ? 10 : null, p95Ms: samples ? 20 : null },
@@ -30,6 +30,15 @@ it("renders actual backend and unverified browser observations without paid call
   expect(screen.getByText("Not Yet Verified")).toBeInTheDocument();
   expect(fetcher.mock.calls.map(([url]) => url)).toEqual(["/api/system/status", "/api/system/metrics?window=1h"]);
   expect(screen.getByRole("region", { name: "Provider request metrics" })).toHaveAttribute("tabindex", "0");
+  expect(screen.getByRole("button", { name: "Refresh status" })).toHaveClass("clu-button");
+  expect(screen.getByRole("combobox", { name: "Observation window" })).toHaveClass("clu-control");
+  expect(screen.getByRole("table", { name: "Retained backend observations · 1h" })).toHaveClass("clu-table");
+  expect(screen.getAllByRole("article")).toHaveLength(8);
+  const browser = screen.getByRole("heading", { name: "ArcGIS Maps SDK (Browser)" }).closest("article")!;
+  expect(within(browser).getByText("Not Yet Verified")).toHaveClass("clu-badge");
+  expect(browser.closest('[data-clu-theme="light"]')).toHaveClass("settings-page");
+  expect(screen.getByRole("heading", { name: "Observed Provider Status" }).closest(".clu-card")).toBeInTheDocument();
+  expect(document.documentElement).not.toHaveAttribute("data-clu-theme"); expect(document.body).not.toHaveAttribute("data-clu-theme");
 });
 it("renders empty metrics with unavailable latency and missing tokens", async () => {
   install(0); render(<Settings />);
@@ -94,8 +103,27 @@ it("marks retained status stale after refresh failure and clears current metrics
   await user.click(screen.getByRole("button", { name: "Refresh status" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("retained status is stale");
   expect(screen.getByText("Unavailable · stale snapshot")).toBeInTheDocument();
+  const mongo = screen.getByRole("heading", { name: "MongoDB" }).closest("article")!;
+  expect(within(mongo).getByText("Stale · Operational")).toHaveClass("clu-badge");
+  expect(within(mongo).getByText("Stale · Operational")).toHaveAttribute("data-tone", "unknown");
   expect(screen.queryByRole("table")).not.toBeInTheDocument();
   expect(screen.queryByText(/PRIVATE_FAILURE/)).not.toBeInTheDocument();
+});
+
+it("keeps unknown configuration and zero observations distinct in the packaged presentation", async () => {
+  const fetcher = vi.fn(async (url: string) => {
+    const data = fixture(url.includes("window=1h") ? "1h" : "24h", 0);
+    data.providers[2].configured = null;
+    return reply(data);
+  });
+  vi.stubGlobal("fetch", fetcher); render(<Settings />);
+  expect(await screen.findByText("No operations observed in this window.")).toBeInTheDocument();
+  const configuration = screen.getByRole("heading", { name: "AI Configuration Status" }).closest("article")!;
+  expect(within(configuration).getByText("Unknown")).toBeInTheDocument();
+  const ai = screen.getByRole("heading", { name: "OpenAI Analyst" }).closest("article")!;
+  expect(within(ai).getByText("Not Yet Verified")).toHaveAttribute("data-tone", "unknown");
+  expect(screen.queryByText("100.0%")).not.toBeInTheDocument();
+  expect(fetcher.mock.calls.map(([url]) => url)).toEqual(["/api/system/status", "/api/system/metrics?window=1h"]);
 });
 
 

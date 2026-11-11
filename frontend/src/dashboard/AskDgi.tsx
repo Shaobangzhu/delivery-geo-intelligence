@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Alert, Button } from "@shaobangzhu/clu-ui";
 import { AnalystRequestError, askDgi, type AnalystAnswer } from "./aiApi";
 
 const suggestions = ["How efficient were my delivery sessions?", "What does my latest Prop 22 settlement show?",
@@ -35,21 +36,21 @@ export function AskDgi() {
     }
   }
   return <section className="dash-card ask-dgi" aria-labelledby="ask-dgi-title">
-    <div className="ask-dgi-heading"><h2 id="ask-dgi-title">Ask DGI</h2><button ref={toggle} type="button" aria-expanded={open} aria-controls="ask-dgi-panel"
-      onClick={() => open ? close() : setOpen(true)}>{open ? "Close analyst" : "Open analyst"}</button></div>
+    <div className="ask-dgi-heading"><h2 id="ask-dgi-title">Ask DGI</h2><Button ref={toggle} type="button" variant="secondary" size="small" aria-expanded={open} aria-controls="ask-dgi-panel"
+      onClick={() => open ? close() : setOpen(true)}>{open ? "Close analyst" : "Open analyst"}</Button></div>
     <p>Explain recorded DGI data with AI. Financial metrics come from existing analytics; answers can be mistaken.</p>
     {open && <div id="ask-dgi-panel" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
       <p className="ask-dgi-note">Questions and relevant aggregate metrics are sent to OpenAI only when you ask. Do not include private addresses or secrets. State your desired period/category in the question; Dashboard filters do not automatically set this scope.</p>
-      <div className="ask-dgi-suggestions" role="group" aria-label="Suggested questions">{suggestions.map((item) => <button type="button" key={item} disabled={busy}
-        onClick={() => { change(item); textarea.current?.focus(); }}>{item}</button>)}</div>
+      <div className="ask-dgi-suggestions" role="group" aria-label="Suggested questions">{suggestions.map((item) => <Button type="button" variant="secondary" size="small" key={item} disabled={busy}
+        onClick={() => { change(item); textarea.current?.focus(); }}>{item}</Button>)}</div>
       <form onSubmit={submit} aria-busy={busy} noValidate>
         <label htmlFor="dgi-question">Your question</label>
         <textarea id="dgi-question" ref={textarea} value={question} onChange={(event) => change(event.target.value)} disabled={busy} maxLength={1000} rows={3} aria-describedby="dgi-question-limit" />
         <small id="dgi-question-limit">Up to 1,000 characters. No conversation is saved in DGI.</small>
-        <button type="submit" disabled={busy}>{busy ? "Analyzing…" : error ? "Retry analysis" : "Ask"}</button>
+        <Button type="submit" size="small" disabled={busy}>{busy ? "Analyzing…" : error ? "Retry analysis" : "Ask"}</Button>
       </form>
       {busy && <p role="status">Reading recorded analytics…</p>}
-      {error && <p role="alert" className="dashboard-error">{error}</p>}
+      {error && <Alert tone="error" announcement="urgent" className="dashboard-error">{error}</Alert>}
       {result && <div className="ask-dgi-answer" role="region" aria-label="DGI answer" aria-live="polite">
         <h3>Answer to: {submitted}</h3><p className="ask-dgi-answer-text">{result.answer}</p>
         <p className="ask-dgi-sources">Sources: {result.toolsUsed.map((name) => sources[name] ?? "Recorded analytics").join(" · ")}</p>
