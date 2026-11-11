@@ -94,7 +94,6 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
   return <DialogFrame title={session ? "Edit Session" : "Add Session"} onClose={onClose} busy={busy} className="delivery-dialog">
     <p className="dialog-intro">Record the complete operating period, including driving and time outside active deliveries. Times use America/Los_Angeles.</p>
     {session?.associationIntegrity && <p role="alert" className="form-error">An earlier session update did not complete. Review all delivery links before saving. Complete efficiency is blocked until this review succeeds.</p>}
-    <button type="button" className="dialog-close" aria-label="Close dialog" disabled={busy} onClick={onClose}>×</button>
     <form onSubmit={submit} noValidate aria-busy={busy}>
       <div className="form-grid">
         <div className="form-field"><label htmlFor={`${id}-start`}>Session Start *</label><Input id={`${id}-start`} type="datetime-local" step="60" required data-autofocus disabled={busy} value={start} onChange={(event) => { setStart(event.target.value.slice(0, 16)); setStartChanged(true); }} />

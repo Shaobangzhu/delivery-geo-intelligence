@@ -94,7 +94,6 @@ export function DeliveryModal({ delivery, merchants, onClose, onSaved }: Deliver
   return (
     <DialogFrame title={delivery ? "Edit Delivery" : "Add Delivery"} onClose={onClose} busy={saving} className="delivery-dialog">
       <p className="dialog-intro">{delivery ? "Update this observed delivery record." : "Add an observed delivery record."}</p>
-      <button type="button" className="dialog-close" aria-label="Close dialog" onClick={onClose} disabled={saving}>×</button>
       <form onSubmit={submit} aria-busy={saving} noValidate>
         <div className="form-grid">
           <div className="form-field"><label htmlFor={`${id}-platform`}>Delivery Platform{!delivery && " *"}</label>

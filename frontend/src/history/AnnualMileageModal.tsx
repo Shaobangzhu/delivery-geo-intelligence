@@ -27,7 +27,6 @@ export function AnnualMileageModal({ record, onClose, onSaved }: { record: Annua
   }
   return <DialogFrame title={record ? "Edit Annual Mileage" : "Add Annual Mileage"} onClose={onClose} busy={busy}>
     <p className="dialog-intro">Record annual mileage by business purpose. Standard Mileage is a tax method; no tax savings or additional depreciation are calculated.</p>
-    <button type="button" className="dialog-close" aria-label="Close dialog" disabled={busy} onClick={onClose}>×</button>
     <form noValidate onSubmit={submit} aria-busy={busy}>
       <div className="form-grid">
         <div className="form-field"><label htmlFor={`${id}-year`}>Tax Year *</label><Input id={`${id}-year`} type="number" min="2000" max="2100" step="1" required data-autofocus disabled={busy || Boolean(record)} value={year} onChange={(event) => setYear(event.target.value)} /></div>

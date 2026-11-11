@@ -25,7 +25,6 @@ export function VehicleModal({ profile, onClose, onSaved }: { profile: VehiclePr
   }
   return <DialogFrame title="Tesla Model Y — Vehicle Economics" onClose={onClose} busy={busy}>
     <p className="dialog-intro">Personal assumptions for the 2022 Long Range. Historical tire purchase cost does not establish its lifespan. Leave unknown estimates blank.</p>
-    <button type="button" className="dialog-close" aria-label="Close dialog" disabled={busy} onClick={onClose}>×</button>
     <form noValidate onSubmit={submit} aria-busy={busy}>
       <div className="form-grid">
         <div className="form-field"><label htmlFor={`${id}-energy`}>Energy Cash Cost ($/mi)</label><Input id={`${id}-energy`} type="number" min="0" step="any" required data-autofocus disabled={busy} value={energy} onChange={(event) => setEnergy(event.target.value)} /></div>

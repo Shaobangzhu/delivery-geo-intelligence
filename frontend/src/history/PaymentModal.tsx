@@ -90,7 +90,6 @@ export function PaymentModal({ payment, onClose, onSaved }: {
   }
   return <DialogFrame title={payment ? "Edit Prop 22 Payment" : "Add Prop 22 Payment"} onClose={onClose} busy={busy} className="delivery-dialog">
     <p className="dialog-intro">Record the adjustment received. Coverage dates are optional and do not allocate earnings.</p>
-    <button type="button" className="dialog-close" aria-label="Close dialog" onClick={onClose} disabled={busy}>×</button>
     <form onSubmit={submit} noValidate aria-busy={busy} onChange={() => setReconciliationChanged(true)}>
       <div className="form-grid">
         <div className="form-field"><label htmlFor={`${id}-platform`}>Payment Platform{!payment && " *"}</label>

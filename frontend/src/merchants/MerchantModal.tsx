@@ -53,7 +53,6 @@ export function MerchantModal({ merchant, onClose, onSaved }: Props) {
 
   return <DialogFrame title={merchant ? "Edit Merchant" : "Add Merchant"} onClose={onClose} busy={saving} className="merchant-dialog">
     <p className="dialog-intro">Each Merchant represents one physical pickup location.</p>
-    <button type="button" className="dialog-close" aria-label="Close dialog" onClick={onClose} disabled={saving}>×</button>
     <form onSubmit={submit} aria-busy={saving} noValidate>
       <div className="form-grid">
         <div className="form-field form-wide">
