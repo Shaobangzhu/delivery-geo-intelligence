@@ -1,3 +1,4 @@
+import { Button, Input, Select, Textarea } from "@shaobangzhu/clu-ui";
 import { PlatformOptions, platformLabel, type DeliveryPlatform } from "./platform";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { DialogFrame } from "./DialogFrame";
@@ -93,15 +94,15 @@ export function PaymentModal({ payment, onClose, onSaved }: {
     <form onSubmit={submit} noValidate aria-busy={busy} onChange={() => setReconciliationChanged(true)}>
       <div className="form-grid">
         <div className="form-field"><label htmlFor={`${id}-platform`}>Payment Platform{!payment && " *"}</label>
-          <select id={`${id}-platform`} value={platform} disabled={busy} required={!payment} onChange={(event) => { setPlatform(event.target.value as DeliveryPlatform | ""); setCoverageConfirmed(false); setPlatformReviewed(true); }}>
+          <Select id={`${id}-platform`} value={platform} disabled={busy} required={!payment} onChange={(event) => { setPlatform(event.target.value as DeliveryPlatform | ""); setCoverageConfirmed(false); setPlatformReviewed(true); }}>
             <PlatformOptions legacy={!!payment && !payment.platform} />
-          </select>
+          </Select>
         </div>
-        <div className="form-field"><label htmlFor={`${id}-date`}>Payment Date *</label><input id={`${id}-date`} type="date" required value={date} onChange={(e) => setDate(e.target.value)} disabled={busy} data-autofocus /></div>
-        <div className="form-field"><label htmlFor={`${id}-amount`}>Amount Received *</label><input id={`${id}-amount`} type="number" min="0.01" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} /></div>
-        <div className="form-field"><label htmlFor={`${id}-start`}>Coverage Start Date</label><input id={`${id}-start`} type="date" value={start} onChange={(e) => setStart(e.target.value)} disabled={busy} /></div>
-        <div className="form-field"><label htmlFor={`${id}-end`}>Coverage End Date</label><input id={`${id}-end`} type="date" value={end} onChange={(e) => setEnd(e.target.value)} disabled={busy} /></div>
-        <div className="form-field form-wide"><label htmlFor={`${id}-notes`}>Optional Notes</label><textarea id={`${id}-notes`} rows={3} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} /></div>
+        <div className="form-field"><label htmlFor={`${id}-date`}>Payment Date *</label><Input id={`${id}-date`} type="date" required value={date} onChange={(e) => setDate(e.target.value)} disabled={busy} data-autofocus /></div>
+        <div className="form-field"><label htmlFor={`${id}-amount`}>Amount Received *</label><Input id={`${id}-amount`} type="number" min="0.01" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} /></div>
+        <div className="form-field"><label htmlFor={`${id}-start`}>Coverage Start Date</label><Input id={`${id}-start`} type="date" value={start} onChange={(e) => setStart(e.target.value)} disabled={busy} /></div>
+        <div className="form-field"><label htmlFor={`${id}-end`}>Coverage End Date</label><Input id={`${id}-end`} type="date" value={end} onChange={(e) => setEnd(e.target.value)} disabled={busy} /></div>
+        <div className="form-field form-wide"><label htmlFor={`${id}-notes`}>Optional Notes</label><Textarea id={`${id}-notes`} rows={3} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} /></div>
       </div>
       <div className="form-field coverage-confirmation">
         <label><input type="checkbox" checked={coverageConfirmed} onChange={(e) => setCoverageConfirmed(e.target.checked)} disabled={busy || !platform || platformChanged} /> I have recorded all {platform ? platformLabel(platform) : "platform"} deliveries and sessions for this settlement period.</label>
@@ -116,14 +117,14 @@ export function PaymentModal({ payment, onClose, onSaved }: {
           <fieldset className="duration-group form-wide" disabled={busy}>
             <legend>Engaged Time</legend>
             <div className="duration-inputs">
-              <div className="form-field"><label htmlFor={`${id}-hours`}>Hours</label><input id={`${id}-hours`} type="number" min="0" step="1" value={hours} onChange={(e) => setHours(e.target.value)} /></div>
-              <div className="form-field"><label htmlFor={`${id}-minutes`}>Minutes</label><input id={`${id}-minutes`} type="number" min="0" max="59" step="1" value={minutes} onChange={(e) => setMinutes(e.target.value)} /></div>
-              <div className="form-field"><label htmlFor={`${id}-seconds`}>Seconds</label><input id={`${id}-seconds`} type="number" min="0" max="59" step="1" value={seconds} onChange={(e) => setSeconds(e.target.value)} /></div>
+              <div className="form-field"><label htmlFor={`${id}-hours`}>Hours</label><Input id={`${id}-hours`} type="number" min="0" step="1" value={hours} onChange={(e) => setHours(e.target.value)} /></div>
+              <div className="form-field"><label htmlFor={`${id}-minutes`}>Minutes</label><Input id={`${id}-minutes`} type="number" min="0" max="59" step="1" value={minutes} onChange={(e) => setMinutes(e.target.value)} /></div>
+              <div className="form-field"><label htmlFor={`${id}-seconds`}>Seconds</label><Input id={`${id}-seconds`} type="number" min="0" max="59" step="1" value={seconds} onChange={(e) => setSeconds(e.target.value)} /></div>
             </div>
           </fieldset>
-          <div className="form-field"><label htmlFor={`${id}-miles`}>Engaged Miles</label><input id={`${id}-miles`} type="number" min="0" step="any" value={miles} onChange={(e) => setMiles(e.target.value)} disabled={busy} /></div>
-          <div className="form-field"><label htmlFor={`${id}-eligible`}>Eligible Earnings (Excluding Tips)</label><input id={`${id}-eligible`} type="number" min="0" step="0.01" value={eligible} onChange={(e) => setEligible(e.target.value)} disabled={busy} /></div>
-          <div className="form-field form-wide"><label htmlFor={`${id}-guarantee`}>{platform ? platformLabel(platform) : "Platform"} Reported Guaranteed Amount</label><input id={`${id}-guarantee`} type="number" min="0" step="0.01" value={guarantee} onChange={(e) => setGuarantee(e.target.value)} disabled={busy} /></div>
+          <div className="form-field"><label htmlFor={`${id}-miles`}>Engaged Miles</label><Input id={`${id}-miles`} type="number" min="0" step="any" value={miles} onChange={(e) => setMiles(e.target.value)} disabled={busy} /></div>
+          <div className="form-field"><label htmlFor={`${id}-eligible`}>Eligible Earnings (Excluding Tips)</label><Input id={`${id}-eligible`} type="number" min="0" step="0.01" value={eligible} onChange={(e) => setEligible(e.target.value)} disabled={busy} /></div>
+          <div className="form-field form-wide"><label htmlFor={`${id}-guarantee`}>{platform ? platformLabel(platform) : "Platform"} Reported Guaranteed Amount</label><Input id={`${id}-guarantee`} type="number" min="0" step="0.01" value={guarantee} onChange={(e) => setGuarantee(e.target.value)} disabled={busy} /></div>
         </div>
         <section className="settlement-reconciliation" aria-label="Saved settlement reconciliation" aria-live="polite">
           {reconciliationChanged ? <p>Save changes, then reopen to view updated reconciliation.</p>
@@ -141,7 +142,7 @@ export function PaymentModal({ payment, onClose, onSaved }: {
         </section>
       </details>
       {error && <p role="alert" className="form-error">{error}</p>}
-      <div className="dialog-actions"><button type="button" className="button secondary" onClick={onClose} disabled={busy}>Cancel</button><button className="button primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Save Payment"}</button></div>
+      <div className="dialog-actions"><Button type="button" variant="secondary" size="small" onClick={onClose} disabled={busy}>Cancel</Button><Button variant="primary" size="small" type="submit" disabled={busy}>{busy ? "Saving…" : "Save Payment"}</Button></div>
     </form>
   </DialogFrame>;
 }

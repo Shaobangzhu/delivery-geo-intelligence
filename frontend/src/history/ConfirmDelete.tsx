@@ -1,3 +1,4 @@
+import { Button } from "@shaobangzhu/clu-ui";
 import { useRef, useState } from "react";
 import { deleteDelivery, userFacingError, type Delivery } from "./api";
 import { DialogFrame } from "./DialogFrame";
@@ -34,8 +35,8 @@ export function ConfirmDelete({ delivery, onClose, onDeleted }: ConfirmDeletePro
       <p className="dialog-intro">This delivery record will be permanently removed. This action cannot be undone.</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions">
-        <button type="button" className="button secondary" onClick={onClose} disabled={deleting} data-autofocus>Cancel</button>
-        <button type="button" className="button danger" onClick={confirm} disabled={deleting}>{deleting ? "Deleting…" : "Delete Delivery"}</button>
+        <Button type="button" variant="secondary" size="small" onClick={onClose} disabled={deleting} data-autofocus>Cancel</Button>
+        <Button type="button" variant="danger" size="small" onClick={confirm} disabled={deleting}>{deleting ? "Deleting…" : "Delete Delivery"}</Button>
       </div>
     </DialogFrame>
   );

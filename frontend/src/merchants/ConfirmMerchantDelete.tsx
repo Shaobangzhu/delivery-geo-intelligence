@@ -1,3 +1,4 @@
+import { Button } from "@shaobangzhu/clu-ui";
 import { useRef, useState } from "react";
 import { DialogFrame } from "../history/DialogFrame";
 import { ApiError } from "../history/api";
@@ -38,8 +39,8 @@ export function ConfirmMerchantDelete({ merchant, onClose, onDeleted }: Props) {
       : <p className="merchant-delete-copy">This unused Merchant will be permanently removed. This action cannot be undone.</p>}
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="dialog-actions">
-      <button type="button" className="button secondary" onClick={onClose} disabled={deleting} data-autofocus>{blocked ? "Close" : "Cancel"}</button>
-      {!blocked && <button type="button" className="button danger" onClick={confirm} disabled={deleting}>{deleting ? "Deleting…" : "Delete Merchant"}</button>}
+      <Button type="button" variant="secondary" size="small" onClick={onClose} disabled={deleting} data-autofocus>{blocked ? "Close" : "Cancel"}</Button>
+      {!blocked && <Button type="button" variant="danger" size="small" onClick={confirm} disabled={deleting}>{deleting ? "Deleting…" : "Delete Merchant"}</Button>}
     </div>
   </DialogFrame>;
 }
