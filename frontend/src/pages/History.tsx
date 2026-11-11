@@ -1,3 +1,4 @@
+import { Button, Input, Select, Table } from "@shaobangzhu/clu-ui";
 import { Pagination } from "../components/Pagination";
 import { PAGE_SIZE } from "../components/pageRange";
 import { PlatformOptions, platformLabel, type PlatformFilter } from "../history/platform";
@@ -98,48 +99,48 @@ export function History() {
   }
 
   return (
-    <section className="history-page" aria-labelledby="history-title">
+    <section className="history-page" data-clu-theme="light" aria-labelledby="history-title">
       <div className="history-heading">
         <div>
           <div className="section-kicker">History</div>
           <h1 id="history-title">Delivery History</h1>
           <p>Create, edit, and maintain delivery records before they feed dashboard analytics.</p>
         </div>
-        <div className="history-primary-actions"><button type="button" className="button secondary" onClick={() => setAddingPayment(true)}>＋ Add Prop 22 Payment</button>
-        <button type="button" className="button primary add-delivery" data-history-primary onClick={() => setEditor(null)}>
+        <div className="history-primary-actions"><Button type="button" variant="secondary" size="small" onClick={() => setAddingPayment(true)}>＋ Add Prop 22 Payment</Button>
+        <Button type="button" variant="primary" size="small" className="add-delivery" data-history-primary onClick={() => setEditor(null)}>
           <span aria-hidden="true">＋</span> Add Delivery
-        </button></div>
+        </Button></div>
       </div>
 
       <div className="history-filters" aria-label="Delivery filters">
         <div className="filter-field search-field">
           <label htmlFor="merchant-search">Merchant search</label>
-          <input id="merchant-search" type="search" placeholder="Search merchant…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+          <Input id="merchant-search" type="search" placeholder="Search merchant…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
         </div>
         <div className="filter-field"><label htmlFor="delivery-platform-filter">Delivery Platform</label>
-          <select id="delivery-platform-filter" value={platform} onChange={(event) => { setPlatform(event.target.value as PlatformFilter); setPage(1); }}><PlatformOptions filter /></select>
+          <Select id="delivery-platform-filter" value={platform} onChange={(event) => { setPlatform(event.target.value as PlatformFilter); setPage(1); }}><PlatformOptions filter /></Select>
         </div>
         <div className="filter-field category-field">
           <label htmlFor="category-filter">Category</label>
-          <select id="category-filter" value={category} onChange={(event) => { setCategory(event.target.value as Category | ""); setPage(1); }}>
+          <Select id="category-filter" value={category} onChange={(event) => { setCategory(event.target.value as Category | ""); setPage(1); }}>
             {categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
+          </Select>
         </div>
         <div className="filter-field date-field">
           <label htmlFor="date-from">From date</label>
-          <input id="date-from" type="date" value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} />
+          <Input id="date-from" type="date" value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} />
         </div>
         <div className="filter-field date-field">
           <label htmlFor="date-to">To date</label>
-          <input id="date-to" type="date" value={toDate} onChange={(event) => { setToDate(event.target.value); setPage(1); }} />
+          <Input id="date-to" type="date" value={toDate} onChange={(event) => { setToDate(event.target.value); setPage(1); }} />
         </div>
         <div className="filter-field sort-field">
           <label htmlFor="sort-order">Sort</label>
-          <select id="sort-order" value={sort} onChange={(event) => { setSort(event.target.value as SortOrder); setPage(1); }}>
+          <Select id="sort-order" value={sort} onChange={(event) => { setSort(event.target.value as SortOrder); setPage(1); }}>
             <option value="newest">Newest First</option><option value="oldest">Oldest First</option>
             <option value="payoutDesc">Highest Payout</option><option value="payoutAsc">Lowest Payout</option>
             <option value="distanceDesc">Longest Distance</option><option value="distanceAsc">Shortest Distance</option>
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -147,30 +148,30 @@ export function History() {
       {listError && <p className="history-alert" role="alert">{listError}</p>}
 
       <div className="history-table-card">
-        <div className="table-scroll"><table className="history-table">
-          <thead><tr><th scope="col">Date &amp; Time</th><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Platform</th><th scope="col">Payout</th><th scope="col">Distance</th><th scope="col">Duration</th><th scope="col">Destination</th><th scope="col">Actions</th></tr></thead>
-          <tbody>
-            {loading ? <tr><td colSpan={9} className="table-message">Loading deliveries…</td></tr>
-              : result.data.length === 0 ? <tr><td colSpan={9} className="table-message">{listError ? "No records to display." : "No deliveries match the current filters."}</td></tr>
+        <Table.ScrollArea label="Delivery records" className="table-scroll"><Table density="compact" className="history-table">
+          <Table.Header><Table.Row><Table.HeadCell scope="col">Date &amp; Time</Table.HeadCell><Table.HeadCell scope="col">Merchant</Table.HeadCell><Table.HeadCell scope="col">Category</Table.HeadCell><Table.HeadCell scope="col">Platform</Table.HeadCell><Table.HeadCell scope="col">Payout</Table.HeadCell><Table.HeadCell scope="col">Distance</Table.HeadCell><Table.HeadCell scope="col">Duration</Table.HeadCell><Table.HeadCell scope="col">Destination</Table.HeadCell><Table.HeadCell scope="col">Actions</Table.HeadCell></Table.Row></Table.Header>
+          <Table.Body>
+            {loading ? <Table.MessageRow colSpan={9} className="dgi-table-message">Loading deliveries…</Table.MessageRow>
+              : result.data.length === 0 ? <Table.MessageRow colSpan={9} className="dgi-table-message">{listError ? "No records to display." : "No deliveries match the current filters."}</Table.MessageRow>
               : result.data.map((delivery) => {
                 const merchant = merchantById.get(delivery.merchantId);
-                return <tr key={delivery.id}>
-                  <td className="date-cell">{formatDateTime(delivery.pickedUpAt)}</td>
-                  <td><span className="merchant-name">{merchant?.name ?? "Unknown merchant"}</span>{merchant && <span className="merchant-city">{merchant.publicAddress ?? merchant.city}</span>}</td>
-                  <td><span className={`category-label${merchant ? ` category-${merchant.category}` : ""}`}>{merchant ? categories.find((item) => item.value === merchant.category)?.label : "Unknown"}</span></td>
-                  <td><span className="platform-label">{platformLabel(delivery.platform)}</span></td>
-                  <td className="number-cell">{delivery.payout === undefined ? "—" : `$${delivery.payout.toFixed(2)}`}</td>
-                  <td className="number-cell">{delivery.distanceMiles === undefined ? "—" : `${delivery.distanceMiles.toFixed(1)} mi`}</td>
-                  <td className="duration-cell">{formatDuration(delivery.deliveryDurationSeconds)}</td>
-                  <td><span className={delivery.hasDestinationLocation ? "destination-status ready" : "destination-status missing"}>{delivery.hasDestinationLocation ? "Location Ready" : "No Location"}</span></td>
-                  <td><div className="row-actions">
-                    <button type="button" className="icon-action" aria-label={`Edit delivery for ${merchant?.name ?? "unknown merchant"}`} onClick={() => setEditor(delivery)} title="Edit delivery">✎</button>
-                    <button type="button" className="icon-action destructive" aria-label={`Delete delivery for ${merchant?.name ?? "unknown merchant"}`} onClick={() => setDeleteTarget(delivery)} title="Delete delivery">⌫</button>
-                  </div></td>
-                </tr>;
+                return <Table.Row key={delivery.id}>
+                  <Table.Cell className="date-cell">{formatDateTime(delivery.pickedUpAt)}</Table.Cell>
+                  <Table.Cell><span className="merchant-name">{merchant?.name ?? "Unknown merchant"}</span>{merchant && <span className="merchant-city">{merchant.publicAddress ?? merchant.city}</span>}</Table.Cell>
+                  <Table.Cell><span className={`category-label${merchant ? ` category-${merchant.category}` : ""}`}>{merchant ? categories.find((item) => item.value === merchant.category)?.label : "Unknown"}</span></Table.Cell>
+                  <Table.Cell><span className="platform-label">{platformLabel(delivery.platform)}</span></Table.Cell>
+                  <Table.Cell className="number-cell">{delivery.payout === undefined ? "—" : `$${delivery.payout.toFixed(2)}`}</Table.Cell>
+                  <Table.Cell className="number-cell">{delivery.distanceMiles === undefined ? "—" : `${delivery.distanceMiles.toFixed(1)} mi`}</Table.Cell>
+                  <Table.Cell className="duration-cell">{formatDuration(delivery.deliveryDurationSeconds)}</Table.Cell>
+                  <Table.Cell><span className={delivery.hasDestinationLocation ? "destination-status ready" : "destination-status missing"}>{delivery.hasDestinationLocation ? "Location Ready" : "No Location"}</span></Table.Cell>
+                  <Table.Cell><div className="row-actions">
+                    <Button type="button" variant="secondary" size="small" className="dgi-row-action" aria-label={`Edit delivery for ${merchant?.name ?? "unknown merchant"}`} onClick={() => setEditor(delivery)} title="Edit delivery">✎</Button>
+                    <Button type="button" variant="danger" size="small" className="dgi-row-action" aria-label={`Delete delivery for ${merchant?.name ?? "unknown merchant"}`} onClick={() => setDeleteTarget(delivery)} title="Delete delivery">⌫</Button>
+                  </div></Table.Cell>
+                </Table.Row>;
               })}
-          </tbody>
-        </table></div>
+          </Table.Body>
+        </Table></Table.ScrollArea>
         <Pagination page={page} total={total} noun="deliveries" label="Delivery pages" disabled={loading} onPageChange={setPage} />
       </div>
 

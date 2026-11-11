@@ -20,7 +20,7 @@
 .filter-field input::placeholder, .form-field input::placeholder, .form-field textarea::placeholder { color: #8297b5; }
 .filter-field input:hover, .filter-field select:hover, .form-field input:hover, .form-field select:hover, .form-field textarea:hover { border-color: #90b4ed; }
 .filter-field input:focus, .filter-field select:focus, .form-field input:focus, .form-field select:focus, .form-field textarea:focus { border-color: #1262df; outline: 2px solid #bed6ff; outline-offset: 1px; }
-.history-page button:focus-visible, .dialog-card button:focus-visible { outline: 3px solid #8bbaff; outline-offset: 2px; }
+.history-page button:not(.clu-button):focus-visible, .dialog-card button:not(.clu-button):focus-visible { outline: 3px solid #8bbaff; outline-offset: 2px; }
 .history-alert, .form-error { margin: 0 0 12px; padding: 9px 11px; border: 1px solid #f1b7bd; border-radius: 5px; background: #fff2f3; color: #a62331; font-size: 12px; }
 
 .history-table-card { overflow: hidden; border: 1px solid #d8e5f5; border-radius: 8px; background: white; box-shadow: 0 4px 12px #517cb015; }
@@ -72,7 +72,7 @@
 .text-button:hover { text-decoration: underline; }
 .form-error { margin: 14px 0 0; }
 .dialog-actions { display: flex; gap: 10px; margin-top: 20px; }
-.dialog-actions .button { flex: 1; }
+.dialog-actions .button, .dialog-actions .clu-button { flex: 1; }
 .confirm-dialog { width: min(100%, 430px); }
 .confirm-dialog .dialog-intro { margin-top: 12px; }
 
@@ -147,3 +147,13 @@
 
 .platform-label { display: inline-block; white-space: nowrap; padding: 3px 7px; border-radius: 4px; background: #eef3fa; color: #304c76; font-size: 11px; }
 .payment-platform-filter { max-width: 220px; margin-bottom: 12px; }
+
+/* CLU owns control chrome; DGI owns dense list and form layout. */
+[data-clu-theme] .dgi-row-action { flex: none; min-width: 32px; padding-inline: 6px; }
+[data-clu-theme] .table-scroll.clu-table-scroll { border: 0; border-radius: 0; }
+[data-clu-theme] .dgi-table-message .clu-table-message { height: 160px; text-align: center; }
+[data-clu-theme] .input-prefix .clu-control { border: 0; box-shadow: none; }
+.input-prefix:has(.clu-control):focus-within { outline: none; }
+.form-field .clu-control { box-shadow: none; }
+[data-clu-theme] .clu-dialog.dialog-card { width: min(560px, calc(100% - 40px)); }
+[data-clu-theme] .clu-dialog.confirm-dialog { width: min(430px, calc(100% - 40px)); }

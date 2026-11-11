@@ -1,3 +1,4 @@
+import { Button, Select, Table } from "@shaobangzhu/clu-ui";
 import { Pagination } from "../components/Pagination";
 import { PAGE_SIZE, pageRange } from "../components/pageRange";
 import { PlatformOptions, platformLabel, type PlatformFilter } from "./platform";
@@ -39,22 +40,22 @@ export function Prop22Payments({ adding, onCloseAdd }: { adding: boolean; onClos
   }
   return <section className="prop22-section" aria-labelledby="prop22-title">
     <h2 id="prop22-title">Prop 22 Payments</h2>
-    <div className="filter-field payment-platform-filter"><label htmlFor="payment-platform-filter">Payment Platform</label><select id="payment-platform-filter" value={platform} onChange={(event) => { setPlatform(event.target.value as PlatformFilter); setPage(1); }}><PlatformOptions filter /></select></div>
+    <div className="filter-field payment-platform-filter"><label htmlFor="payment-platform-filter">Payment Platform</label><Select id="payment-platform-filter" value={platform} onChange={(event) => { setPlatform(event.target.value as PlatformFilter); setPage(1); }}><PlatformOptions filter /></Select></div>
     {error && <p role="alert" className="form-error">{error}</p>}
-    <div className="history-table-card"><div className="table-scroll"><table className="history-table payment-table">
-      <thead><tr><th scope="col">Payment Date</th><th scope="col">Platform</th><th scope="col">Coverage Period</th><th scope="col">Amount</th><th scope="col">Actions</th></tr></thead>
-      <tbody>{loading ? <tr><td colSpan={5}>Loading payments…</td></tr> : error ? <tr><td colSpan={5}>Payments unavailable.</td></tr> : !rows.length ? <tr><td colSpan={5}>No Prop 22 payments recorded.</td></tr> : rows.slice(range.offset, range.offset + PAGE_SIZE).map((row) => <tr key={row.id}>
-        <td>{displayDate(row.paymentDate)}</td><td><span className="platform-label">{platformLabel(row.platform)}</span></td><td>{row.coverageStartDate && row.coverageEndDate ? `${displayDate(row.coverageStartDate)} – ${displayDate(row.coverageEndDate)}` : "—"}</td><td>${row.amount.toFixed(2)}</td>
-        <td><div className="row-actions"><button type="button" className="icon-action" aria-label={`Edit Prop 22 payment ${row.paymentDate}`} onClick={() => setEditing(row)}>✎</button><button type="button" className="icon-action delete-action" aria-label={`Delete Prop 22 payment ${row.paymentDate}`} onClick={() => { setDeleteError(""); setTarget(row); }}>⌫</button></div></td>
-      </tr>)}</tbody>
-    </table></div>
+    <div className="history-table-card"><Table.ScrollArea label="Prop 22 payments" className="table-scroll"><Table density="compact" className="history-table payment-table">
+      <Table.Header><Table.Row><Table.HeadCell scope="col">Payment Date</Table.HeadCell><Table.HeadCell scope="col">Platform</Table.HeadCell><Table.HeadCell scope="col">Coverage Period</Table.HeadCell><Table.HeadCell scope="col">Amount</Table.HeadCell><Table.HeadCell scope="col">Actions</Table.HeadCell></Table.Row></Table.Header>
+      <Table.Body>{loading ? <Table.MessageRow colSpan={5} className="dgi-table-message">Loading payments…</Table.MessageRow> : error ? <Table.MessageRow colSpan={5} className="dgi-table-message">Payments unavailable.</Table.MessageRow> : !rows.length ? <Table.MessageRow colSpan={5} className="dgi-table-message">No Prop 22 payments recorded.</Table.MessageRow> : rows.slice(range.offset, range.offset + PAGE_SIZE).map((row) => <Table.Row key={row.id}>
+        <Table.Cell>{displayDate(row.paymentDate)}</Table.Cell><Table.Cell><span className="platform-label">{platformLabel(row.platform)}</span></Table.Cell><Table.Cell>{row.coverageStartDate && row.coverageEndDate ? `${displayDate(row.coverageStartDate)} – ${displayDate(row.coverageEndDate)}` : "—"}</Table.Cell><Table.Cell>${row.amount.toFixed(2)}</Table.Cell>
+        <Table.Cell><div className="row-actions"><Button type="button" variant="secondary" size="small" className="dgi-row-action" aria-label={`Edit Prop 22 payment ${row.paymentDate}`} onClick={() => setEditing(row)}>✎</Button><Button type="button" variant="danger" size="small" className="dgi-row-action" aria-label={`Delete Prop 22 payment ${row.paymentDate}`} onClick={() => { setDeleteError(""); setTarget(row); }}>⌫</Button></div></Table.Cell>
+      </Table.Row>)}</Table.Body>
+    </Table></Table.ScrollArea>
     {!loading && !error && <Pagination page={page} total={rows.length} noun="payments" label="Prop 22 payment pages" onPageChange={setPage} />}
     </div>
     {(adding || editing) && <PaymentModal key={editing?.id ?? "new"} payment={editing} onClose={() => { setEditing(null); onCloseAdd(); }} onSaved={saved} />}
     {target && <DialogFrame title="Delete Prop 22 payment?" onClose={() => setTarget(null)} busy={deleting} className="confirm-dialog">
       <p className="dialog-intro">This payment will be permanently removed. This action cannot be undone.</p>
       {deleteError && <p role="alert" className="form-error">{deleteError}</p>}
-      <div className="dialog-actions"><button className="button secondary" type="button" disabled={deleting} data-autofocus onClick={() => setTarget(null)}>Cancel</button><button className="button danger" type="button" disabled={deleting} onClick={() => void confirmDelete()}>{deleting ? "Deleting…" : "Delete Payment"}</button></div>
+      <div className="dialog-actions"><Button variant="secondary" size="small" type="button" disabled={deleting} data-autofocus onClick={() => setTarget(null)}>Cancel</Button><Button variant="danger" size="small" type="button" disabled={deleting} onClick={() => void confirmDelete()}>{deleting ? "Deleting…" : "Delete Payment"}</Button></div>
     </DialogFrame>}
   </section>;
 }

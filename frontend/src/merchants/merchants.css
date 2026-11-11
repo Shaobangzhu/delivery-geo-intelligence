@@ -6,5 +6,5 @@
 .merchant-location-warning { margin: 14px 0 0; padding: 10px 12px; border: 1px solid #e9c981; border-radius: 5px; background: #fff8e8; color: #765013; font-size: 12px; line-height: 1.5; }
 .merchant-legacy-note { margin: 2px 0 0; color: #647b9c; font-size: 11px; line-height: 1.45; }
 .merchant-delete-copy { color: #395778; font-size: 12px; line-height: 1.5; }
-.merchants-page button:focus-visible { outline: 3px solid #8bbaff; outline-offset: 2px; }
+.merchants-page button:not(.clu-button):focus-visible { outline: 3px solid #8bbaff; outline-offset: 2px; }
 @media (max-width: 600px) { .merchant-filters { grid-template-columns: 1fr; } }

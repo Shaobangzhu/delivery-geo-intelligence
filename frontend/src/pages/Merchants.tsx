@@ -1,3 +1,4 @@
+import { Button, Input, Select, Table } from "@shaobangzhu/clu-ui";
 import { useEffect, useMemo, useState } from "react";
 import type { Category } from "../history/api";
 import { ConfirmMerchantDelete } from "../merchants/ConfirmMerchantDelete";
@@ -48,44 +49,44 @@ export function Merchants() {
     setReload((value) => value + 1);
   }
 
-  return <section className="merchants-page" aria-labelledby="merchants-title">
+  return <section className="merchants-page" data-clu-theme="light" aria-labelledby="merchants-title">
     <div className="history-heading">
       <div><div className="section-kicker">Merchants</div><h1 id="merchants-title">Merchants</h1>
         <p>Manage physical pickup locations used by observed delivery records.</p></div>
-      <button type="button" className="button primary add-delivery" data-merchant-primary onClick={() => setEditor(null)}>
+      <Button type="button" variant="primary" size="small" className="add-delivery" data-merchant-primary onClick={() => setEditor(null)}>
         <span aria-hidden="true">＋</span> Add Merchant
-      </button>
+      </Button>
     </div>
     <div className="merchant-filters" aria-label="Merchant filters">
       <div className="filter-field">
         <label htmlFor="merchant-management-search">Search merchant</label>
-        <input id="merchant-management-search" type="search" placeholder="Search name, address, or city…" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <Input id="merchant-management-search" type="search" placeholder="Search name, address, or city…" value={search} onChange={(event) => setSearch(event.target.value)} />
       </div>
       <div className="filter-field">
         <label htmlFor="merchant-management-category">Category</label>
-        <select id="merchant-management-category" value={category} onChange={(event) => setCategory(event.target.value as Category | "")}>
+        <Select id="merchant-management-category" value={category} onChange={(event) => setCategory(event.target.value as Category | "")}>
           {categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
+        </Select>
       </div>
     </div>
     {error && <p className="history-alert" role="alert">{error}</p>}
     <div className="history-table-card">
-      <div className="table-scroll"><table className="history-table merchant-table">
-        <thead><tr><th scope="col">Merchant</th><th scope="col">Category</th><th scope="col">Public Address</th><th scope="col">City</th><th scope="col">Observed Deliveries</th><th scope="col">Actions</th></tr></thead>
-        <tbody>{loading ? <tr><td colSpan={6} className="table-message">Loading merchants…</td></tr>
-          : filtered.length === 0 ? <tr><td colSpan={6} className="table-message">{error ? "No records to display." : "No merchants match the current filters."}</td></tr>
-            : filtered.map((merchant) => <tr key={merchant.id}>
-              <td><span className="merchant-name">{merchant.name}</span></td>
-              <td><span className={`category-label category-${merchant.category}`}>{categories.find((item) => item.value === merchant.category)?.label}</span></td>
-              <td>{merchant.publicAddress ?? <span className="merchant-address-missing">Address not recorded</span>}</td>
-              <td>{merchant.city}</td>
-              <td className="number-cell">{merchant.deliveryCount}</td>
-              <td><div className="row-actions">
-                <button type="button" className="icon-action" aria-label={`Edit ${merchant.name} at ${merchant.publicAddress ?? merchant.city}`} title="Edit merchant" onClick={() => setEditor(merchant)}>✎</button>
-                <button type="button" className="icon-action destructive" aria-label={`Delete ${merchant.name} at ${merchant.publicAddress ?? merchant.city}`} title="Delete merchant" onClick={() => setDeleteTarget(merchant)}>⌫</button>
-              </div></td>
-            </tr>)}</tbody>
-      </table></div>
+      <Table.ScrollArea label="Physical merchants" className="table-scroll"><Table density="compact" className="history-table merchant-table">
+        <Table.Header><Table.Row><Table.HeadCell scope="col">Merchant</Table.HeadCell><Table.HeadCell scope="col">Category</Table.HeadCell><Table.HeadCell scope="col">Public Address</Table.HeadCell><Table.HeadCell scope="col">City</Table.HeadCell><Table.HeadCell scope="col">Observed Deliveries</Table.HeadCell><Table.HeadCell scope="col">Actions</Table.HeadCell></Table.Row></Table.Header>
+        <Table.Body>{loading ? <Table.MessageRow colSpan={6} className="dgi-table-message">Loading merchants…</Table.MessageRow>
+          : filtered.length === 0 ? <Table.MessageRow colSpan={6} className="dgi-table-message">{error ? "No records to display." : "No merchants match the current filters."}</Table.MessageRow>
+            : filtered.map((merchant) => <Table.Row key={merchant.id}>
+              <Table.Cell><span className="merchant-name">{merchant.name}</span></Table.Cell>
+              <Table.Cell><span className={`category-label category-${merchant.category}`}>{categories.find((item) => item.value === merchant.category)?.label}</span></Table.Cell>
+              <Table.Cell>{merchant.publicAddress ?? <span className="merchant-address-missing">Address not recorded</span>}</Table.Cell>
+              <Table.Cell>{merchant.city}</Table.Cell>
+              <Table.Cell className="number-cell">{merchant.deliveryCount}</Table.Cell>
+              <Table.Cell><div className="row-actions">
+                <Button type="button" variant="secondary" size="small" className="dgi-row-action" aria-label={`Edit ${merchant.name} at ${merchant.publicAddress ?? merchant.city}`} title="Edit merchant" onClick={() => setEditor(merchant)}>✎</Button>
+                <Button type="button" variant="danger" size="small" className="dgi-row-action" aria-label={`Delete ${merchant.name} at ${merchant.publicAddress ?? merchant.city}`} title="Delete merchant" onClick={() => setDeleteTarget(merchant)}>⌫</Button>
+              </div></Table.Cell>
+            </Table.Row>)}</Table.Body>
+      </Table></Table.ScrollArea>
       <div className="table-footer"><span>Showing {filtered.length} of {records.length} physical merchants</span></div>
     </div>
     {editor !== undefined && <MerchantModal key={editor?.id ?? "new"} merchant={editor} onClose={() => setEditor(undefined)} onSaved={refresh} />}
