@@ -39,6 +39,19 @@ it("loads one dashboard response for the cards, timeline, ranking, and map shell
   expect(screen.getByRole("heading", { name: "Observed Pickups Over Time" })).toBeInTheDocument();
   expect(within(screen.getByRole("table")).getByText("Synthetic Pickup")).toBeInTheDocument();
   expect(screen.getByText("1 filtered merchant locations available")).toBeInTheDocument();
+  const deliveries = screen.getByTestId("summary-deliveries"), earnings = screen.getByTestId("summary-earnings");
+  expect(deliveries.tagName).toBe("STRONG"); expect(deliveries).toHaveTextContent(/^2$/);
+  expect(earnings.tagName).toBe("STRONG"); expect(earnings).toHaveTextContent(/^\$12\.00$/);
+  expect(deliveries.closest(".clu-card")).toHaveClass("stat-card");
+  expect(earnings.closest('[data-clu-theme="light"]')).toHaveClass("dashboard-page");
+  expect(screen.getByRole("table", { name: "Top Merchants by Deliveries" })).toHaveClass("clu-table");
+  for (const name of ["Time period", "Map metric", "Category"]) {
+    const group = within(screen.getByRole("group", { name }));
+    expect(group.getAllByRole("button").every((button) => button.hasAttribute("aria-pressed"))).toBe(true);
+    expect(group.queryByRole("radio")).not.toBeInTheDocument();
+  }
+  expect(document.documentElement).not.toHaveAttribute("data-clu-theme");
+  expect(document.body).not.toHaveAttribute("data-clu-theme");
   expect(String(fetchMock.mock.calls[0][0])).toContain("period=week&category=all");
   expect(fetchMock.mock.calls.every(([url]) => !String(url).includes("/api/ai/ask"))).toBe(true);
 });

@@ -12,8 +12,12 @@ it("opens/closes, focuses suggestions and makes no requests until explicit submi
   const fetch = vi.fn(); vi.stubGlobal("fetch", fetch); render(<AskDgi />);
   expect(fetch).not.toHaveBeenCalled(); expect(screen.queryByLabelText("Your question")).not.toBeInTheDocument();
   const user = await open(); await user.click(screen.getByRole("button", { name: "What data should I backfill?" }));
+  expect(screen.getByRole("button", { name: "Close analyst" })).toHaveClass("clu-button");
+  expect(screen.getByRole("button", { name: "Ask" })).toHaveAttribute("type", "submit");
+  expect(screen.getByLabelText("Your question")).toHaveAttribute("maxlength", "1000");
   expect(screen.getByLabelText("Your question")).toHaveValue("What data should I backfill?"); expect(screen.getByLabelText("Your question")).toHaveFocus(); expect(fetch).not.toHaveBeenCalled();
   await user.keyboard("{Escape}"); expect(screen.queryByLabelText("Your question")).not.toBeInTheDocument(); expect(screen.getByRole("button", { name: "Open analyst" })).toHaveFocus();
+  await open(); expect(screen.getByLabelText("Your question")).toHaveValue("What data should I backfill?"); expect(fetch).not.toHaveBeenCalled();
 });
 it("validates blank questions, prevents duplicate submission and safely renders grounded plain text", async () => {
   let finish!: (value: unknown) => void;
@@ -23,6 +27,7 @@ it("validates blank questions, prevents duplicate submission and safely renders 
   const form = screen.getByLabelText("Your question").closest("form")!;
   fireEvent.submit(form); fireEvent.submit(form); expect(fetch).toHaveBeenCalledTimes(1);
   expect(screen.getByRole("status")).toHaveTextContent("Reading recorded analytics"); expect(screen.getByRole("button", { name: "Analyzing…" })).toBeDisabled();
+  expect(form).toHaveAttribute("aria-busy", "true"); expect(screen.getByLabelText("Your question")).toBeDisabled();
   const init = fetch.mock.calls[0][1] as RequestInit; expect(JSON.parse(init.body as string)).toEqual({ question: "How efficient were my delivery sessions?" });
   await act(async () => finish({ ok: true, json: async () => answer }));
   expect(await screen.findByRole("region", { name: "DGI answer" })).toHaveTextContent("0 USD"); expect(document.querySelector("script")).toBeNull();
@@ -33,6 +38,7 @@ it("handles configuration/provider errors and retries only by user action", asyn
   const fetch = vi.fn().mockResolvedValueOnce({ ok: false, status: 503 }).mockResolvedValueOnce({ ok: true, json: async () => answer }); vi.stubGlobal("fetch", fetch); render(<AskDgi />);
   const user = await open(); await user.type(screen.getByLabelText("Your question"), "Explain my session"); await user.click(screen.getByRole("button", { name: "Ask" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("unavailable"); expect(fetch).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("alert")).toHaveClass("clu-alert");
   await user.click(screen.getByRole("button", { name: "Retry analysis" })); await screen.findByRole("region", { name: "DGI answer" }); expect(fetch).toHaveBeenCalledTimes(2);
 });
 it.each(["07ef87c3-71fa-46bd-b213-774c678b672f", "PRIVATE_PROVIDER_DETAIL"]) (

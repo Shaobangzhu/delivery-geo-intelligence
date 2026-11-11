@@ -1,0 +1,16 @@
+/* Consumer tokens apply only to these two explicit light-theme hosts. */
+.dashboard-page[data-clu-theme="light"],
+.settings-page[data-clu-theme="light"] {
+  --clu-accent: #1262df;
+  --clu-accent-hover: #0c4cb4;
+  --clu-accent-subtle: #eaf2ff;
+  --clu-accent-text: #fff;
+  --clu-focus: #1262df;
+  --clu-text: #17345e;
+  --clu-text-secondary: #425d83;
+  --clu-text-muted: #587092;
+  --clu-surface: #fff;
+  --clu-surface-subtle: #f2f7ff;
+  --clu-stroke: #7594b8;
+  --clu-stroke-subtle: #dce8f7;
+}
