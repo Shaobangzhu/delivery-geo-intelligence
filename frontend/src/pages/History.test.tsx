@@ -118,6 +118,26 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Delivery History", () => {
+  it("renders published tables and native CLU controls without changing form names or optional values", async () => {
+    installApi(); const user = userEvent.setup(); render(<History />);
+    await screen.findByText("Test Merchant A");
+    const region = screen.getByRole("region", { name: "Delivery records" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(within(region).getByRole("table")).toHaveClass("clu-table");
+    expect(within(region).getByRole("columnheader", { name: "Payout" })).toHaveAttribute("scope", "col");
+    expect(screen.getByLabelText("Merchant search")).toHaveClass("clu-control");
+    const add = screen.getByRole("button", { name: /Add Delivery/ });
+    expect(add).toHaveClass("clu-button"); await user.click(add);
+    const dialog = screen.getByRole("dialog", { name: "Add Delivery" });
+    expect(dialog.tagName).toBe("DIALOG"); expect(dialog).toHaveAttribute("open");
+    expect(dialog).toHaveClass("clu-dialog");
+    expect(within(dialog).getAllByRole("button", { name: "Close dialog" })).toHaveLength(1);
+    const payout = within(dialog).getByLabelText("Payout");
+    expect(payout).toHaveValue(null); await user.type(payout, "0"); expect(payout).toHaveValue(0);
+    await user.clear(payout); expect(payout).toHaveValue(null);
+    expect(within(dialog).getByRole("button", { name: "Save Delivery" })).toHaveAttribute("type", "submit");
+  });
+
   it("refreshes an edited platform on page 8 without resetting pagination", async () => {
     const user = userEvent.setup();
     const fetchMock = installApi({ rows: syntheticRows(88) });

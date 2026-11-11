@@ -1,3 +1,4 @@
+import { Button, Input, Select } from "@shaobangzhu/clu-ui";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { DialogFrame } from "./DialogFrame";
 import { type DeliveryPage, type Merchant } from "./api";
@@ -93,20 +94,19 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
   return <DialogFrame title={session ? "Edit Session" : "Add Session"} onClose={onClose} busy={busy} className="delivery-dialog">
     <p className="dialog-intro">Record the complete operating period, including driving and time outside active deliveries. Times use America/Los_Angeles.</p>
     {session?.associationIntegrity && <p role="alert" className="form-error">An earlier session update did not complete. Review all delivery links before saving. Complete efficiency is blocked until this review succeeds.</p>}
-    <button type="button" className="dialog-close" aria-label="Close dialog" disabled={busy} onClick={onClose}>×</button>
     <form onSubmit={submit} noValidate aria-busy={busy}>
       <div className="form-grid">
-        <div className="form-field"><label htmlFor={`${id}-start`}>Session Start *</label><input id={`${id}-start`} type="datetime-local" step="60" required data-autofocus disabled={busy} value={start} onChange={(event) => { setStart(event.target.value.slice(0, 16)); setStartChanged(true); }} />
-          {sessionTimeCandidates(start).length === 2 && <><label htmlFor={`${id}-start-fold`}>Start clock occurrence</label><select id={`${id}-start-fold`} value={startOccurrence} disabled={busy} onChange={(event) => { setStartOccurrence(event.target.value as "earlier" | "later"); setStartChanged(true); }}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></select></>}
+        <div className="form-field"><label htmlFor={`${id}-start`}>Session Start *</label><Input id={`${id}-start`} type="datetime-local" step="60" required data-autofocus disabled={busy} value={start} onChange={(event) => { setStart(event.target.value.slice(0, 16)); setStartChanged(true); }} />
+          {sessionTimeCandidates(start).length === 2 && <><label htmlFor={`${id}-start-fold`}>Start clock occurrence</label><Select id={`${id}-start-fold`} value={startOccurrence} disabled={busy} onChange={(event) => { setStartOccurrence(event.target.value as "earlier" | "later"); setStartChanged(true); }}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></Select></>}
         </div>
-        <div className="form-field"><label htmlFor={`${id}-end`}>Session End *</label><input id={`${id}-end`} type="datetime-local" step="60" required disabled={busy} value={end} onChange={(event) => { setEnd(event.target.value.slice(0, 16)); setEndChanged(true); }} />
-          {sessionTimeCandidates(end).length === 2 && <><label htmlFor={`${id}-end-fold`}>End clock occurrence</label><select id={`${id}-end-fold`} value={endOccurrence} disabled={busy} onChange={(event) => { setEndOccurrence(event.target.value as "earlier" | "later"); setEndChanged(true); }}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></select></>}
+        <div className="form-field"><label htmlFor={`${id}-end`}>Session End *</label><Input id={`${id}-end`} type="datetime-local" step="60" required disabled={busy} value={end} onChange={(event) => { setEnd(event.target.value.slice(0, 16)); setEndChanged(true); }} />
+          {sessionTimeCandidates(end).length === 2 && <><label htmlFor={`${id}-end-fold`}>End clock occurrence</label><Select id={`${id}-end-fold`} value={endOccurrence} disabled={busy} onChange={(event) => { setEndOccurrence(event.target.value as "earlier" | "later"); setEndChanged(true); }}><option value="earlier">First occurrence (PDT)</option><option value="later">Second occurrence (PST)</option></Select></>}
         </div>
-        <div className="form-field form-wide"><label htmlFor={`${id}-strategy`}>Operating Strategy</label><select id={`${id}-strategy`} disabled={busy} value={strategy} onChange={(event) => setStrategy(event.target.value as DeliveryStrategy | "")}><option value="">Not recorded</option>{strategies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-        {platforms.map(({ value, label }) => <div className="form-field" key={value}><label htmlFor={`${id}-${value}`}>{label} — Trips Offered</label><input id={`${id}-${value}`} name={value} type="number" min="0" max={Number.MAX_SAFE_INTEGER} step="1" aria-describedby={`${id}-offers-help`} disabled={busy} value={offers[value]} onChange={(event) => setOffers((previous) => ({ ...previous, [value]: event.target.value }))} /></div>)}
+        <div className="form-field form-wide"><label htmlFor={`${id}-strategy`}>Operating Strategy</label><Select id={`${id}-strategy`} disabled={busy} value={strategy} onChange={(event) => setStrategy(event.target.value as DeliveryStrategy | "")}><option value="">Not recorded</option>{strategies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></div>
+        {platforms.map(({ value, label }) => <div className="form-field" key={value}><label htmlFor={`${id}-${value}`}>{label} — Trips Offered</label><Input id={`${id}-${value}`} name={value} type="number" min="0" max={Number.MAX_SAFE_INTEGER} step="1" aria-describedby={`${id}-offers-help`} disabled={busy} value={offers[value]} onChange={(event) => setOffers((previous) => ({ ...previous, [value]: event.target.value }))} /></div>)}
         <p id={`${id}-offers-help`} className="duration-help form-wide">Enter offers reported by each delivery platform during this session. Leave blank if unknown or not monitored. Zero means no offers were received while online.</p>
-        <div className="form-field"><label htmlFor={`${id}-miles`}>Total Driven Miles</label><input id={`${id}-miles`} type="number" min="0" step="any" disabled={busy} value={miles} onChange={(event) => setMiles(event.target.value)} /></div>
-        <div className="form-field"><label htmlFor={`${id}-tax`}>IRS Eligible Business Miles</label><input id={`${id}-tax`} type="number" min="0" step="any" disabled={busy} value={taxMiles} onChange={(event) => setTaxMiles(event.target.value)} /></div>
+        <div className="form-field"><label htmlFor={`${id}-miles`}>Total Driven Miles</label><Input id={`${id}-miles`} type="number" min="0" step="any" disabled={busy} value={miles} onChange={(event) => setMiles(event.target.value)} /></div>
+        <div className="form-field"><label htmlFor={`${id}-tax`}>IRS Eligible Business Miles</label><Input id={`${id}-tax`} type="number" min="0" step="any" disabled={busy} value={taxMiles} onChange={(event) => setTaxMiles(event.target.value)} /></div>
         <p className="duration-help form-wide">Leave unknown mileage blank. Eligibility is manually recorded; session miles do not automatically qualify for a tax deduction.</p>
       </div>
       <details className="settlement-details" open={linkOpen} onToggle={(event) => setLinkOpen(event.currentTarget.open)}>
@@ -117,13 +117,13 @@ export function SessionModal({ session, merchants, onClose, onSaved }: {
           : <>
             {candidates.data.filter((delivery) => !session?.deliveryIds.includes(delivery.id)).map((delivery) => <label key={delivery.id} className="session-link"><input type="checkbox" checked={selected.includes(delivery.id)} disabled={busy || Boolean(delivery.sessionId && delivery.sessionId !== session?.id)} onChange={() => toggle(delivery.id)} />{deliveryLabel(delivery)}{delivery.sessionId && delivery.sessionId !== session?.id ? " (linked to another session)" : ""}</label>)}
             {!candidates.data.length && <p>No deliveries in this interval.</p>}
-            <div className="session-candidate-pages"><button type="button" className="button secondary" disabled={busy || page <= 1} onClick={() => setPage((value) => value - 1)}>Previous candidates</button><span>Page {page} of {Math.max(1, candidates.pagination.totalPages)}</span><button type="button" className="button secondary" disabled={busy || page >= candidates.pagination.totalPages} onClick={() => setPage((value) => value + 1)}>Next candidates</button></div>
+            <div className="session-candidate-pages"><Button type="button" variant="secondary" size="small" disabled={busy || page <= 1} onClick={() => setPage((value) => value - 1)}>Previous candidates</Button><span>Page {page} of {Math.max(1, candidates.pagination.totalPages)}</span><Button type="button" variant="secondary" size="small" disabled={busy || page >= candidates.pagination.totalPages} onClick={() => setPage((value) => value + 1)}>Next candidates</Button></div>
           </>}
-        <button type="button" className="text-button" disabled={busy || loading} onClick={() => setReload((value) => value + 1)}>Refresh candidates</button>
+        <Button type="button" variant="quiet" size="small" disabled={busy || loading} onClick={() => setReload((value) => value + 1)}>Refresh candidates</Button>
         {selected.filter((item) => !session?.deliveryIds.includes(item) && !candidates?.data.some((delivery) => delivery.id === item)).map((item) => <label key={item} className="session-link"><input type="checkbox" checked disabled={busy} onChange={() => toggle(item)} />Selected delivery · {item.slice(-6)} (outside current candidate page)</label>)}
       </details>
       {error && <p role="alert" className="form-error">{error}</p>}
-      <div className="dialog-actions"><button type="button" className="button secondary" disabled={busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={busy} type="submit">{busy ? "Saving…" : "Save Session"}</button></div>
+      <div className="dialog-actions"><Button type="button" variant="secondary" size="small" disabled={busy} onClick={onClose}>Cancel</Button><Button variant="primary" size="small" disabled={busy} type="submit">{busy ? "Saving…" : "Save Session"}</Button></div>
     </form>
   </DialogFrame>;
 }

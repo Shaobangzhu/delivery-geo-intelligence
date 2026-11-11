@@ -1,6 +1,8 @@
-/* Consumer tokens apply only to these two explicit light-theme hosts. */
+/* Consumer tokens apply only to explicitly opted-in route roots. */
 .dashboard-page[data-clu-theme="light"],
-.settings-page[data-clu-theme="light"] {
+.settings-page[data-clu-theme="light"],
+.history-page[data-clu-theme="light"],
+.merchants-page[data-clu-theme="light"] {
   --clu-accent: #1262df;
   --clu-accent-hover: #0c4cb4;
   --clu-accent-subtle: #eaf2ff;
