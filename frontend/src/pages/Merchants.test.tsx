@@ -63,6 +63,12 @@ it("loads separate same-name physical locations and filters by search and catego
   installApi();
   render(<Merchants />);
   expect(await screen.findByText("Showing 3 of 3 physical merchants")).toBeInTheDocument();
+  const region = screen.getByRole("region", { name: "Physical merchants" });
+  expect(region).toHaveAttribute("tabindex", "0");
+  expect(within(region).getByRole("table")).toHaveClass("clu-table");
+  expect(within(region).getByRole("columnheader", { name: "Public Address" })).toHaveAttribute("scope", "col");
+  expect(screen.getByLabelText("Search merchant")).toHaveClass("clu-control");
+  expect(screen.getByRole("button", { name: /Add Merchant/ })).toHaveClass("clu-button");
   expect(screen.getAllByText("Starbucks")).toHaveLength(2);
   expect(screen.getByText("Public Business A")).toBeInTheDocument();
   expect(screen.getByText("Public Business B")).toBeInTheDocument();
@@ -83,6 +89,8 @@ it("opens an accessible centered modal, validates required fields, and closes on
   const trigger = screen.getByRole("button", { name: /Add Merchant/ });
   await user.click(trigger);
   const dialog = screen.getByRole("dialog", { name: "Add Merchant" });
+  expect(dialog.tagName).toBe("DIALOG"); expect(dialog).toHaveClass("clu-dialog");
+  expect(within(dialog).getAllByRole("button", { name: "Close dialog" })).toHaveLength(1);
   expect(dialog).toHaveAttribute("aria-modal", "true");
   expect(within(dialog).getByLabelText(/Merchant Name/)).toHaveFocus();
   expect(within(dialog).queryByLabelText(/latitude|longitude/i)).not.toBeInTheDocument();
@@ -201,6 +209,7 @@ it("honors a backend 409 if history appears after the list loaded", async () => 
   await user.click(screen.getByRole("button", { name: "Delete Merchant" }));
   const dialog = screen.getByRole("dialog");
   expect(await within(dialog).findByRole("alert")).toHaveTextContent("has delivery history and cannot be deleted");
+  expect(dialog).toHaveClass("clu-dialog");
   expect(within(dialog).queryByRole("button", { name: "Delete Merchant" })).not.toBeInTheDocument();
 });
 
